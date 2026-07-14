@@ -50,8 +50,10 @@ constexpr UINT kContactPulseMessage = WM_APP + 0x47;
 constexpr UINT kShowLocalUiMessage = WM_APP + 0x48;
 constexpr wchar_t kNativeRightClickRequestFile[] = L"right-click-request.json";
 constexpr int kLocalUiPanelWidth = 320;
-constexpr int kLocalUiPanelHeight = 146;
+constexpr int kLocalUiPanelHeight = 190;
 constexpr int kLocalUiMinimizeButtonId = 6101;
+constexpr int kLocalUiDesktopPlanButtonId = 6102;
+constexpr int kLocalUiDesktopPreviewButtonId = 6103;
 constexpr double kPi = 3.14159265358979323846;
 constexpr int kThreeDRingCount = 38;
 constexpr int kFineOrbitCount = 56;
@@ -1618,6 +1620,14 @@ private:
                 self->minimize_local_ui_panel();
                 return 0;
             }
+            if (LOWORD(wparam) == kLocalUiDesktopPlanButtonId) {
+                self->request_desktop_organization_plan();
+                return 0;
+            }
+            if (LOWORD(wparam) == kLocalUiDesktopPreviewButtonId) {
+                self->request_desktop_organization_preview();
+                return 0;
+            }
             break;
         case WM_PAINT:
             self->paint_local_ui_panel(hwnd);
@@ -1629,6 +1639,8 @@ private:
             self->local_ui_panel_visible_ = false;
             self->local_ui_panel_hwnd_ = nullptr;
             self->local_ui_minimize_button_hwnd_ = nullptr;
+            self->local_ui_desktop_plan_button_hwnd_ = nullptr;
+            self->local_ui_desktop_preview_button_hwnd_ = nullptr;
             return 0;
         default:
             break;
@@ -1677,6 +1689,32 @@ private:
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLocalUiMinimizeButtonId)),
             instance_,
             nullptr);
+        local_ui_desktop_plan_button_hwnd_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"Plan",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            12,
+            150,
+            88,
+            26,
+            local_ui_panel_hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLocalUiDesktopPlanButtonId)),
+            instance_,
+            nullptr);
+        local_ui_desktop_preview_button_hwnd_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"Preview",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            108,
+            150,
+            98,
+            26,
+            local_ui_panel_hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLocalUiDesktopPreviewButtonId)),
+            instance_,
+            nullptr);
     }
 
     void show_local_ui_panel() {
@@ -1710,6 +1748,14 @@ private:
         local_ui_panel_visible_ = false;
         local_ui_panel_minimized_ = true;
         write_local_ui_control_request("minimize_native_local_ui_panel", "native_cpp_local_ui_minimize");
+    }
+
+    void request_desktop_organization_plan() {
+        write_local_ui_control_request("request_desktop_organization_plan", "native_cpp_local_ui_desktop_plan");
+    }
+
+    void request_desktop_organization_preview() {
+        write_local_ui_control_request("request_desktop_organization_preview", "native_cpp_local_ui_desktop_preview");
     }
 
     void paint_local_ui_panel(HWND hwnd) {
@@ -1763,22 +1809,22 @@ private:
             L"Segoe UI");
         SelectObject(dc, body_font);
         SetTextColor(dc, RGB(203, 213, 225));
-        RECT body_rect{12, 42, kLocalUiPanelWidth - 12, 80};
+        RECT body_rect{12, 42, kLocalUiPanelWidth - 12, 92};
         DrawTextW(
             dc,
-            L"Native C++ panel. No browser, cursor takeover, or desktop action authority.",
+            L"Desktop organization controls are plan and preview only.",
             -1,
             &body_rect,
             DT_LEFT | DT_WORDBREAK);
 
         SetTextColor(dc, RGB(147, 197, 253));
-        RECT status_rect{12, 95, kLocalUiPanelWidth - 12, 126};
+        RECT status_rect{12, 100, kLocalUiPanelWidth - 12, 142};
         DrawTextW(
             dc,
-            L"Listen  |  PTT  |  LLM  |  Drift",
+            L"No cursor takeover. No desktop mutation authority.",
             -1,
             &status_rect,
-            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            DT_LEFT | DT_WORDBREAK);
 
         SelectObject(dc, old_font);
         DeleteObject(title_font);
@@ -1805,6 +1851,11 @@ private:
         if (config_.runtime_dir.empty()) {
             return;
         }
+        std::string const action_text = (action == nullptr) ? "" : action;
+        bool const desktop_organization_request =
+            action_text == "request_desktop_organization_plan" || action_text == "request_desktop_organization_preview";
+        std::string const desktop_organization_request_kind =
+            action_text == "request_desktop_organization_plan" ? "plan" : "preview";
         ULONGLONG const now_ticks = GetTickCount64();
         if (last_right_click_request_ticks_ != 0 && (now_ticks - last_right_click_request_ticks_) < 250) {
             return;
@@ -1842,6 +1893,20 @@ private:
             {"grants_execution_authority", false},
             {"grants_mutation_authority", false},
         };
+        if (desktop_organization_request) {
+            payload["desktop_organization_panel_request"] = true;
+            payload["desktop_organization_request_kind"] = desktop_organization_request_kind;
+            payload["desktop_organization_route"] = "/lens/orb/desktop-organization";
+            payload["desktop_organization_plan_route"] = "/lens/orb/desktop-organization/plan";
+            payload["desktop_organization_preview_route"] = "/lens/orb/desktop-organization/orb-sequence";
+            payload["desktop_organization_preview_run_route"] = "/lens/orb/desktop-organization/orb-sequence/run";
+            payload["desktop_organization_requires_lens_semantics"] = true;
+            payload["desktop_organization_requires_plan_approval"] = true;
+            payload["desktop_organization_requires_reversibility_evidence"] = true;
+            payload["desktop_organization_capturable_does_not_imply_reversible"] = true;
+            payload["desktop_organization_preview_only"] = true;
+            payload["desktop_organization_execution_allowed"] = false;
+        }
 
         try {
             fs::create_directories(config_.runtime_dir);
@@ -1977,6 +2042,8 @@ private:
     HWND hwnd_ = nullptr;
     HWND local_ui_panel_hwnd_ = nullptr;
     HWND local_ui_minimize_button_hwnd_ = nullptr;
+    HWND local_ui_desktop_plan_button_hwnd_ = nullptr;
+    HWND local_ui_desktop_preview_button_hwnd_ = nullptr;
     std::chrono::steady_clock::time_point start_;
     double last_reload_seconds_ = -10.0;
     double last_render_seconds_ = 0.0;

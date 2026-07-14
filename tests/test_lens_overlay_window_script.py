@@ -1162,13 +1162,14 @@ def test_lens_overlay_orb_right_click_opens_local_ui_panel_with_receipt() -> Non
     assert "'francis.native_orb_renderer.right_click_request'" in script
     assert "'native_orb_right_click'" in script
     assert "'native_cpp_local_ui_minimize'" in script
+    assert "'native_cpp_local_ui_desktop_plan'" in script
+    assert "'native_cpp_local_ui_desktop_preview'" in script
     assert "'native_right_click_refused'" in script
     assert "invalid_or_unavailable_native_right_click_request" in script
     assert "Invoke-OverlayNativeOrbRightClickRequest -Root $script:LensOverlayDataRoot" in script
-    assert (
-        "@('open_local_ui_panel', 'open_native_local_ui_panel', 'minimize_native_local_ui_panel') -notcontains $Action"
-        in script
-    )
+    assert "'request_desktop_organization_plan'" in script
+    assert "'request_desktop_organization_preview'" in script
+    assert ") -notcontains $Action" in script
     assert (
         "Show-NativeOrbRendererLocalUiPanel -Root $script:LensOverlayDataRoot -Trigger $Trigger -RequestId $RequestId"
         in script
@@ -1180,6 +1181,25 @@ def test_lens_overlay_orb_right_click_opens_local_ui_panel_with_receipt() -> Non
     )
     assert "-Action $Action" in script
     assert "-Action 'native_local_ui_panel_minimize'" in script
+    assert "'desktop_organization_plan_surface_requested'" in script
+    assert "'desktop_organization_preview_surface_requested'" in script
+    assert "'desktop_organization_plan_surface_request'" in script
+    assert "'desktop_organization_preview_surface_request'" in script
+    assert "New-OverlayDesktopOrganizationControlState" in script
+    assert "desktop_organization = New-OverlayDesktopOrganizationControlState" in script
+    assert "desktop_organization = $DesktopOrganization" in script
+    assert "desktop_organization_surface_requested = $true" in script
+    assert "desktop_organization_request_kind = $RequestKindName" in script
+    assert "desktop_organization_route = '/lens/orb/desktop-organization'" in script
+    assert "desktop_organization_plan_route = '/lens/orb/desktop-organization/plan'" in script
+    assert "desktop_organization_preview_route = '/lens/orb/desktop-organization/orb-sequence'" in script
+    assert "desktop_organization_preview_run_route = '/lens/orb/desktop-organization/orb-sequence/run'" in script
+    assert "requires_lens_semantics = $true" in script
+    assert "requires_plan_level_approval = $true" in script
+    assert "requires_reversibility_evidence = $true" in script
+    assert "capturable_does_not_imply_reversible = $true" in script
+    assert "preview_only = $true" in script
+    assert "allowed_to_execute = $false" in script
     assert "native_local_ui_panel_refused" in script
     assert "-Action 'local_ui_panel_open_failed'" in script
     assert "native_local_ui_panel_opened" in script
@@ -1202,6 +1222,31 @@ def test_lens_overlay_orb_right_click_opens_local_ui_panel_with_receipt() -> Non
     assert "physical_input_performed = $false" in script
     assert "desktop_effect_performed = $false" in script
     assert "ShowDialog()" not in script
+
+
+def test_lens_overlay_desktop_organization_native_panel_requests_are_receipt_only() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    start = script.index("if (@('request_desktop_organization_plan', 'request_desktop_organization_preview')")
+    end = script.index("if ($Action -eq 'minimize_native_local_ui_panel')", start)
+    branch = script[start:end]
+
+    assert "Write-OverlayOrbControlReceipt" in branch
+    assert "desktop_organization_plan_surface_request" in branch
+    assert "desktop_organization_preview_surface_request" in branch
+    assert "requires_lens_semantics = $true" in branch
+    assert "requires_plan_level_approval = $true" in branch
+    assert "requires_reversibility_evidence = $true" in branch
+    assert "capturable_does_not_imply_reversible = $true" in branch
+    assert "allowed_to_execute = $false" in branch
+    assert "controls_user_os_cursor = $false" in branch
+    assert "desktop_effect_performed = $false" in branch
+    assert "grants_execution_authority = $false" in branch
+    assert "grants_mutation_authority = $false" in branch
+    assert "Invoke-RestMethod" not in branch
+    assert "Invoke-WebRequest" not in branch
+    assert "Start-Process" not in branch
+    assert "Show-OverlayOrbRightClickPanel" not in branch
 
 
 def test_lens_overlay_consumes_correlated_canonical_summon_requests() -> None:

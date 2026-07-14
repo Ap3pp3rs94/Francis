@@ -434,7 +434,9 @@ def test_native_orb_cpp_renderer_accepts_bounded_move_and_contact_messages_only(
     assert 'constexpr wchar_t kLocalUiWindowClassName[] = L"FrancisNativeOrbLocalUiWindow";' in source
     assert 'constexpr wchar_t kNativeRightClickRequestFile[] = L"right-click-request.json";' in source
     assert "constexpr int kLocalUiPanelWidth = 320;" in source
-    assert "constexpr int kLocalUiPanelHeight = 146;" in source
+    assert "constexpr int kLocalUiPanelHeight = 190;" in source
+    assert "constexpr int kLocalUiDesktopPlanButtonId = 6102;" in source
+    assert "constexpr int kLocalUiDesktopPreviewButtonId = 6103;" in source
     assert "case kMoveCenterMessage:" in source
     assert "case kContactPulseMessage:" in source
     assert "case kShowLocalUiMessage:" in source
@@ -446,6 +448,8 @@ def test_native_orb_cpp_renderer_accepts_bounded_move_and_contact_messages_only(
     assert "show_local_ui_panel();" in source
     assert "request_local_ui_panel_from_right_click();" in source
     assert "void request_local_ui_panel_from_right_click()" in source
+    assert "void request_desktop_organization_plan()" in source
+    assert "void request_desktop_organization_preview()" in source
     assert "static LRESULT CALLBACK local_ui_window_proc" in source
     assert "void ensure_local_ui_panel()" in source
     assert "void show_local_ui_panel()" in source
@@ -454,16 +458,33 @@ def test_native_orb_cpp_renderer_accepts_bounded_move_and_contact_messages_only(
     assert "CreateWindowExW(" in source
     assert "kLocalUiWindowClassName" in source
     assert "kLocalUiMinimizeButtonId" in source
+    assert "kLocalUiDesktopPlanButtonId" in source
+    assert "kLocalUiDesktopPreviewButtonId" in source
     assert 'DrawTextW(dc, L"Francis Local UI"' in source
-    assert 'DrawTextW(\n            dc,\n            L"Native C++ panel.' in source
+    assert (
+        'DrawTextW(\n            dc,\n            L"Desktop organization controls are plan and preview only.' in source
+    )
+    assert 'DrawTextW(\n            dc,\n            L"No cursor takeover. No desktop mutation authority.' in source
+    assert 'L"Plan"' in source
+    assert 'L"Preview"' in source
     assert '"francis.native_orb_renderer.right_click_request"' in source
     assert '"open_native_local_ui_panel"' in source
     assert '"minimize_native_local_ui_panel"' in source
+    assert '"request_desktop_organization_plan"' in source
+    assert '"request_desktop_organization_preview"' in source
     assert '"native_cpp_local_ui_minimize"' in source
+    assert '"native_cpp_local_ui_desktop_plan"' in source
+    assert '"native_cpp_local_ui_desktop_preview"' in source
     assert '"runtime_overlay_panel_only"' in source
     assert '"native_local_ui_panel"' in source
     assert '"native_local_ui_panel_visible"' in source
     assert '"native_local_ui_panel_minimized"' in source
+    assert '"desktop_organization_panel_request"' in source
+    assert '"desktop_organization_requires_lens_semantics"' in source
+    assert '"desktop_organization_requires_plan_approval"' in source
+    assert '"desktop_organization_requires_reversibility_evidence"' in source
+    assert '"desktop_organization_capturable_does_not_imply_reversible"' in source
+    assert '"desktop_organization_execution_allowed"' in source
     assert "MoveFileExW(temp_path.c_str(), request_path.c_str()" in source
     assert "ShellExecute" not in source
     assert "contact_pulse_started_seconds_" in source

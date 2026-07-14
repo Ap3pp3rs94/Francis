@@ -4179,6 +4179,29 @@ function Get-OverlayScriptValue {
   return $Variable.Value
 }
 
+function New-OverlayDesktopOrganizationControlState {
+  return [ordered]@{
+    surface_supported = $true
+    surface_requested = $false
+    latest_request_kind = ''
+    latest_status = ''
+    route = '/lens/orb/desktop-organization'
+    plan_route = '/lens/orb/desktop-organization/plan'
+    preview_route = '/lens/orb/desktop-organization/orb-sequence'
+    preview_run_route = '/lens/orb/desktop-organization/orb-sequence/run'
+    requires_lens_semantics = $true
+    requires_plan_level_approval = $true
+    requires_reversibility_evidence = $true
+    capturable_does_not_imply_reversible = $true
+    preview_only = $true
+    allowed_to_execute = $false
+    controls_user_os_cursor = $false
+    desktop_effect_performed = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+}
+
 function Get-OverlayOrbControlState {
   $Variable = Get-Variable -Name LensOverlayOrbControlState -Scope Script -ErrorAction SilentlyContinue
   if ($null -eq $Variable -or $null -eq $Variable.Value) {
@@ -4206,9 +4229,13 @@ function Get-OverlayOrbControlState {
       latest_request_id = ''
       latest_trigger = ''
       last_receipt_path = ''
+      desktop_organization = New-OverlayDesktopOrganizationControlState
       grants_execution_authority = $false
       grants_mutation_authority = $false
     }
+  }
+  if (-not $script:LensOverlayOrbControlState.Contains('desktop_organization')) {
+    $script:LensOverlayOrbControlState['desktop_organization'] = New-OverlayDesktopOrganizationControlState
   }
   return $script:LensOverlayOrbControlState
 }
@@ -4243,6 +4270,9 @@ function Get-OverlayOrbControlReadback {
   $State['backend_surface_url'] = ''
   $State['local_ui_surface'] = 'native.cpp.orb.local_ui_panel'
   $State['local_ui_open_mode'] = 'native_cpp_panel'
+  if (-not $State.Contains('desktop_organization')) {
+    $State['desktop_organization'] = New-OverlayDesktopOrganizationControlState
+  }
   $State['grants_execution_authority'] = $false
   $State['grants_mutation_authority'] = $false
   return $State
@@ -6878,7 +6908,7 @@ function Show-OverlayOrbRightClickPanel {
   $State['local_ui_surface'] = 'native.cpp.orb.local_ui_panel'
   $State['local_ui_open_mode'] = 'native_cpp_panel'
   $State['panel_width'] = 320
-  $State['panel_max_height'] = 146
+  $State['panel_max_height'] = 190
   $Action = if ($NativeApplied) { 'native_local_ui_panel_open' } else { 'native_local_ui_panel_refused' }
   $Receipt = Write-OverlayOrbControlReceipt -Root $script:LensOverlayDataRoot -Action $Action -Details ([ordered]@{
         status = $State['latest_status']
@@ -6888,7 +6918,7 @@ function Show-OverlayOrbRightClickPanel {
         native_local_ui_panel = $true
         native_local_ui_panel_supported = $true
         panel_width = 320
-        panel_max_height = 146
+        panel_max_height = 190
         panel_minimized = $false
         features = Get-OverlayOrbControlFeatures
         opened_external_process = $false
@@ -6981,9 +7011,20 @@ function Invoke-OverlayNativeOrbRightClickRequest {
     if (
       [string]::IsNullOrWhiteSpace($RequestId) -or
       $RequestKind -ne 'francis.native_orb_renderer.right_click_request' -or
-      @('open_local_ui_panel', 'open_native_local_ui_panel', 'minimize_native_local_ui_panel') -notcontains $Action -or
+      @(
+        'open_local_ui_panel',
+        'open_native_local_ui_panel',
+        'minimize_native_local_ui_panel',
+        'request_desktop_organization_plan',
+        'request_desktop_organization_preview'
+      ) -notcontains $Action -or
       $AuthorityScope -ne 'runtime_overlay_panel_only' -or
-      @('native_orb_right_click', 'native_cpp_local_ui_minimize') -notcontains $Trigger
+      @(
+        'native_orb_right_click',
+        'native_cpp_local_ui_minimize',
+        'native_cpp_local_ui_desktop_plan',
+        'native_cpp_local_ui_desktop_preview'
+      ) -notcontains $Trigger
     ) {
       $Receipt = Write-OverlayOrbControlReceipt -Root $Root -Action 'native_right_click_refused' -Details ([ordered]@{
           status = 'native_right_click_refused'
@@ -6992,6 +7033,62 @@ function Invoke-OverlayNativeOrbRightClickRequest {
           error = 'invalid_or_unavailable_native_right_click_request'
           authority_scope = $AuthorityScope
           opened_external_process = $false
+        })
+      Publish-OverlayOrbControlRuntimeState
+      return $Receipt
+    }
+    if (@('request_desktop_organization_plan', 'request_desktop_organization_preview') -contains $Action) {
+      $RequestKindName = if ($Action -eq 'request_desktop_organization_plan') { 'plan' } else { 'preview' }
+      $Status = if ($RequestKindName -eq 'plan') {
+        'desktop_organization_plan_surface_requested'
+      } else {
+        'desktop_organization_preview_surface_requested'
+      }
+      $ReceiptAction = if ($RequestKindName -eq 'plan') {
+        'desktop_organization_plan_surface_request'
+      } else {
+        'desktop_organization_preview_surface_request'
+      }
+      $DesktopOrganization = New-OverlayDesktopOrganizationControlState
+      $DesktopOrganization['surface_requested'] = $true
+      $DesktopOrganization['latest_request_kind'] = $RequestKindName
+      $DesktopOrganization['latest_status'] = $Status
+      $DesktopOrganization['native_request_observed'] = $true
+      $DesktopOrganization['request_id'] = $RequestId
+      $DesktopOrganization['trigger'] = $Trigger
+      $State = Get-OverlayOrbControlState
+      $State['panel_visible'] = $true
+      $State['panel_minimized'] = $false
+      $State['latest_status'] = $Status
+      $State['latest_request_id'] = $RequestId
+      $State['latest_trigger'] = $Trigger
+      $State['local_ui_surface'] = 'native.cpp.orb.local_ui_panel'
+      $State['local_ui_open_mode'] = 'native_cpp_panel'
+      $State['desktop_organization'] = $DesktopOrganization
+      $Receipt = Write-OverlayOrbControlReceipt -Root $Root -Action $ReceiptAction -Details ([ordered]@{
+          status = $Status
+          request_id = $RequestId
+          trigger = $Trigger
+          native_local_ui_panel = $true
+          native_request_observed = $true
+          desktop_organization = $DesktopOrganization
+          desktop_organization_surface_requested = $true
+          desktop_organization_request_kind = $RequestKindName
+          desktop_organization_route = '/lens/orb/desktop-organization'
+          desktop_organization_plan_route = '/lens/orb/desktop-organization/plan'
+          desktop_organization_preview_route = '/lens/orb/desktop-organization/orb-sequence'
+          desktop_organization_preview_run_route = '/lens/orb/desktop-organization/orb-sequence/run'
+          requires_lens_semantics = $true
+          requires_plan_level_approval = $true
+          requires_reversibility_evidence = $true
+          capturable_does_not_imply_reversible = $true
+          preview_only = $true
+          allowed_to_execute = $false
+          opened_external_process = $false
+          controls_user_os_cursor = $false
+          desktop_effect_performed = $false
+          grants_execution_authority = $false
+          grants_mutation_authority = $false
         })
       Publish-OverlayOrbControlRuntimeState
       return $Receipt
