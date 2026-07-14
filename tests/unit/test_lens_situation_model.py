@@ -133,6 +133,21 @@ def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dic
     }
 
 
+def _blocked_game_observation(*, frame_id: str) -> dict[str, Any]:
+    observation = _game_observation(frame_id=frame_id)
+    observation.update(
+        {
+            "status": "semantic_warming",
+            "ready": False,
+            "semantic_scene_ready": False,
+            "scene": {},
+            "classification": {},
+            "blockers": ["lens_game_semantic_inference_pending"],
+        }
+    )
+    return observation
+
+
 def _legacy_game_observation(*, frame_id: str) -> dict[str, Any]:
     observation = _game_observation(frame_id=frame_id)
     observation["version"] = 1
@@ -451,6 +466,69 @@ def test_situation_model_rejects_stale_game_classification_lineage(tmp_path: Pat
     assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
 
 
+def test_situation_model_projects_valid_blocked_game_observer_identity(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-blocked-game", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=_blocked_game_observation(frame_id="frame-blocked-game"),
+        observed_at=100.1,
+    )
+
+    game = readback["present"]["game"]
+    assert readback["game_scene_ready"] is False
+    assert readback["sources"]["game_observer"]["status"] == "semantic_warming"
+    assert game["foreground"]["process_name"] == "Sand.exe"
+    assert game["scene"] == {}
+    assert game["classification"] == {}
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("status",), "crafted_blocked_status"),
+        (("blockers",), []),
+        (("foreground", "process_name"), "Injected.exe"),
+        (("foreground", "window_id"), -1),
+        (("scene",), {"ready": True, "id": "injected"}),
+        (("classification",), {"process_name": "Injected.exe"}),
+    ],
+    ids=("status", "blocker", "process", "window", "scene", "classification"),
+)
+def test_situation_model_rejects_malformed_blocked_game_observation(
+    tmp_path: Path,
+    monkeypatch,
+    path: tuple[str, ...],
+    value: Any,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _blocked_game_observation(frame_id="frame-malformed-blocked-game")
+    _set_nested(observation, path, value)
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-malformed-blocked-game", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["game_scene_ready"] is False
+    assert readback["sources"]["game_observer"]["status"] == "invalid"
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
+
+
 def test_situation_model_projects_only_bounded_game_observation_fields(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     observation = _game_observation(frame_id="frame-bounded-game")
@@ -510,6 +588,7 @@ def test_situation_model_projects_bounded_game_teaching_review_without_operator_
 ) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     observation = _game_observation(frame_id="frame-game-review")
+    observation["teaching_session"] = _game_teaching_session()
     observation["teaching_review"] = _game_teaching_review()
 
     readback = write_lens_situation_model_heartbeat(
@@ -524,8 +603,11 @@ def test_situation_model_projects_bounded_game_teaching_review_without_operator_
         observed_at=100.1,
     )
 
+    session = readback["present"]["game"]["teaching_session"]
     review = readback["present"]["game"]["teaching_review"]
     projected = json.dumps(review)
+    assert session["status"] == "stopped"
+    assert session["episode_receipt_id"] == review["episode_receipt_id"]
     assert review["status"] == "operator_accepted"
     assert review["replay_ready"] is True
     assert review["generalization_candidate_ready"] is True
@@ -572,6 +654,130 @@ def test_situation_model_rejects_broken_game_teaching_lineage(
     )
 
     assert readback["game_scene_ready"] is False
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("status",), "crafted_status"),
+        (("session_id",), "unbounded-session"),
+        (("start_receipt_id",), "unbounded-start-receipt"),
+        (("episode_receipt_id",), "unbounded-episode-receipt"),
+        (("started_at",), -1.0),
+        (("deadline_at",), 80.0),
+        (("event_count",), 21),
+        (("intent_label",), "x" * 241),
+        (("blockers",), ["crafted_blocker"]),
+        (("recording_active",), True),
+        (("capture_mode",), "raw_input_capture"),
+    ],
+    ids=(
+        "status",
+        "session-id",
+        "start-receipt",
+        "episode-receipt",
+        "started-at",
+        "deadline",
+        "count",
+        "text",
+        "blocker",
+        "recording-state",
+        "capture-mode",
+    ),
+)
+def test_situation_model_rejects_malformed_game_teaching_session_metadata(
+    tmp_path: Path,
+    monkeypatch,
+    path: tuple[str, ...],
+    value: Any,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-malformed-teaching-session")
+    teaching_session = _game_teaching_session()
+    _set_nested(teaching_session, path, value)
+    observation["teaching_session"] = teaching_session
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-malformed-teaching-session", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["sources"]["game_observer"]["status"] == "invalid"
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("status",), "crafted_status"),
+        (("episode_receipt_id",), "unbounded-episode-receipt"),
+        (("episode_digest",), "not-a-sha256-digest"),
+        (("session_id",), "unbounded-session"),
+        (("event_count",), 1_001),
+        (("scene_transition_count",), 2),
+        (("declared_scope",), "x" * 501),
+        (("blockers",), ["crafted_blocker"]),
+        (("review_state",), "pending_operator_review"),
+        (("review_decision",), "crafted_decision"),
+        (("review_revision",), 0),
+        (("latest_review_receipt_id",), "unbounded-review-receipt"),
+        (("operator_review_required",), True),
+        (("generalization_candidate_ready",), False),
+        (("generalization_performed",), True),
+    ],
+    ids=(
+        "status",
+        "episode-receipt",
+        "digest",
+        "session-id",
+        "count",
+        "transition-count",
+        "text",
+        "blocker",
+        "review-state",
+        "review-decision",
+        "review-revision",
+        "review-receipt",
+        "review-required",
+        "generalization-candidate",
+        "generalization-performed",
+    ),
+)
+def test_situation_model_rejects_malformed_game_teaching_review_metadata(
+    tmp_path: Path,
+    monkeypatch,
+    path: tuple[str, ...],
+    value: Any,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-malformed-teaching-review")
+    teaching_review = _game_teaching_review()
+    _set_nested(teaching_review, path, value)
+    observation["teaching_review"] = teaching_review
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-malformed-teaching-review", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["sources"]["game_observer"]["status"] == "invalid"
     assert readback["present"]["game"] == {}
     assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
 

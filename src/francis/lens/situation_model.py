@@ -32,8 +32,61 @@ _PROCESS_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_. -]{1,128}\.exe$", re.IGNORECA
 _SCENE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,47}$")
 _FRAME_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
+_GAME_TEACHING_SESSION_ID_PATTERN = re.compile(r"^game_teaching_[a-f0-9]{16}$")
+_GAME_TEACHING_START_RECEIPT_ID_PATTERN = re.compile(r"^game_teaching_start_[a-f0-9]{16}$")
+_GAME_TEACHING_EPISODE_RECEIPT_ID_PATTERN = re.compile(r"^game_teaching_episode_[a-f0-9]{16}$")
+_GAME_TEACHING_REVIEW_RECEIPT_ID_PATTERN = re.compile(r"^game_teaching_review_[a-f0-9]{16}$")
+_SHA256_DIGEST_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _TARGET_MODE_PROCESS_ALLOWLIST = "process_allowlist"
 _TARGET_MODE_FOREGROUND_GAME = "foreground_game"
+_GAME_TEACHING_CAPTURE_MODE = "explicit_semantic_scene_transition_session"
+_MAX_GAME_TEACHING_DURATION_SECONDS = 28_800.0
+_MAX_GAME_TEACHING_EVENTS = 1_000
+_MAX_GAME_TEACHING_REVIEW_CORRECTIONS = 50
+_GAME_OBSERVER_BLOCKERS_BY_STATUS = {
+    "configuration_invalid": "lens_game_observer_configuration_invalid",
+    "not_configured": "lens_game_observer_target_not_configured",
+    "foreground_unavailable": "lens_game_observer_foreground_process_unavailable",
+    "foreground_game_verification_unavailable": "lens_game_observer_foreground_game_verification_unavailable",
+    "target_not_foreground": "lens_game_target_not_foreground",
+    "semantic_model_not_configured": "lens_game_semantic_model_not_configured",
+    "semantic_model_missing": "lens_game_observer_model_files_missing",
+    "semantic_warming": "lens_game_semantic_inference_pending",
+    "scene_uncertain": "lens_game_scene_confidence_below_threshold",
+}
+_GAME_OBSERVER_INFERENCE_BLOCKERS = {
+    "lens_game_observer_dependencies_missing",
+    "lens_game_observer_inference_failed",
+    "lens_game_observer_model_files_missing",
+    "lens_game_observer_model_load_failed",
+}
+_GAME_OBSERVER_FOREGROUND_REQUIRED_STATUSES = {
+    "semantic_inference_failed",
+    "semantic_model_missing",
+    "semantic_model_not_configured",
+    "semantic_warming",
+    "scene_uncertain",
+}
+_GAME_TEACHING_SESSION_BLOCKERS = {
+    "game_teaching_duration_limit_reached",
+    "game_teaching_event_limit_reached",
+    "game_teaching_semantic_event_write_failed",
+    "game_teaching_session_finalization_incomplete",
+    "game_teaching_session_state_invalid",
+}
+_GAME_TEACHING_REVIEW_BLOCKERS = {
+    "game_teaching_episode_changed_after_review",
+    "game_teaching_episode_contract_invalid",
+    "game_teaching_episode_digest_mismatch",
+    "game_teaching_episode_digest_missing",
+    "game_teaching_episode_not_found",
+    "game_teaching_episode_not_ready_for_operator_review",
+    "game_teaching_episode_receipt_id_invalid",
+    "game_teaching_episode_scene_confirmation_invalid",
+    "game_teaching_episode_sequence_count_invalid",
+    "game_teaching_episode_sequence_invalid",
+    "game_teaching_episode_sequence_time_invalid",
+}
 
 
 def write_lens_situation_model_heartbeat(
@@ -374,6 +427,38 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _strict_contract_int(value: Any, *, minimum: int, maximum: int) -> int | None:
+    if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
+        return None
+    return value
+
+
+def _strict_contract_float(value: Any, *, minimum: float, maximum: float) -> float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    parsed = float(value)
+    if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
+        return None
+    return parsed
+
+
+def _bounded_contract_text(value: Any, *, minimum: int, maximum: int) -> str | None:
+    if not isinstance(value, str) or value != value.strip() or not minimum <= len(value) <= maximum:
+        return None
+    return value
+
+
+def _bounded_contract_blockers(value: Any, *, allowed: set[str], maximum: int = 8) -> list[str] | None:
+    if (
+        not isinstance(value, list)
+        or len(value) > maximum
+        or any(not isinstance(item, str) or item not in allowed for item in value)
+        or len(set(value)) != len(value)
+    ):
+        return None
+    return value
+
+
 def _game_observation_contract_status(game_state: dict[str, Any], *, frame_id: str, receipt_id: str) -> str:
     if not game_state or game_state.get("kind") != _GAME_OBSERVATION_KIND:
         return "invalid"
@@ -415,6 +500,8 @@ def _game_observation_v2_contract_valid(
     base_valid = bool(
         str(game_state.get("source_frame_id") or "") == frame_id
         and _FRAME_ID_PATTERN.fullmatch(frame_id)
+        and isinstance(game_state.get("ready"), bool)
+        and isinstance(game_state.get("semantic_scene_ready"), bool)
         and ready is semantic_ready
         and str(runtime_identity.get("authority_receipt_id") or "") == receipt_id
         and 1 <= len(receipt_id) <= 256
@@ -446,14 +533,219 @@ def _game_observation_v2_contract_valid(
     if not base_valid:
         return False
     if not ready:
-        status = str(game_state.get("status") or "")
-        return bool(1 <= len(status) <= 80)
+        return _blocked_game_observation_lineage_valid(
+            game_state,
+            target=target,
+            model=model,
+            observed_at=observed_at,
+            receipt_id=receipt_id,
+        )
     return _ready_game_observation_lineage_valid(
         game_state,
         target=target,
         model=model,
         observed_at=observed_at,
         receipt_id=receipt_id,
+    )
+
+
+def _blocked_game_observation_lineage_valid(
+    game_state: dict[str, Any],
+    *,
+    target: dict[str, Any],
+    model: dict[str, Any],
+    observed_at: float,
+    receipt_id: str,
+) -> bool:
+    status = game_state.get("status")
+    blockers = game_state.get("blockers")
+    foreground_value = game_state.get("foreground")
+    scene_value = game_state.get("scene")
+    classification_value = game_state.get("classification")
+    if (
+        not isinstance(status, str)
+        or not isinstance(blockers, list)
+        or not isinstance(foreground_value, dict)
+        or not isinstance(scene_value, dict)
+        or not isinstance(classification_value, dict)
+    ):
+        return False
+    expected_blocker = _GAME_OBSERVER_BLOCKERS_BY_STATUS.get(status)
+    if expected_blocker is not None:
+        if blockers != [expected_blocker]:
+            return False
+    elif status == "semantic_inference_failed":
+        if len(blockers) != 1 or blockers[0] not in _GAME_OBSERVER_INFERENCE_BLOCKERS:
+            return False
+    else:
+        return False
+
+    foreground_required = status in _GAME_OBSERVER_FOREGROUND_REQUIRED_STATUSES
+    if not _blocked_game_foreground_contract_valid(
+        foreground_value,
+        target=target,
+        require_match=foreground_required,
+    ):
+        return False
+    if status == "configuration_invalid":
+        configuration = _as_dict(game_state.get("configuration"))
+        if (
+            configuration.get("source") != "invalid"
+            or configuration.get("loaded") is not False
+            or configuration.get("enabled") is not False
+        ):
+            return False
+    elif status == "not_configured":
+        if target.get("configured") is not False:
+            return False
+    elif status == "foreground_unavailable":
+        if target.get("configured") is not True or foreground_value.get("available") is not False:
+            return False
+    elif status == "foreground_game_verification_unavailable":
+        if (
+            target.get("configured") is not True
+            or target.get("mode") != _TARGET_MODE_FOREGROUND_GAME
+            or foreground_value.get("available") is not True
+        ):
+            return False
+    elif status == "target_not_foreground":
+        if target.get("configured") is not True or foreground_value.get("available") is not True:
+            return False
+    elif status == "semantic_model_not_configured":
+        if model.get("configured") is not False:
+            return False
+    elif status in {"semantic_inference_failed", "semantic_warming", "scene_uncertain"}:
+        if model.get("configured") is not True or model.get("local_files_present") is not True:
+            return False
+    elif status == "semantic_model_missing":
+        if model.get("configured") is not True or model.get("local_files_present") is not False:
+            return False
+
+    if status != "scene_uncertain":
+        return scene_value == {} and classification_value == {}
+    process_id = _strict_contract_int(foreground_value.get("process_id"), minimum=1, maximum=4_294_967_295)
+    process_name = foreground_value.get("process_name")
+    return bool(
+        process_id is not None
+        and isinstance(process_name, str)
+        and _game_uncertain_scene_contract_valid(scene_value)
+        and _game_classification_lineage_valid(
+            classification_value,
+            scene=scene_value,
+            observed_at=observed_at,
+            target_id=str(target.get("id") or ""),
+            process_id=process_id,
+            process_name=process_name,
+            model_id=str(model.get("id") or ""),
+            receipt_id=receipt_id,
+        )
+    )
+
+
+def _blocked_game_foreground_contract_valid(
+    foreground: dict[str, Any],
+    *,
+    target: dict[str, Any],
+    require_match: bool,
+) -> bool:
+    process_id = _strict_contract_int(foreground.get("process_id"), minimum=0, maximum=4_294_967_295)
+    window_id = _strict_contract_int(foreground.get("window_id"), minimum=0, maximum=18_446_744_073_709_551_615)
+    process_name = foreground.get("process_name")
+    verification_basis = foreground.get("verification_basis")
+    if (
+        process_id is None
+        or window_id is None
+        or not isinstance(process_name, str)
+        or not isinstance(verification_basis, str)
+        or not all(
+            isinstance(foreground.get(field), bool)
+            for field in ("supported", "available", "target_match", "window_title_included", "game_verified")
+        )
+        or foreground.get("window_title_included") is not False
+    ):
+        return False
+    if not require_match:
+        return bool(
+            target.get("foreground") is False
+            and target.get("visibility_basis") == "not_observed"
+            and foreground.get("target_match") is False
+            and process_id == 0
+            and process_name == ""
+            and window_id == 0
+            and foreground.get("game_verified") is False
+            and verification_basis == ""
+        )
+    mode = target.get("mode")
+    expected_basis = (
+        "local_launcher_library_path" if mode == _TARGET_MODE_FOREGROUND_GAME else "foreground_process_match"
+    )
+    process_names = target.get("process_names")
+    return bool(
+        target.get("foreground") is True
+        and target.get("visibility_basis") == expected_basis
+        and foreground.get("supported") is True
+        and foreground.get("available") is True
+        and foreground.get("target_match") is True
+        and process_id > 0
+        and window_id > 0
+        and _PROCESS_NAME_PATTERN.fullmatch(process_name)
+        and verification_basis == expected_basis
+        and (
+            mode != _TARGET_MODE_PROCESS_ALLOWLIST
+            or (
+                isinstance(process_names, list)
+                and process_name.casefold() in {item.casefold() for item in process_names}
+                and foreground.get("game_verified") is False
+            )
+        )
+        and (mode != _TARGET_MODE_FOREGROUND_GAME or foreground.get("game_verified") is True)
+    )
+
+
+def _game_uncertain_scene_contract_valid(scene: dict[str, Any]) -> bool:
+    raw_candidates = scene.get("candidates")
+    confidence = _strict_contract_float(scene.get("confidence"), minimum=0.0, maximum=1.0)
+    margin = _strict_contract_float(scene.get("margin"), minimum=0.0, maximum=1.0)
+    if scene.get("ready") is not False or confidence is None or margin is None or not isinstance(raw_candidates, list):
+        return False
+    if not raw_candidates:
+        return bool(
+            scene.get("id") == ""
+            and scene.get("top_candidate_id") in {None, ""}
+            and confidence == 0.0
+            and margin == 0.0
+            and scene.get("min_confidence") is None
+            and scene.get("min_margin") is None
+        )
+    min_confidence = _strict_contract_float(scene.get("min_confidence"), minimum=0.0, maximum=1.0)
+    min_margin = _strict_contract_float(scene.get("min_margin"), minimum=0.0, maximum=1.0)
+    top_candidate_id = scene.get("top_candidate_id")
+    if (
+        scene.get("id") != "uncertain"
+        or not isinstance(top_candidate_id, str)
+        or not _SCENE_ID_PATTERN.fullmatch(top_candidate_id)
+        or min_confidence is None
+        or min_margin is None
+        or not 1 <= len(raw_candidates) <= 3
+    ):
+        return False
+    candidates: list[tuple[str, float]] = []
+    for raw_candidate in raw_candidates:
+        candidate = _as_dict(raw_candidate)
+        candidate_id = candidate.get("scene_id")
+        score = _strict_contract_float(candidate.get("score"), minimum=0.0, maximum=1.0)
+        if not isinstance(candidate_id, str) or not _SCENE_ID_PATTERN.fullmatch(candidate_id) or score is None:
+            return False
+        candidates.append((candidate_id, score))
+    if len({candidate_id for candidate_id, _score in candidates}) != len(candidates):
+        return False
+    expected_margin = max(0.0, candidates[0][1] - (candidates[1][1] if len(candidates) > 1 else 0.0))
+    return bool(
+        candidates == sorted(candidates, key=lambda item: item[1], reverse=True)
+        and candidates[0][0] == top_candidate_id
+        and abs(candidates[0][1] - confidence) <= 1e-6
+        and abs(expected_margin - margin) <= 1e-6
+        and (confidence < min_confidence or margin < min_margin)
     )
 
 
@@ -832,19 +1124,8 @@ def _sha256_fingerprint_valid(value: str) -> bool:
 
 def _game_teaching_session_contract_valid(teaching: dict[str, Any], *, target_id: str) -> bool:
     governance = _as_dict(teaching.get("governance"))
-    status = str(teaching.get("status") or "")
-    teaching_target_id = str(teaching.get("target_id") or "")
-    session_id = str(teaching.get("session_id") or "")
-    target_lineage_valid = (
-        teaching_target_id == target_id
-        if teaching_target_id or session_id
-        else status in {"idle", "unavailable", "recording_error"}
-    )
-    return bool(
-        teaching.get("kind") == _GAME_TEACHING_SESSION_STATUS_KIND
-        and teaching.get("version") == _GAME_TEACHING_CONTRACT_VERSION
-        and target_lineage_valid
-        and governance.get("explicit_start_stop_required") is True
+    governance_valid = bool(
+        governance.get("explicit_start_stop_required") is True
         and governance.get("semantic_transitions_only") is True
         and all(
             governance.get(field) is False
@@ -867,6 +1148,155 @@ def _game_teaching_session_contract_valid(teaching: dict[str, Any], *, target_id
             )
         )
         and governance.get("operator_review_required") is True
+    )
+    return bool(
+        teaching.get("kind") == _GAME_TEACHING_SESSION_STATUS_KIND
+        and type(teaching.get("version")) is int
+        and teaching.get("version") == _GAME_TEACHING_CONTRACT_VERSION
+        and governance_valid
+        and _game_teaching_session_payload_valid(teaching, target_id=target_id)
+    )
+
+
+def _game_teaching_session_payload_valid(teaching: dict[str, Any], *, target_id: str) -> bool:
+    status = teaching.get("status")
+    blockers = _bounded_contract_blockers(teaching.get("blockers"), allowed=_GAME_TEACHING_SESSION_BLOCKERS)
+    recording_active = teaching.get("recording_active")
+    review_required = teaching.get("review_required")
+    event_count = _strict_contract_int(teaching.get("event_count"), minimum=0, maximum=_MAX_GAME_TEACHING_EVENTS)
+    max_events = _strict_contract_int(teaching.get("max_events"), minimum=0, maximum=_MAX_GAME_TEACHING_EVENTS)
+    if (
+        not isinstance(status, str)
+        or blockers is None
+        or not isinstance(recording_active, bool)
+        or not isinstance(review_required, bool)
+        or event_count is None
+        or max_events is None
+        or teaching.get("capture_mode") != _GAME_TEACHING_CAPTURE_MODE
+    ):
+        return False
+    empty_status_blockers = {
+        "idle": [],
+        "recording_error": ["game_teaching_semantic_event_write_failed"],
+        "unavailable": ["game_teaching_session_state_invalid"],
+    }
+    if status in empty_status_blockers:
+        return bool(
+            blockers == empty_status_blockers[status]
+            and recording_active is False
+            and review_required is False
+            and event_count == 0
+            and max_events == 0
+            and all(
+                teaching.get(field) == ""
+                for field in (
+                    "session_id",
+                    "target_id",
+                    "intent_label",
+                    "declared_scope",
+                    "success_condition",
+                    "latest_scene_id",
+                    "start_receipt_id",
+                    "episode_receipt_id",
+                )
+            )
+            and all(
+                teaching.get(field) is None
+                for field in ("started_at", "deadline_at", "remaining_seconds", "latest_event_at")
+            )
+        )
+    if status not in {"active", "awaiting_explicit_stop", "finalizing", "stopped"}:
+        return False
+
+    session_id = _bounded_contract_text(teaching.get("session_id"), minimum=1, maximum=64)
+    teaching_target_id = _bounded_contract_text(teaching.get("target_id"), minimum=1, maximum=64)
+    intent_label = _bounded_contract_text(teaching.get("intent_label"), minimum=1, maximum=240)
+    declared_scope = _bounded_contract_text(teaching.get("declared_scope"), minimum=1, maximum=500)
+    success_condition = _bounded_contract_text(teaching.get("success_condition"), minimum=1, maximum=500)
+    start_receipt_id = _bounded_contract_text(teaching.get("start_receipt_id"), minimum=1, maximum=64)
+    episode_receipt_id = _bounded_contract_text(teaching.get("episode_receipt_id"), minimum=0, maximum=64)
+    latest_scene_id = _bounded_contract_text(teaching.get("latest_scene_id"), minimum=0, maximum=48)
+    started_at = _strict_contract_float(
+        teaching.get("started_at"),
+        minimum=0.0,
+        maximum=float(2**53),
+    )
+    deadline_at = _strict_contract_float(
+        teaching.get("deadline_at"),
+        minimum=0.0,
+        maximum=float(2**53),
+    )
+    remaining_seconds = _strict_contract_float(
+        teaching.get("remaining_seconds"),
+        minimum=0.0,
+        maximum=_MAX_GAME_TEACHING_DURATION_SECONDS,
+    )
+    latest_event_at_value = teaching.get("latest_event_at")
+    latest_event_at = (
+        None
+        if latest_event_at_value is None
+        else _strict_contract_float(latest_event_at_value, minimum=0.0, maximum=float(2**53))
+    )
+    if (
+        session_id is None
+        or not _GAME_TEACHING_SESSION_ID_PATTERN.fullmatch(session_id)
+        or teaching_target_id is None
+        or teaching_target_id != target_id
+        or not _TARGET_ID_PATTERN.fullmatch(teaching_target_id)
+        or intent_label is None
+        or declared_scope is None
+        or success_condition is None
+        or start_receipt_id is None
+        or not _GAME_TEACHING_START_RECEIPT_ID_PATTERN.fullmatch(start_receipt_id)
+        or episode_receipt_id is None
+        or latest_scene_id is None
+        or started_at is None
+        or deadline_at is None
+        or remaining_seconds is None
+        or latest_event_at_value is not None
+        and latest_event_at is None
+        or not 30.0 <= deadline_at - started_at <= _MAX_GAME_TEACHING_DURATION_SECONDS
+        or max_events < 1
+        or event_count > max_events
+        or review_required is not True
+    ):
+        return False
+    if event_count == 0:
+        if latest_scene_id or latest_event_at_value is not None:
+            return False
+    elif (
+        not _SCENE_ID_PATTERN.fullmatch(latest_scene_id)
+        or latest_event_at is None
+        or not started_at <= latest_event_at <= deadline_at
+    ):
+        return False
+    if status == "active":
+        return bool(
+            blockers == []
+            and recording_active is True
+            and event_count < max_events
+            and remaining_seconds > 0.0
+            and episode_receipt_id == ""
+        )
+    if status == "awaiting_explicit_stop":
+        if recording_active is not False or episode_receipt_id != "" or len(blockers) != 1:
+            return False
+        return bool(
+            blockers == ["game_teaching_event_limit_reached"]
+            and event_count >= max_events
+            or blockers == ["game_teaching_duration_limit_reached"]
+            and remaining_seconds == 0.0
+        )
+    if status == "finalizing":
+        return bool(
+            recording_active is False
+            and episode_receipt_id == ""
+            and blockers == ["game_teaching_session_finalization_incomplete"]
+        )
+    return bool(
+        recording_active is False
+        and blockers == []
+        and _GAME_TEACHING_EPISODE_RECEIPT_ID_PATTERN.fullmatch(episode_receipt_id)
     )
 
 
@@ -911,12 +1341,8 @@ def _game_teaching_session_present(teaching: dict[str, Any]) -> dict[str, Any]:
 
 def _game_teaching_review_contract_valid(review: dict[str, Any], *, target_id: str) -> bool:
     governance = _as_dict(review.get("governance"))
-    review_target_id = str(review.get("target_id") or "")
-    return bool(
-        review.get("kind") == _GAME_TEACHING_EPISODE_REVIEW_STATUS_KIND
-        and review.get("version") == _GAME_TEACHING_CONTRACT_VERSION
-        and (not review_target_id or review_target_id == target_id)
-        and governance.get("source_episode_immutable") is True
+    governance_valid = bool(
+        governance.get("source_episode_immutable") is True
         and governance.get("source_digest_required") is True
         and governance.get("semantic_replay_only") is True
         and governance.get("operator_review_required") is True
@@ -942,6 +1368,170 @@ def _game_teaching_review_contract_valid(review: dict[str, Any], *, target_id: s
             )
         )
     )
+    return bool(
+        review.get("kind") == _GAME_TEACHING_EPISODE_REVIEW_STATUS_KIND
+        and type(review.get("version")) is int
+        and review.get("version") == _GAME_TEACHING_CONTRACT_VERSION
+        and governance_valid
+        and _game_teaching_review_payload_valid(review, target_id=target_id)
+    )
+
+
+def _game_teaching_review_payload_valid(review: dict[str, Any], *, target_id: str) -> bool:
+    status = review.get("status")
+    blockers = _bounded_contract_blockers(review.get("blockers"), allowed=_GAME_TEACHING_REVIEW_BLOCKERS)
+    event_count = _strict_contract_int(review.get("event_count"), minimum=0, maximum=_MAX_GAME_TEACHING_EVENTS)
+    transition_count = _strict_contract_int(
+        review.get("scene_transition_count"),
+        minimum=0,
+        maximum=_MAX_GAME_TEACHING_EVENTS,
+    )
+    review_revision = _strict_contract_int(review.get("review_revision"), minimum=0, maximum=1_000_000)
+    correction_count = _strict_contract_int(
+        review.get("correction_count"),
+        minimum=0,
+        maximum=_MAX_GAME_TEACHING_REVIEW_CORRECTIONS,
+    )
+    if (
+        not isinstance(status, str)
+        or blockers is None
+        or event_count is None
+        or transition_count is None
+        or review_revision is None
+        or correction_count is None
+        or not all(
+            isinstance(review.get(field), bool)
+            for field in (
+                "ready_for_operator_review",
+                "replay_ready",
+                "operator_review_required",
+                "generalization_candidate_ready",
+                "generalization_performed",
+                "skillization_performed",
+            )
+        )
+        or review.get("generalization_performed") is not False
+        or review.get("skillization_performed") is not False
+    ):
+        return False
+
+    episode_receipt_id = _bounded_contract_text(review.get("episode_receipt_id"), minimum=0, maximum=64)
+    episode_digest = _bounded_contract_text(review.get("episode_digest"), minimum=0, maximum=64)
+    session_id = _bounded_contract_text(review.get("session_id"), minimum=0, maximum=64)
+    review_target_id = _bounded_contract_text(review.get("target_id"), minimum=0, maximum=64)
+    intent_label = _bounded_contract_text(review.get("intent_label"), minimum=0, maximum=240)
+    declared_scope = _bounded_contract_text(review.get("declared_scope"), minimum=0, maximum=500)
+    success_condition = _bounded_contract_text(review.get("success_condition"), minimum=0, maximum=500)
+    review_state = _bounded_contract_text(review.get("review_state"), minimum=1, maximum=40)
+    review_decision = _bounded_contract_text(review.get("review_decision"), minimum=0, maximum=40)
+    latest_review_receipt_id = _bounded_contract_text(
+        review.get("latest_review_receipt_id"),
+        minimum=0,
+        maximum=64,
+    )
+    if (
+        episode_receipt_id is None
+        or episode_digest is None
+        or session_id is None
+        or review_target_id is None
+        or intent_label is None
+        or declared_scope is None
+        or success_condition is None
+        or review_state is None
+        or review_decision is None
+        or latest_review_receipt_id is None
+    ):
+        return False
+    no_source_status_blockers = {
+        "awaiting_episode": ["game_teaching_episode_not_found"],
+        "invalid_request": ["game_teaching_episode_receipt_id_invalid"],
+    }
+    if status in no_source_status_blockers:
+        return bool(
+            blockers == no_source_status_blockers[status]
+            and all(
+                value == ""
+                for value in (
+                    episode_receipt_id,
+                    episode_digest,
+                    session_id,
+                    review_target_id,
+                    intent_label,
+                    declared_scope,
+                    success_condition,
+                    review_decision,
+                    latest_review_receipt_id,
+                )
+            )
+            and event_count == 0
+            and transition_count == 0
+            and review.get("ready_for_operator_review") is False
+            and review.get("replay_ready") is False
+            and review_state == "pending_operator_review"
+            and review_revision == 0
+            and correction_count == 0
+            and review.get("operator_review_required") is True
+            and review.get("generalization_candidate_ready") is False
+        )
+    if status not in {
+        "correction_required",
+        "episode_invalid",
+        "operator_accepted",
+        "operator_rejected",
+        "pending_operator_review",
+    }:
+        return False
+    if (
+        not _GAME_TEACHING_EPISODE_RECEIPT_ID_PATTERN.fullmatch(episode_receipt_id)
+        or not _SHA256_DIGEST_PATTERN.fullmatch(episode_digest)
+        or not _GAME_TEACHING_SESSION_ID_PATTERN.fullmatch(session_id)
+        or review_target_id != target_id
+        or not _TARGET_ID_PATTERN.fullmatch(review_target_id)
+        or not intent_label
+        or not declared_scope
+        or not success_condition
+        or event_count != transition_count
+        or review.get("ready_for_operator_review") is not (event_count > 0)
+    ):
+        return False
+    review_state_by_decision = {
+        "": "pending_operator_review",
+        "accepted": "operator_accepted",
+        "needs_correction": "correction_required",
+        "rejected": "operator_rejected",
+    }
+    expected_review_state = review_state_by_decision.get(review_decision)
+    if expected_review_state is None or review_state != expected_review_state:
+        return False
+    if review_decision:
+        if (
+            not 1 <= review_revision <= 1_000_000
+            or not _GAME_TEACHING_REVIEW_RECEIPT_ID_PATTERN.fullmatch(latest_review_receipt_id)
+            or review_decision == "needs_correction"
+            and correction_count < 1
+            or review_decision != "needs_correction"
+            and correction_count != 0
+        ):
+            return False
+    elif review_revision != 0 or latest_review_receipt_id or correction_count != 0:
+        return False
+
+    replay_ready = review.get("replay_ready") is True
+    accepted = review_decision == "accepted" and replay_ready
+    if (
+        review.get("operator_review_required") is not (not accepted)
+        or review.get("generalization_candidate_ready") is not accepted
+    ):
+        return False
+    if replay_ready:
+        expected_status_by_decision = {
+            "": "pending_operator_review",
+            "accepted": "operator_accepted",
+            "needs_correction": "correction_required",
+            "rejected": "operator_rejected",
+        }
+        return bool(event_count > 0 and blockers == [] and status == expected_status_by_decision[review_decision])
+    return bool(status == "episode_invalid" and blockers)
 
 
 def _game_teaching_review_present(review: dict[str, Any]) -> dict[str, Any]:
