@@ -24,15 +24,21 @@ from francis.kernel.paths import data_dir
 from francis.telemetry.audit import record as audit_record
 
 GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE = "apprenticeship.game_teaching_episode_review.write"
+GAME_TEACHING_GENERALIZATION_WRITE_SCOPE = "apprenticeship.game_teaching_generalization.write"
 GAME_TEACHING_EPISODE_REVIEW_CONTRACT_KIND = "francis.apprenticeship.game_teaching_episode_review.contract"
 GAME_TEACHING_EPISODE_REVIEW_STATUS_KIND = "francis.apprenticeship.game_teaching_episode_review.status"
 GAME_TEACHING_EPISODE_REPLAY_KIND = "francis.apprenticeship.game_teaching_episode.semantic_replay"
 GAME_TEACHING_EPISODE_REVIEW_RECEIPT_KIND = "francis.apprenticeship.game_teaching_episode_review.receipt"
 GAME_TEACHING_EPISODE_REVIEW_RECEIPTS_KIND = "francis.apprenticeship.game_teaching_episode_review.receipts"
+GAME_TEACHING_GENERALIZATION_CONTRACT_KIND = "francis.apprenticeship.game_teaching_generalization.contract"
+GAME_TEACHING_GENERALIZATION_STATUS_KIND = "francis.apprenticeship.game_teaching_generalization.status"
+GAME_TEACHING_GENERALIZATION_PROPOSAL_KIND = "francis.apprenticeship.game_teaching_generalization.proposal"
+GAME_TEACHING_GENERALIZATION_PROPOSALS_KIND = "francis.apprenticeship.game_teaching_generalization.proposals"
 GAME_TEACHING_EPISODE_REVIEW_VERSION = 1
 
 MAX_REPLAY_PAGE_SIZE = 100
 MAX_REVIEW_CORRECTIONS = 50
+MAX_GENERALIZATION_STEPS = 100
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_DECISIONS = {"accepted", "needs_correction", "rejected"}
@@ -47,6 +53,7 @@ _ALLOWED_CORRECTION_TYPES = {
     "validation",
 }
 _EPISODE_RECEIPT_ID_PATTERN = re.compile(r"^game_teaching_episode_[a-f0-9]{16}$")
+_GENERALIZATION_PROPOSAL_ID_PATTERN = re.compile(r"^game_generalization_[a-f0-9]{16}$")
 
 
 def game_teaching_episode_review_contract() -> dict[str, Any]:
@@ -381,6 +388,277 @@ def game_teaching_episode_review_receipts(
     }
 
 
+def game_teaching_generalization_contract() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "kind": GAME_TEACHING_GENERALIZATION_CONTRACT_KIND,
+        "version": GAME_TEACHING_EPISODE_REVIEW_VERSION,
+        "status": "ready",
+        "source_id": "apprenticeship",
+        "pipeline_stage": "generalize",
+        "proposal_type": "semantic_scene_progression_hypothesis",
+        "requires_operator_accepted_replay": True,
+        "requires_episode_digest": True,
+        "requires_replay_digest": True,
+        "requires_review_receipt": True,
+        "max_generalization_steps": MAX_GENERALIZATION_STEPS,
+        "extracts_causal_input_policy": False,
+        "infers_unobserved_controls": False,
+        "generalization_is_proposal_only": True,
+        "operator_review_required": True,
+        "additional_demonstration_required_before_skillization": True,
+        "writes_receipt": False,
+        "writes_memory": False,
+        "creates_capability": False,
+        "promotes_skill": False,
+        "learning_authority": False,
+        "reward_authority": False,
+        "input_execution_authority": False,
+        "automatic_generalization": False,
+        "automatic_skillization": False,
+        "automatic_capability_promotion": False,
+        "governance": _generalization_governance(),
+        "next_smallest_truthful_gap": "generate_operator_reviewable_game_generalization_proposal",
+    }
+
+
+def game_teaching_generalization_status(*, episode_receipt_id: Any = "") -> dict[str, Any]:
+    review = game_teaching_episode_review_status(episode_receipt_id=episode_receipt_id)
+    safe_episode_receipt_id = _safe_text(review.get("episode_receipt_id"))
+    accepted = bool(
+        review.get("generalization_candidate_ready") is True
+        and review.get("review_state") == "operator_accepted"
+        and review.get("review_decision") == "accepted"
+    )
+    if not accepted:
+        blockers = _string_items(review.get("blockers"))
+        if not blockers:
+            blockers = ["game_teaching_generalization_requires_operator_accepted_replay"]
+        return _generalization_status_payload(
+            status="awaiting_operator_accepted_replay",
+            review=review,
+            blockers=blockers,
+        )
+
+    review_receipt_id = _safe_text(review.get("latest_review_receipt_id"))
+    proposals = [
+        item
+        for item in _generalization_proposals_for_episode(safe_episode_receipt_id)
+        if _safe_text(_as_dict(item.get("source_lineage")).get("review_receipt_id")) == review_receipt_id
+    ]
+    if not proposals:
+        return _generalization_status_payload(
+            status="ready_to_generate",
+            review=review,
+            ready_to_generate=True,
+        )
+
+    latest = proposals[-1]
+    if not _generalization_proposal_integrity_valid(latest):
+        return _generalization_status_payload(
+            status="proposal_integrity_invalid",
+            review=review,
+            proposal=latest,
+            blockers=["game_teaching_generalization_proposal_digest_mismatch"],
+        )
+    return _generalization_status_payload(
+        status="proposal_ready_for_operator_review",
+        review=review,
+        proposal=latest,
+        proposal_ready=True,
+    )
+
+
+def record_game_teaching_generalization_proposal(
+    *,
+    actor: Any,
+    reason: Any,
+    episode_receipt_id: Any,
+    now: float | None = None,
+) -> dict[str, Any]:
+    if _env_profile() not in _ALLOWED_ENV_PROFILES:
+        return _blocked_generalization_action(
+            "blocked_environment_profile",
+            "game_teaching_generalization_dev_or_workstation_only",
+        )
+
+    safe_actor = _redacted_text(actor)[:240]
+    safe_reason = _redacted_text(reason)[:500]
+    safe_episode_receipt_id = _safe_text(episode_receipt_id)
+    if not safe_actor or not safe_reason or not _EPISODE_RECEIPT_ID_PATTERN.fullmatch(safe_episode_receipt_id):
+        return _blocked_generalization_action(
+            "invalid_request",
+            "game_teaching_generalization_context_invalid",
+            episode_receipt_id=safe_episode_receipt_id,
+        )
+
+    status = game_teaching_generalization_status(episode_receipt_id=safe_episode_receipt_id)
+    if status.get("proposal_ready_for_operator_review") is True:
+        proposal = _as_dict(status.get("proposal"))
+        return {**proposal, "idempotent": True}
+    if status.get("ready_to_generate") is not True:
+        return _blocked_generalization_action(
+            str(status.get("status") or "not_ready"),
+            "game_teaching_generalization_source_not_ready",
+            episode_receipt_id=safe_episode_receipt_id,
+            blockers=_string_items(status.get("blockers")),
+        )
+
+    episode = game_teaching_episode_receipt(safe_episode_receipt_id)
+    event_count = _safe_int(episode.get("event_count"))
+    if event_count < 1 or event_count > MAX_GENERALIZATION_STEPS:
+        return _blocked_generalization_action(
+            "episode_outside_generalization_bounds",
+            "game_teaching_generalization_step_count_invalid",
+            episode_receipt_id=safe_episode_receipt_id,
+        )
+    replay = game_teaching_episode_replay(
+        episode_receipt_id=safe_episode_receipt_id,
+        cursor=0,
+        limit=MAX_GENERALIZATION_STEPS,
+    )
+    if replay.get("ok") is not True or replay.get("complete") is not True:
+        return _blocked_generalization_action(
+            "semantic_replay_not_ready",
+            "game_teaching_generalization_replay_not_ready",
+            episode_receipt_id=safe_episode_receipt_id,
+            blockers=_string_items(replay.get("blockers")),
+        )
+
+    review_receipt_id = _safe_text(status.get("latest_review_receipt_id"))
+    review_receipts = _review_receipts_for_episode(safe_episode_receipt_id)
+    source_review = next(
+        (
+            receipt
+            for receipt in reversed(review_receipts)
+            if _safe_text(receipt.get("receipt_id")) == review_receipt_id
+        ),
+        {},
+    )
+    if not source_review:
+        return _blocked_generalization_action(
+            "review_lineage_missing",
+            "game_teaching_generalization_review_receipt_missing",
+            episode_receipt_id=safe_episode_receipt_id,
+        )
+
+    pattern = _game_generalization_pattern(episode)
+    uncertainty = _game_generalization_uncertainty()
+    evidence = _game_generalization_evidence(episode, source_review)
+    source_lineage = {
+        "episode_receipt_id": safe_episode_receipt_id,
+        "episode_digest": _safe_text(episode.get("episode_digest")),
+        "review_receipt_id": review_receipt_id,
+        "review_revision": _safe_int(source_review.get("review_revision")),
+        "review_decision": _safe_text(source_review.get("decision")),
+        "replay_digest": _safe_text(replay.get("replay_digest")),
+    }
+    intent = {
+        "target_id": _safe_text(episode.get("target_id")),
+        "intent_label": _safe_text(episode.get("intent_label")),
+        "declared_scope": _safe_text(episode.get("declared_scope")),
+        "success_condition": _safe_text(episode.get("success_condition")),
+    }
+    proposal_core = {
+        "kind": GAME_TEACHING_GENERALIZATION_PROPOSAL_KIND,
+        "version": GAME_TEACHING_EPISODE_REVIEW_VERSION,
+        "source_lineage": source_lineage,
+        "intent": intent,
+        "pattern": pattern,
+        "uncertainty": uncertainty,
+        "evidence": evidence,
+    }
+    proposal_digest = _canonical_digest(proposal_core)
+    for existing in _generalization_proposals_for_episode(safe_episode_receipt_id):
+        existing_lineage = _as_dict(existing.get("source_lineage"))
+        if _safe_text(existing_lineage.get("review_receipt_id")) != review_receipt_id:
+            continue
+        if not _generalization_proposal_integrity_valid(existing):
+            return _blocked_generalization_action(
+                "proposal_integrity_conflict",
+                "game_teaching_generalization_proposal_digest_mismatch",
+                episode_receipt_id=safe_episode_receipt_id,
+            )
+        if _safe_text(existing.get("proposal_digest")) == proposal_digest:
+            return {**existing, "idempotent": True}
+
+    proposal_receipt_id = f"game_generalization_{uuid.uuid4().hex[:16]}"
+    receipt = {
+        "ok": True,
+        **proposal_core,
+        "receipt_id": proposal_receipt_id,
+        "status": "proposal_ready_for_operator_review",
+        "recorded_at": _validated_timestamp(now),
+        "actor": safe_actor,
+        "reason": safe_reason,
+        "integrity_algorithm": "sha256",
+        "proposal_digest": proposal_digest,
+        "generalization_hypothesis_extracted": True,
+        "generalization_performed": False,
+        "generalization_accepted": False,
+        "operator_review_required": True,
+        "additional_demonstration_required": True,
+        "skillization_candidate_ready": False,
+        "skillization_performed": False,
+        "writes_receipt": True,
+        "writes_memory": False,
+        "creates_capability": False,
+        "promotes_skill": False,
+        "learning_authority": False,
+        "reward_authority": False,
+        "input_execution_authority": False,
+        "governance": _generalization_governance(),
+        "next_smallest_truthful_gap": "operator_review_game_generalization_proposal",
+    }
+    _append_jsonl(_generalization_proposals_path(), receipt)
+    audit_record(
+        "apprenticeship.game_teaching_generalization_proposal_recorded",
+        actor=safe_actor,
+        reason=safe_reason,
+        receipt_id=proposal_receipt_id,
+        episode_receipt_id=safe_episode_receipt_id,
+        review_receipt_id=review_receipt_id,
+        proposal_digest=proposal_digest,
+    )
+    return receipt
+
+
+def game_teaching_generalization_proposals(
+    *,
+    limit: int = 20,
+    episode_receipt_id: Any = "",
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    safe_episode_receipt_id = _safe_text(episode_receipt_id)
+    stored_items = _generalization_proposals_for_episode(safe_episode_receipt_id)[-safe_limit:]
+    items = [{**item, "integrity_valid": _generalization_proposal_integrity_valid(item)} for item in stored_items]
+    integrity_valid = all(item["integrity_valid"] is True for item in items)
+    return {
+        "ok": integrity_valid,
+        "kind": GAME_TEACHING_GENERALIZATION_PROPOSALS_KIND,
+        "version": GAME_TEACHING_EPISODE_REVIEW_VERSION,
+        "status": "ready" if items and integrity_valid else "integrity_invalid" if items else "empty",
+        "count": len(items),
+        "items": items,
+        "integrity_valid": integrity_valid,
+        "blockers": [] if integrity_valid else ["game_teaching_generalization_proposal_digest_mismatch"],
+        "latest_receipt_id": _safe_text(items[-1].get("receipt_id")) if items else "",
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "creates_capability": False,
+        "promotes_skill": False,
+        "learning_authority": False,
+        "input_execution_authority": False,
+        "governance": _generalization_governance(),
+        "next_smallest_truthful_gap": (
+            "operator_review_game_generalization_proposal"
+            if items
+            else "generate_operator_reviewable_game_generalization_proposal"
+        ),
+    }
+
+
 def _status_payload(
     *,
     status: str,
@@ -596,6 +874,240 @@ def _review_receipts_for_episode(episode_receipt_id: str) -> list[dict[str, Any]
     ]
 
 
+def _generalization_status_payload(
+    *,
+    status: str,
+    review: dict[str, Any],
+    proposal: dict[str, Any] | None = None,
+    ready_to_generate: bool = False,
+    proposal_ready: bool = False,
+    blockers: list[str] | None = None,
+) -> dict[str, Any]:
+    latest = proposal or {}
+    return {
+        "ok": review.get("ok") is True and status not in {"proposal_integrity_invalid"},
+        "kind": GAME_TEACHING_GENERALIZATION_STATUS_KIND,
+        "version": GAME_TEACHING_EPISODE_REVIEW_VERSION,
+        "status": status,
+        "source_id": "apprenticeship",
+        "episode_receipt_id": _safe_text(review.get("episode_receipt_id")),
+        "episode_digest": _safe_text(review.get("episode_digest")),
+        "target_id": _safe_text(review.get("target_id")),
+        "review_state": _safe_text(review.get("review_state")),
+        "review_decision": _safe_text(review.get("review_decision")),
+        "review_revision": _safe_int(review.get("review_revision")),
+        "latest_review_receipt_id": _safe_text(review.get("latest_review_receipt_id")),
+        "generalization_candidate_ready": review.get("generalization_candidate_ready") is True,
+        "ready_to_generate": ready_to_generate,
+        "proposal_ready_for_operator_review": proposal_ready,
+        "proposal_receipt_id": _safe_text(latest.get("receipt_id")),
+        "proposal_digest": _safe_text(latest.get("proposal_digest")),
+        "proposal": latest,
+        "generalization_hypothesis_extracted": proposal_ready,
+        "generalization_performed": False,
+        "generalization_accepted": False,
+        "operator_review_required": True,
+        "additional_demonstration_required": True,
+        "skillization_candidate_ready": False,
+        "skillization_performed": False,
+        "blockers": blockers or [],
+        "writes_receipt": False,
+        "writes_memory": False,
+        "creates_capability": False,
+        "promotes_skill": False,
+        "learning_authority": False,
+        "reward_authority": False,
+        "input_execution_authority": False,
+        "governance": _generalization_governance(),
+        "next_smallest_truthful_gap": (
+            "operator_review_game_generalization_proposal"
+            if proposal_ready
+            else "generate_operator_reviewable_game_generalization_proposal"
+            if ready_to_generate
+            else "operator_review_of_game_teaching_episode"
+        ),
+    }
+
+
+def _game_generalization_pattern(episode: dict[str, Any]) -> dict[str, Any]:
+    sequence = [_as_dict(item) for item in _as_list(episode.get("scene_sequence"))]
+    scene_ids = [_safe_text(item.get("scene_id")) for item in sequence]
+    stable_steps = [
+        {
+            "sequence": _safe_int(item.get("sequence")),
+            "scene_id": _safe_text(item.get("scene_id")),
+            "evidence_basis": "confirmed_semantic_scene_observation",
+            "confirmation_count": _safe_int(item.get("confirmation_count")),
+            "confirmation_required": _safe_int(item.get("confirmation_required")),
+            "causal_input_known": False,
+        }
+        for item in sequence
+    ]
+    target_id = _safe_text(episode.get("target_id"))
+    return {
+        "pattern_type": "semantic_scene_progression_hypothesis",
+        "summary": f"Observed semantic progression for {target_id}: {' -> '.join(scene_ids)}",
+        "observed_scene_sequence": scene_ids,
+        "stable_steps": stable_steps,
+        "fixed_context": [
+            {"id": "target_id", "value": target_id},
+            {"id": "observed_scene_sequence", "value": scene_ids},
+        ],
+        "variable_inputs": [],
+        "unresolved_variables": [
+            "player_input_sequence",
+            "control_timing",
+            "gameplay_state",
+            "environment_variation",
+            "failure_recovery_actions",
+        ],
+        "optional_branches": [],
+        "optional_branches_inferred": False,
+        "validation_checkpoints": [
+            "source_episode_digest_matches",
+            "semantic_replay_digest_matches",
+            "operator_replay_review_is_accepted",
+            "target_process_is_foreground",
+            "each_scene_has_distinct_frame_confirmation",
+        ],
+        "failure_handling": [
+            {"condition": "scene_uncertain", "response": "pause_and_request_operator_review"},
+            {"condition": "unexpected_transition", "response": "collect_additional_demonstration"},
+            {"condition": "input_required", "response": "block_without_input_authority"},
+        ],
+        "causal_action_policy_observed": False,
+        "causal_action_policy_inference_allowed": False,
+    }
+
+
+def _game_generalization_uncertainty() -> dict[str, Any]:
+    return {
+        "evidence_class": "single_operator_accepted_semantic_episode",
+        "episode_count": 1,
+        "causal_input_policy_observed": False,
+        "reusable_gameplay_policy_supported": False,
+        "optional_branches_supported": False,
+        "environment_generalization_supported": False,
+        "additional_demonstration_required": True,
+        "operator_review_required": True,
+        "reasons": [
+            "the source records semantic scenes but no player inputs",
+            "one episode cannot establish optional branches or environment variance",
+            "observed ordering does not prove which actions caused the transition",
+        ],
+    }
+
+
+def _game_generalization_evidence(
+    episode: dict[str, Any],
+    review: dict[str, Any],
+) -> dict[str, Any]:
+    sequence = [_as_dict(item) for item in _as_list(episode.get("scene_sequence"))]
+    policy = _as_dict(episode.get("scene_confirmation_policy"))
+    return {
+        "source_type": "explicit_game_teaching_session",
+        "episode_count": 1,
+        "accepted_review_count": 1,
+        "semantic_event_count": len(sequence),
+        "distinct_scene_count": len({_safe_text(item.get("scene_id")) for item in sequence}),
+        "input_action_event_count": 0,
+        "scene_confirmation_basis": _safe_text(policy.get("basis")),
+        "all_events_temporally_confirmed": policy.get("all_events_temporally_confirmed") is True,
+        "review_decision": _safe_text(review.get("decision")),
+        "review_correction_count": _safe_int(review.get("correction_count")),
+    }
+
+
+def _generalization_proposals_for_episode(episode_receipt_id: str) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in _read_jsonl(_generalization_proposals_path())
+        if item.get("kind") == GAME_TEACHING_GENERALIZATION_PROPOSAL_KIND
+        and item.get("version") == GAME_TEACHING_EPISODE_REVIEW_VERSION
+        and (
+            not episode_receipt_id
+            or _safe_text(_as_dict(item.get("source_lineage")).get("episode_receipt_id")) == episode_receipt_id
+        )
+    ]
+
+
+def _generalization_proposal_integrity_valid(proposal: dict[str, Any]) -> bool:
+    proposal_digest = _safe_text(proposal.get("proposal_digest"))
+    lineage = _as_dict(proposal.get("source_lineage"))
+    pattern = _as_dict(proposal.get("pattern"))
+    uncertainty = _as_dict(proposal.get("uncertainty"))
+    return bool(
+        proposal.get("kind") == GAME_TEACHING_GENERALIZATION_PROPOSAL_KIND
+        and proposal.get("version") == GAME_TEACHING_EPISODE_REVIEW_VERSION
+        and _GENERALIZATION_PROPOSAL_ID_PATTERN.fullmatch(_safe_text(proposal.get("receipt_id")))
+        and proposal.get("integrity_algorithm") == "sha256"
+        and re.fullmatch(r"[a-f0-9]{64}", proposal_digest)
+        and proposal_digest == _generalization_proposal_digest(proposal)
+        and lineage.get("review_decision") == "accepted"
+        and pattern.get("causal_action_policy_observed") is False
+        and pattern.get("causal_action_policy_inference_allowed") is False
+        and uncertainty.get("additional_demonstration_required") is True
+        and uncertainty.get("reusable_gameplay_policy_supported") is False
+        and proposal.get("generalization_performed") is False
+        and proposal.get("generalization_accepted") is False
+        and proposal.get("skillization_candidate_ready") is False
+        and proposal.get("writes_memory") is False
+        and proposal.get("creates_capability") is False
+        and proposal.get("promotes_skill") is False
+        and proposal.get("learning_authority") is False
+        and proposal.get("reward_authority") is False
+        and proposal.get("input_execution_authority") is False
+        and _as_dict(proposal.get("governance")) == _generalization_governance()
+    )
+
+
+def _generalization_proposal_digest(proposal: dict[str, Any]) -> str:
+    return _canonical_digest(
+        {
+            "kind": proposal.get("kind"),
+            "version": proposal.get("version"),
+            "source_lineage": _as_dict(proposal.get("source_lineage")),
+            "intent": _as_dict(proposal.get("intent")),
+            "pattern": _as_dict(proposal.get("pattern")),
+            "uncertainty": _as_dict(proposal.get("uncertainty")),
+            "evidence": _as_dict(proposal.get("evidence")),
+        }
+    )
+
+
+def _blocked_generalization_action(
+    status: str,
+    reason: str,
+    *,
+    episode_receipt_id: str = "",
+    blockers: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "kind": GAME_TEACHING_GENERALIZATION_PROPOSAL_KIND,
+        "version": GAME_TEACHING_EPISODE_REVIEW_VERSION,
+        "status": status,
+        "reason": reason,
+        "receipt_id": "",
+        "episode_receipt_id": episode_receipt_id,
+        "blockers": blockers or [reason],
+        "generalization_hypothesis_extracted": False,
+        "generalization_performed": False,
+        "generalization_accepted": False,
+        "operator_review_required": True,
+        "skillization_candidate_ready": False,
+        "writes_receipt": False,
+        "writes_memory": False,
+        "creates_capability": False,
+        "promotes_skill": False,
+        "learning_authority": False,
+        "reward_authority": False,
+        "input_execution_authority": False,
+        "governance": _generalization_governance(),
+        "next_smallest_truthful_gap": "operator_review_of_game_teaching_episode",
+    }
+
+
 def _blocked_action(
     status: str,
     reason: str,
@@ -650,8 +1162,40 @@ def _governance() -> dict[str, Any]:
     }
 
 
+def _generalization_governance() -> dict[str, Any]:
+    return {
+        "required_scope": GAME_TEACHING_GENERALIZATION_WRITE_SCOPE,
+        "source_episode_immutable": True,
+        "source_episode_digest_required": True,
+        "source_review_receipt_required": True,
+        "source_replay_digest_required": True,
+        "proposal_only": True,
+        "operator_review_required": True,
+        "additional_demonstration_required_before_skillization": True,
+        "single_episode_policy_training_denied": True,
+        "causal_input_inference_denied": True,
+        "literal_macro_playback_denied": True,
+        "raw_pixels_persisted": False,
+        "window_titles_persisted": False,
+        "keyboard_content_captured": False,
+        "user_mouse_captured": False,
+        "remote_frame_transfer": False,
+        "memory_write": False,
+        "learning_authority": False,
+        "reward_authority": False,
+        "input_execution_authority": False,
+        "automatic_generalization": False,
+        "automatic_skillization": False,
+        "automatic_capability_promotion": False,
+    }
+
+
 def _review_receipts_path() -> Path:
     return data_dir() / "logs" / "apprenticeship" / "game_teaching_episode_review_receipts.jsonl"
+
+
+def _generalization_proposals_path() -> Path:
+    return data_dir() / "logs" / "apprenticeship" / "game_teaching_generalization_proposals.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:

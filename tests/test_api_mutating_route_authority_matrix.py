@@ -213,6 +213,16 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "source episode digest" in game_episode_review["receipt_behavior"]
     assert "permission_gate" in game_episode_review["denial_behavior"]
     assert "does not execute input" in game_episode_review["notes"]
+
+    game_generalization = entries["/apprenticeship/game-teaching-episode/{episode_receipt_id}/generalization-proposal"]
+    assert game_generalization["family"] == "apprenticeship_game_generalization"
+    assert game_generalization["required_actor"] == "payload.actor"
+    assert game_generalization["required_scope"] == "apprenticeship.game_teaching_generalization.write"
+    assert game_generalization["governance_maturity"] == "permission_gated_generalization_proposal_only"
+    assert "episode, review, and replay lineage" in game_generalization["receipt_behavior"]
+    assert "permission_gate" in game_generalization["denial_behavior"]
+    assert "does not infer player controls" in game_generalization["notes"]
+
     apprenticeship_replay = entries["/apprenticeship/replay-receipt"]
     assert apprenticeship_replay["family"] == "apprenticeship"
     assert apprenticeship_replay["required_actor"] == "payload.actor"

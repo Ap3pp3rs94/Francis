@@ -39,11 +39,16 @@ from francis.apprenticeship_game_teaching import (
 )
 from francis.apprenticeship_game_episode_review import (
     GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE,
+    GAME_TEACHING_GENERALIZATION_WRITE_SCOPE,
     game_teaching_episode_replay,
     game_teaching_episode_review_contract,
     game_teaching_episode_review_receipts,
     game_teaching_episode_review_status,
+    game_teaching_generalization_contract,
+    game_teaching_generalization_proposals,
+    game_teaching_generalization_status,
     record_game_teaching_episode_review,
+    record_game_teaching_generalization_proposal,
 )
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 
@@ -100,6 +105,11 @@ class ApprenticeshipGameTeachingEpisodeReviewIn(BaseModel):
         default_factory=list,
         max_length=50,
     )
+
+
+class ApprenticeshipGameTeachingGeneralizationIn(BaseModel):
+    actor: str = Field(default="", min_length=1, max_length=240)
+    reason: str = Field(default="", min_length=1, max_length=500)
 
 
 class ApprenticeshipReplayReceiptIn(BaseModel):
@@ -263,6 +273,27 @@ def game_teaching_review_receipts(
     episode_receipt_id: str = "",
 ) -> dict[str, Any]:
     return game_teaching_episode_review_receipts(
+        limit=limit,
+        episode_receipt_id=episode_receipt_id,
+    )
+
+
+@router.get("/game-teaching-generalization/contract")
+def game_teaching_generalization_contract_readback() -> dict[str, Any]:
+    return game_teaching_generalization_contract()
+
+
+@router.get("/game-teaching-generalization/status")
+def game_teaching_generalization_status_readback(episode_receipt_id: str = "") -> dict[str, Any]:
+    return game_teaching_generalization_status(episode_receipt_id=episode_receipt_id)
+
+
+@router.get("/game-teaching-generalization/proposals")
+def game_teaching_generalization_proposals_readback(
+    limit: int = 20,
+    episode_receipt_id: str = "",
+) -> dict[str, Any]:
+    return game_teaching_generalization_proposals(
         limit=limit,
         episode_receipt_id=episode_receipt_id,
     )
@@ -490,6 +521,45 @@ def game_teaching_review(
             **_as_dict(result.get("governance")),
             "permission_gate": True,
             "required_scope": GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE,
+            "route": str(request.url.path),
+        },
+    }
+
+
+@router.post("/game-teaching-episode/{episode_receipt_id}/generalization-proposal")
+def game_teaching_generalization_proposal(
+    request: Request,
+    episode_receipt_id: str,
+    payload: ApprenticeshipGameTeachingGeneralizationIn,
+) -> dict[str, Any]:
+    route = "/apprenticeship/game-teaching-episode/{episode_receipt_id}/generalization-proposal"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=GAME_TEACHING_GENERALIZATION_WRITE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=GAME_TEACHING_GENERALIZATION_WRITE_SCOPE,
+            next_step="configure_game_teaching_generalization_write_scope_before_generating",
+        )
+
+    result = record_game_teaching_generalization_proposal(
+        actor=payload.actor,
+        reason=payload.reason,
+        episode_receipt_id=episode_receipt_id,
+    )
+    return {
+        **result,
+        "kind": "francis.apprenticeship.game_teaching_generalization.record",
+        "receipt_kind": result.get("kind", ""),
+        "route": str(request.url.path),
+        "governance": {
+            **_as_dict(result.get("governance")),
+            "permission_gate": True,
+            "required_scope": GAME_TEACHING_GENERALIZATION_WRITE_SCOPE,
             "route": str(request.url.path),
         },
     }

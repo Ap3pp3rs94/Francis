@@ -184,6 +184,25 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship_game_generalization",
+        prefixes=("/apprenticeship/game-teaching-episode/{episode_receipt_id}/generalization-proposal",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.game_teaching_generalization.write",
+        approval_requirement=(
+            "not_required_scope_gate_only; a digest-valid operator-accepted semantic replay and explicit proposal "
+            "request are required"
+        ),
+        receipt_behavior=(
+            "digest-pinned game-teaching generalization proposal with episode, review, and replay lineage"
+        ),
+        denial_behavior="api_permission_denied via permission_gate before generalization proposal receipt write",
+        governance_maturity="permission_gated_generalization_proposal_only",
+        notes=(
+            "The route extracts an inspectable semantic progression hypothesis only; it does not infer player "
+            "controls, learn a gameplay policy, execute input, write memory, skillize, or promote a capability."
+        ),
+    ),
+    AuthorityRule(
         family="apprenticeship",
         prefixes=("/apprenticeship/replay-receipt",),
         required_actor="payload.actor",

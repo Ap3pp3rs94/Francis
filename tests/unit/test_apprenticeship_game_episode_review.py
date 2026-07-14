@@ -7,7 +7,11 @@ from francis.apprenticeship_game_episode_review import (
     game_teaching_episode_replay,
     game_teaching_episode_review_receipts,
     game_teaching_episode_review_status,
+    game_teaching_generalization_contract,
+    game_teaching_generalization_proposals,
+    game_teaching_generalization_status,
     record_game_teaching_episode_review,
+    record_game_teaching_generalization_proposal,
 )
 from francis.apprenticeship_game_teaching import (
     GameTeachingObservationRecorder,
@@ -197,6 +201,129 @@ def test_game_episode_review_is_append_only_correctable_and_idempotent(
 
     receipt_path = tmp_path / "logs" / "apprenticeship" / "game_teaching_episode_review_receipts.jsonl"
     assert len(receipt_path.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_game_generalization_extracts_reviewable_hypothesis_without_learning_policy(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    episode = _episode(scenes=("loading", "active_gameplay"))
+    review = record_game_teaching_episode_review(
+        actor="test.game.reviewer",
+        reason="accept semantic replay",
+        episode_receipt_id=episode["receipt_id"],
+        decision="accepted",
+        summary="The semantic transition order matches the demonstration.",
+        now=120.0,
+    )
+
+    contract = game_teaching_generalization_contract()
+    before = game_teaching_generalization_status(episode_receipt_id=episode["receipt_id"])
+    proposal = record_game_teaching_generalization_proposal(
+        actor="test.game.generalizer",
+        reason="extract bounded semantic progression hypothesis",
+        episode_receipt_id=episode["receipt_id"],
+        now=121.0,
+    )
+    duplicate = record_game_teaching_generalization_proposal(
+        actor="test.game.generalizer",
+        reason="repeat bounded semantic progression hypothesis",
+        episode_receipt_id=episode["receipt_id"],
+        now=122.0,
+    )
+    after = game_teaching_generalization_status(episode_receipt_id=episode["receipt_id"])
+    proposals = game_teaching_generalization_proposals(
+        limit=10,
+        episode_receipt_id=episode["receipt_id"],
+    )
+
+    assert contract["pipeline_stage"] == "generalize"
+    assert contract["extracts_causal_input_policy"] is False
+    assert contract["additional_demonstration_required_before_skillization"] is True
+    assert before["status"] == "ready_to_generate"
+    assert before["ready_to_generate"] is True
+    assert before["additional_demonstration_required"] is True
+    assert proposal["status"] == "proposal_ready_for_operator_review"
+    assert proposal["source_lineage"]["episode_digest"] == episode["episode_digest"]
+    assert proposal["source_lineage"]["review_receipt_id"] == review["receipt_id"]
+    assert proposal["source_lineage"]["replay_digest"] == review["replay_digest"]
+    assert proposal["pattern"]["observed_scene_sequence"] == ["loading", "active_gameplay"]
+    assert proposal["pattern"]["variable_inputs"] == []
+    assert "player_input_sequence" in proposal["pattern"]["unresolved_variables"]
+    assert proposal["pattern"]["causal_action_policy_observed"] is False
+    assert proposal["uncertainty"]["reusable_gameplay_policy_supported"] is False
+    assert proposal["uncertainty"]["additional_demonstration_required"] is True
+    assert proposal["evidence"]["input_action_event_count"] == 0
+    assert len(proposal["proposal_digest"]) == 64
+    assert proposal["generalization_hypothesis_extracted"] is True
+    assert proposal["generalization_performed"] is False
+    assert proposal["generalization_accepted"] is False
+    assert proposal["skillization_candidate_ready"] is False
+    assert proposal["writes_memory"] is False
+    assert proposal["creates_capability"] is False
+    assert proposal["learning_authority"] is False
+    assert proposal["input_execution_authority"] is False
+    assert proposal["governance"]["single_episode_policy_training_denied"] is True
+    assert duplicate["receipt_id"] == proposal["receipt_id"]
+    assert duplicate["idempotent"] is True
+    assert after["status"] == "proposal_ready_for_operator_review"
+    assert after["proposal_digest"] == proposal["proposal_digest"]
+    assert after["generalization_performed"] is False
+    assert proposals["count"] == 1
+    assert proposals["integrity_valid"] is True
+    assert proposals["items"][0]["integrity_valid"] is True
+    proposal_path = tmp_path / "logs" / "apprenticeship" / "game_teaching_generalization_proposals.jsonl"
+    assert len(proposal_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_game_generalization_detects_proposal_digest_tampering(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    episode = _episode(scenes=("loading", "active_gameplay"))
+    record_game_teaching_episode_review(
+        actor="test.game.reviewer",
+        reason="accept semantic replay",
+        episode_receipt_id=episode["receipt_id"],
+        decision="accepted",
+        summary="The semantic transition order matches the demonstration.",
+        now=120.0,
+    )
+    record_game_teaching_generalization_proposal(
+        actor="test.game.generalizer",
+        reason="extract bounded semantic progression hypothesis",
+        episode_receipt_id=episode["receipt_id"],
+        now=121.0,
+    )
+    proposal_path = tmp_path / "logs" / "apprenticeship" / "game_teaching_generalization_proposals.jsonl"
+    row = json.loads(proposal_path.read_text(encoding="utf-8"))
+    row["pattern"]["causal_action_policy_observed"] = True
+    proposal_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    status = game_teaching_generalization_status(episode_receipt_id=episode["receipt_id"])
+    proposals = game_teaching_generalization_proposals(
+        limit=10,
+        episode_receipt_id=episode["receipt_id"],
+    )
+    retry = record_game_teaching_generalization_proposal(
+        actor="test.game.generalizer",
+        reason="retry after tampering",
+        episode_receipt_id=episode["receipt_id"],
+        now=122.0,
+    )
+
+    assert status["status"] == "proposal_integrity_invalid"
+    assert "game_teaching_generalization_proposal_digest_mismatch" in status["blockers"]
+    assert proposals["ok"] is False
+    assert proposals["status"] == "integrity_invalid"
+    assert proposals["integrity_valid"] is False
+    assert retry["ok"] is False
+    assert retry["writes_receipt"] is False
+    assert retry["learning_authority"] is False
 
 
 def test_game_episode_review_rejects_digest_tampering_without_receipt_write(

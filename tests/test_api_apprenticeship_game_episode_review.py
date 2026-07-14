@@ -121,6 +121,51 @@ def test_game_episode_review_permission_denial_writes_nothing(
     assert not (tmp_path / "logs" / "apprenticeship" / "game_teaching_episode_review_receipts.jsonl").exists()
 
 
+def test_game_generalization_permission_denial_writes_nothing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.game.teacher": ["apprenticeship.game_teaching_session.write"],
+                "test.game.reviewer": ["apprenticeship.game_teaching_episode_review.write"],
+            }
+        ),
+    )
+    client = TestClient(create_app())
+    episode = _episode(client)
+    reviewed = client.post(
+        f"/apprenticeship/game-teaching-episode/{episode['receipt_id']}/review",
+        json={
+            "actor": "test.game.reviewer",
+            "reason": "review semantic replay",
+            "decision": "accepted",
+            "summary": "The semantic replay matches the demonstration.",
+        },
+    ).json()
+    assert reviewed["ok"] is True
+
+    denied = client.post(
+        f"/apprenticeship/game-teaching-episode/{episode['receipt_id']}/generalization-proposal",
+        json={
+            "actor": "test.game.generalizer",
+            "reason": "extract bounded hypothesis",
+        },
+    ).json()
+
+    assert denied["ok"] is False
+    assert denied["status"] == "denied"
+    assert denied["writes_receipt"] is False
+    assert denied["writes_memory"] is False
+    assert denied["grants_execution_authority"] is False
+    assert denied["governance"]["required_scope"] == "apprenticeship.game_teaching_generalization.write"
+    assert not (tmp_path / "logs" / "apprenticeship" / "game_teaching_generalization_proposals.jsonl").exists()
+
+
 def test_game_episode_review_api_exposes_read_only_replay_and_append_only_review(
     monkeypatch,
     tmp_path: Path,
@@ -133,6 +178,7 @@ def test_game_episode_review_api_exposes_read_only_replay_and_append_only_review
             {
                 "test.game.teacher": ["apprenticeship.game_teaching_session.write"],
                 "test.game.reviewer": ["apprenticeship.game_teaching_episode_review.write"],
+                "test.game.generalizer": ["apprenticeship.game_teaching_generalization.write"],
             }
         ),
     )
@@ -165,6 +211,26 @@ def test_game_episode_review_api_exposes_read_only_replay_and_append_only_review
         "/apprenticeship/game-teaching-episode-review/receipts",
         params={"episode_receipt_id": episode["receipt_id"], "limit": 5},
     ).json()
+    generalization_contract = client.get("/apprenticeship/game-teaching-generalization/contract").json()
+    generalization_before = client.get(
+        "/apprenticeship/game-teaching-generalization/status",
+        params={"episode_receipt_id": episode["receipt_id"]},
+    ).json()
+    proposal = client.post(
+        f"/apprenticeship/game-teaching-episode/{episode['receipt_id']}/generalization-proposal",
+        json={
+            "actor": "test.game.generalizer",
+            "reason": "extract bounded semantic progression hypothesis",
+        },
+    ).json()
+    generalization_after = client.get(
+        "/apprenticeship/game-teaching-generalization/status",
+        params={"episode_receipt_id": episode["receipt_id"]},
+    ).json()
+    proposal_receipts = client.get(
+        "/apprenticeship/game-teaching-generalization/proposals",
+        params={"episode_receipt_id": episode["receipt_id"], "limit": 5},
+    ).json()
 
     assert contract["pipeline_stage"] == "replay"
     assert contract["replay_is_read_only"] is True
@@ -193,3 +259,28 @@ def test_game_episode_review_api_exposes_read_only_replay_and_append_only_review
     assert after["generalization_candidate_ready"] is True
     assert receipts["count"] == 1
     assert receipts["items"][0]["receipt_id"] == reviewed["receipt_id"]
+    assert generalization_contract["pipeline_stage"] == "generalize"
+    assert generalization_contract["infers_unobserved_controls"] is False
+    assert generalization_before["status"] == "ready_to_generate"
+    assert proposal["ok"] is True
+    assert proposal["kind"] == "francis.apprenticeship.game_teaching_generalization.record"
+    assert proposal["receipt_kind"] == "francis.apprenticeship.game_teaching_generalization.proposal"
+    assert proposal["status"] == "proposal_ready_for_operator_review"
+    assert proposal["pattern"]["observed_scene_sequence"] == ["loading", "active_gameplay"]
+    assert proposal["pattern"]["causal_action_policy_observed"] is False
+    assert proposal["uncertainty"]["reusable_gameplay_policy_supported"] is False
+    assert proposal["generalization_performed"] is False
+    assert proposal["skillization_candidate_ready"] is False
+    assert proposal["writes_memory"] is False
+    assert proposal["creates_capability"] is False
+    assert proposal["learning_authority"] is False
+    assert proposal["input_execution_authority"] is False
+    assert proposal["governance"]["permission_gate"] is True
+    assert proposal["governance"]["required_scope"] == "apprenticeship.game_teaching_generalization.write"
+    assert generalization_after["status"] == "proposal_ready_for_operator_review"
+    assert generalization_after["proposal_digest"] == proposal["proposal_digest"]
+    assert generalization_after["operator_review_required"] is True
+    assert proposal_receipts["count"] == 1
+    assert proposal_receipts["integrity_valid"] is True
+    assert proposal_receipts["items"][0]["integrity_valid"] is True
+    assert proposal_receipts["items"][0]["receipt_id"] == proposal["receipt_id"]
