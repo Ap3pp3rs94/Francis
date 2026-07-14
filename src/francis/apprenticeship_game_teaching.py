@@ -33,6 +33,8 @@ MIN_GAME_TEACHING_DURATION_SECONDS = 30
 MAX_GAME_TEACHING_DURATION_SECONDS = 28_800
 MIN_GAME_TEACHING_EVENTS = 1
 MAX_GAME_TEACHING_EVENTS = 1_000
+DEFAULT_GAME_TEACHING_SCENE_CONFIRMATIONS = 2
+MAX_GAME_TEACHING_SCENE_CONFIRMATIONS = 5
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_OUTCOMES = {"completed", "cancelled", "needs_review"}
@@ -68,6 +70,9 @@ def game_teaching_session_contract() -> dict[str, Any]:
         "min_events": MIN_GAME_TEACHING_EVENTS,
         "max_events": MAX_GAME_TEACHING_EVENTS,
         "records_scene_transitions_only": True,
+        "scene_transition_confirmation_count": DEFAULT_GAME_TEACHING_SCENE_CONFIRMATIONS,
+        "scene_transition_confirmation_basis": "distinct_classification_source_frames",
+        "records_unconfirmed_scene_transitions": False,
         "records_raw_pixels": False,
         "records_window_titles": False,
         "records_keyboard_content": False,
@@ -244,9 +249,22 @@ def stop_game_teaching_session(
             "confidence": _safe_float(event.get("confidence")),
             "margin": _safe_float(event.get("margin")),
             "source_frame_id": _safe_text(event.get("source_frame_id")),
+            "confirmation_required": _safe_int(event.get("confirmation_required")),
+            "confirmation_count": _safe_int(event.get("confirmation_count")),
+            "confirmation_source_frame_ids": _text_items(event.get("confirmation_source_frame_ids")),
+            "confirmation_first_classified_at": _safe_float(event.get("confirmation_first_classified_at")),
+            "confirmation_last_classified_at": _safe_float(event.get("confirmation_last_classified_at")),
         }
         for event in events
     ]
+    confirmation_requirements = sorted(
+        {
+            _safe_int(event.get("confirmation_required"))
+            for event in events
+            if _safe_int(event.get("confirmation_required")) > 0
+        }
+    )
+    all_events_temporally_confirmed = bool(events) and all(_event_temporally_confirmed(event) for event in events)
     receipt = {
         "ok": True,
         "kind": GAME_TEACHING_EPISODE_RECEIPT_KIND,
@@ -273,6 +291,11 @@ def stop_game_teaching_session(
         "source_observation_kind": LENS_GAME_OBSERVATION_KIND,
         "source_observation_version": LENS_GAME_OBSERVATION_VERSION,
         "capture_mode": "explicit_semantic_scene_transition_session",
+        "scene_confirmation_policy": {
+            "basis": "distinct_classification_source_frames",
+            "requirements_observed": confirmation_requirements,
+            "all_events_temporally_confirmed": all_events_temporally_confirmed,
+        },
         "review_state": "pending_operator_review",
         "ready_for_operator_review": bool(events),
         "eligible_for_replay": False,
@@ -415,6 +438,8 @@ def game_teaching_episode_digest(receipt: dict[str, Any]) -> str:
             "capture_mode",
         )
     }
+    if "scene_confirmation_policy" in receipt:
+        payload["scene_confirmation_policy"] = receipt.get("scene_confirmation_policy")
     encoded = json.dumps(
         payload,
         ensure_ascii=True,
@@ -428,25 +453,46 @@ def game_teaching_episode_digest(receipt: dict[str, Any]) -> str:
 class GameTeachingObservationRecorder:
     """Project allowlisted scene transitions into an explicit teaching episode."""
 
-    def __init__(self, *, clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.time,
+        min_scene_confirmations: int = DEFAULT_GAME_TEACHING_SCENE_CONFIRMATIONS,
+    ) -> None:
+        if (
+            isinstance(min_scene_confirmations, bool)
+            or not 1 <= min_scene_confirmations <= MAX_GAME_TEACHING_SCENE_CONFIRMATIONS
+        ):
+            raise ValueError("game_teaching_scene_confirmation_count_invalid")
         self._clock = clock
+        self._min_scene_confirmations = min_scene_confirmations
+        self._pending_session_id = ""
+        self._pending_scene_id = ""
+        self._pending_classification_frame_ids: list[str] = []
+        self._pending_first_classified_at: float | None = None
+        self._pending_last_classified_at: float | None = None
 
     def record(self, observation: dict[str, Any], *, observed_at: float | None = None) -> dict[str, Any]:
         now = self._clock() if observed_at is None else _validated_timestamp(observed_at)
         status = game_teaching_session_status(now=now)
         if status.get("recording_active") is not True:
+            self._reset_pending()
             return status
 
         state = read_json_object(_session_state_path())
+        session_id = _safe_text(state.get("session_id"))
+        if session_id != self._pending_session_id:
+            self._reset_pending(session_id=session_id)
         reason = _observation_blocker(observation, target_id=_safe_text(state.get("target_id")))
         if reason:
+            self._reset_pending(session_id=session_id)
             return {**status, "capture_status": "observation_blocked", "blockers": [reason]}
 
-        session_id = _safe_text(state.get("session_id"))
         events = _read_events(session_id)
         scene = _as_dict(observation.get("scene"))
         scene_id = _safe_text(scene.get("id"))
         if events and _safe_text(events[-1].get("scene_id")) == scene_id:
+            self._reset_pending(session_id=session_id)
             return {**status, "capture_status": "scene_unchanged", "event_written": False}
 
         max_events = _safe_int(state.get("max_events"))
@@ -458,6 +504,32 @@ class GameTeachingObservationRecorder:
             }
 
         classification = _as_dict(observation.get("classification"))
+        classification_source_frame_id = _safe_text(classification.get("source_frame_id"))
+        classified_at = _safe_float(classification.get("classified_at"))
+        if self._pending_scene_id != scene_id:
+            self._pending_scene_id = scene_id
+            self._pending_classification_frame_ids = [classification_source_frame_id]
+            self._pending_first_classified_at = classified_at
+            self._pending_last_classified_at = classified_at
+        elif classification_source_frame_id not in self._pending_classification_frame_ids:
+            self._pending_classification_frame_ids.append(classification_source_frame_id)
+            self._pending_last_classified_at = classified_at
+
+        confirmation_count = len(self._pending_classification_frame_ids)
+        if confirmation_count < self._min_scene_confirmations:
+            return {
+                **status,
+                "capture_status": "scene_confirmation_pending",
+                "event_written": False,
+                "pending_scene_id": scene_id,
+                "pending_confirmation_count": confirmation_count,
+                "required_confirmation_count": self._min_scene_confirmations,
+                "confirmation_basis": "distinct_classification_source_frames",
+            }
+
+        confirmation_source_frame_ids = list(self._pending_classification_frame_ids)
+        confirmation_first_classified_at = self._pending_first_classified_at
+        confirmation_last_classified_at = self._pending_last_classified_at
         model = _as_dict(observation.get("model"))
         runtime_identity = _as_dict(observation.get("runtime_identity"))
         event = {
@@ -471,8 +543,13 @@ class GameTeachingObservationRecorder:
             "confidence": _safe_float(scene.get("confidence")),
             "margin": _safe_float(scene.get("margin")),
             "source_frame_id": _safe_text(observation.get("source_frame_id")),
-            "classification_source_frame_id": _safe_text(classification.get("source_frame_id")),
-            "classified_at": _safe_float(classification.get("classified_at")),
+            "classification_source_frame_id": classification_source_frame_id,
+            "classified_at": classified_at,
+            "confirmation_required": self._min_scene_confirmations,
+            "confirmation_count": confirmation_count,
+            "confirmation_source_frame_ids": confirmation_source_frame_ids,
+            "confirmation_first_classified_at": confirmation_first_classified_at,
+            "confirmation_last_classified_at": confirmation_last_classified_at,
             "model_id": _safe_text(model.get("id")),
             "authority_receipt_id": _safe_text(runtime_identity.get("authority_receipt_id")),
             "source_observation_kind": LENS_GAME_OBSERVATION_KIND,
@@ -480,8 +557,22 @@ class GameTeachingObservationRecorder:
             "governance": _governance(),
         }
         _append_jsonl(_session_events_path(session_id), event)
+        self._reset_pending(session_id=session_id)
         updated = game_teaching_session_status(now=now)
-        return {**updated, "capture_status": "scene_transition_recorded", "event_written": True}
+        return {
+            **updated,
+            "capture_status": "scene_transition_recorded",
+            "event_written": True,
+            "confirmation_count": confirmation_count,
+            "required_confirmation_count": self._min_scene_confirmations,
+        }
+
+    def _reset_pending(self, *, session_id: str = "") -> None:
+        self._pending_session_id = session_id
+        self._pending_scene_id = ""
+        self._pending_classification_frame_ids = []
+        self._pending_first_classified_at = None
+        self._pending_last_classified_at = None
 
 
 def game_teaching_recording_error_status() -> dict[str, Any]:
@@ -546,6 +637,7 @@ def _observation_blocker(observation: dict[str, Any], *, target_id: str) -> str:
     target = _as_dict(observation.get("target"))
     foreground = _as_dict(observation.get("foreground"))
     scene = _as_dict(observation.get("scene"))
+    classification = _as_dict(observation.get("classification"))
     model = _as_dict(observation.get("model"))
     runtime_identity = _as_dict(observation.get("runtime_identity"))
     governance = _as_dict(observation.get("governance"))
@@ -561,8 +653,11 @@ def _observation_blocker(observation: dict[str, Any], *, target_id: str) -> str:
     margin = _safe_float(scene.get("margin"))
     if confidence is None or not 0.0 <= confidence <= 1.0 or margin is None or not 0.0 <= margin <= 1.0:
         return "game_teaching_scene_score_invalid"
-    if not _safe_text(observation.get("source_frame_id")) or not _safe_text(
-        runtime_identity.get("authority_receipt_id")
+    if (
+        not _safe_text(observation.get("source_frame_id"))
+        or not _safe_text(classification.get("source_frame_id"))
+        or _safe_float(classification.get("classified_at")) is None
+        or not _safe_text(runtime_identity.get("authority_receipt_id"))
     ):
         return "game_teaching_observation_lineage_missing"
     if model.get("remote_inference") is not False:
@@ -584,6 +679,23 @@ def _observation_blocker(observation: dict[str, Any], *, target_id: str) -> str:
     ):
         return "game_teaching_observation_governance_invalid"
     return ""
+
+
+def _event_temporally_confirmed(event: dict[str, Any]) -> bool:
+    required = _safe_int(event.get("confirmation_required"))
+    count = _safe_int(event.get("confirmation_count"))
+    source_frame_ids = _text_items(event.get("confirmation_source_frame_ids"))
+    first_classified_at = _safe_float(event.get("confirmation_first_classified_at"))
+    last_classified_at = _safe_float(event.get("confirmation_last_classified_at"))
+    return (
+        required > 0
+        and count >= required
+        and count == len(source_frame_ids)
+        and len(source_frame_ids) >= required
+        and first_classified_at is not None
+        and last_classified_at is not None
+        and first_classified_at <= last_classified_at
+    )
 
 
 def _finish_stopped_state(state: dict[str, Any], receipt: dict[str, Any]) -> None:
@@ -770,6 +882,12 @@ def _redacted_text(value: Any) -> str:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _text_items(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return _dedupe_text(_safe_text(item) for item in value)
 
 
 def _dedupe_text(values: Any) -> list[str]:

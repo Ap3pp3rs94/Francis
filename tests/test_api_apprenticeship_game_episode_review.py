@@ -22,19 +22,19 @@ def _start_payload() -> dict[str, object]:
     }
 
 
-def _observation(*, scene_id: str) -> dict[str, object]:
+def _observation(*, scene_id: str, frame_id: str, classified_at: float) -> dict[str, object]:
     return {
         "kind": "lens.game.observation",
         "version": 1,
         "ready": True,
         "semantic_scene_ready": True,
-        "source_frame_id": f"frame-{scene_id}",
+        "source_frame_id": f"frame-{scene_id}-{frame_id}",
         "target": {"id": "sand", "foreground": True},
         "foreground": {"target_match": True},
         "scene": {"ready": True, "id": scene_id, "confidence": 0.9, "margin": 0.8},
         "classification": {
-            "source_frame_id": f"classified-{scene_id}",
-            "classified_at": 100.0,
+            "source_frame_id": f"classified-{scene_id}-{frame_id}",
+            "classified_at": classified_at,
         },
         "model": {"id": "test/siglip", "remote_inference": False},
         "runtime_identity": {"authority_receipt_id": "capture-receipt"},
@@ -59,11 +59,25 @@ def _episode(client: TestClient) -> dict[str, object]:
         "/apprenticeship/game-teaching-session/start",
         json=_start_payload(),
     ).json()
-    GameTeachingObservationRecorder().record(_observation(scene_id="loading"), observed_at=101.0)
-    GameTeachingObservationRecorder().record(
-        _observation(scene_id="active_gameplay"),
-        observed_at=102.0,
-    )
+    recorder = GameTeachingObservationRecorder()
+    for index, scene_id in enumerate(("loading", "active_gameplay"), start=1):
+        observed_at = 100.0 + index
+        recorder.record(
+            _observation(
+                scene_id=scene_id,
+                frame_id=f"{index}-pending",
+                classified_at=observed_at - 0.25,
+            ),
+            observed_at=observed_at - 0.25,
+        )
+        recorder.record(
+            _observation(
+                scene_id=scene_id,
+                frame_id=f"{index}-confirmed",
+                classified_at=observed_at,
+            ),
+            observed_at=observed_at,
+        )
     return client.post(
         "/apprenticeship/game-teaching-session/stop",
         json={
@@ -155,6 +169,7 @@ def test_game_episode_review_api_exposes_read_only_replay_and_append_only_review
     assert contract["pipeline_stage"] == "replay"
     assert contract["replay_is_read_only"] is True
     assert contract["replay_executes_input"] is False
+    assert contract["validates_declared_scene_confirmation_policy"] is True
     assert contract["automatic_generalization"] is False
     assert status["status"] == "pending_operator_review"
     assert status["replay_ready"] is True

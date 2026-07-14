@@ -22,17 +22,20 @@ def _start_payload() -> dict[str, object]:
     }
 
 
-def _observation() -> dict[str, object]:
+def _observation(*, frame_id: str, classified_at: float) -> dict[str, object]:
     return {
         "kind": "lens.game.observation",
         "version": 1,
         "ready": True,
         "semantic_scene_ready": True,
-        "source_frame_id": "frame-loading",
+        "source_frame_id": f"frame-loading-{frame_id}",
         "target": {"id": "sand", "foreground": True},
         "foreground": {"target_match": True},
         "scene": {"ready": True, "id": "loading", "confidence": 0.9, "margin": 0.8},
-        "classification": {"source_frame_id": "classified-loading", "classified_at": 100.0},
+        "classification": {
+            "source_frame_id": f"classified-loading-{frame_id}",
+            "classified_at": classified_at,
+        },
         "model": {"id": "test/siglip", "remote_inference": False},
         "runtime_identity": {"authority_receipt_id": "capture-receipt"},
         "governance": {
@@ -94,7 +97,9 @@ def test_game_teaching_api_exposes_explicit_session_and_review_only_receipt(
         json=_start_payload(),
     ).json()
     status = client.get("/apprenticeship/game-teaching-session/status").json()
-    GameTeachingObservationRecorder().record(_observation())
+    recorder = GameTeachingObservationRecorder()
+    pending = recorder.record(_observation(frame_id="1", classified_at=100.0), observed_at=101.0)
+    recorded = recorder.record(_observation(frame_id="2", classified_at=101.0), observed_at=102.0)
     stopped = client.post(
         "/apprenticeship/game-teaching-session/stop",
         json={
@@ -110,6 +115,9 @@ def test_game_teaching_api_exposes_explicit_session_and_review_only_receipt(
     assert contract["status"] == "ready"
     assert contract["pipeline_stage"] == "demonstrate"
     assert contract["records_scene_transitions_only"] is True
+    assert contract["scene_transition_confirmation_count"] == 2
+    assert contract["scene_transition_confirmation_basis"] == "distinct_classification_source_frames"
+    assert contract["records_unconfirmed_scene_transitions"] is False
     assert contract["records_raw_pixels"] is False
     assert contract["learning_authority"] is False
     assert contract["input_execution_authority"] is False
@@ -119,10 +127,20 @@ def test_game_teaching_api_exposes_explicit_session_and_review_only_receipt(
     assert started["recording_active"] is True
     assert status["session_id"] == started["session_id"]
     assert status["intent_label"] == "reach active gameplay"
+    assert pending["capture_status"] == "scene_confirmation_pending"
+    assert pending["event_written"] is False
+    assert recorded["capture_status"] == "scene_transition_recorded"
+    assert recorded["confirmation_count"] == 2
     assert stopped["ok"] is True
     assert stopped["kind"] == "francis.apprenticeship.game_teaching_session.stop"
     assert stopped["receipt_kind"] == "francis.apprenticeship.game_teaching.episode_receipt"
     assert stopped["event_count"] == 1
+    assert stopped["scene_confirmation_policy"] == {
+        "basis": "distinct_classification_source_frames",
+        "requirements_observed": [2],
+        "all_events_temporally_confirmed": True,
+    }
+    assert stopped["scene_sequence"][0]["confirmation_count"] == 2
     assert stopped["review_state"] == "pending_operator_review"
     assert stopped["eligible_for_replay"] is False
     assert stopped["creates_capability"] is False

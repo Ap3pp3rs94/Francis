@@ -11,18 +11,19 @@ from francis.apprenticeship_game_episode_review import (
 )
 from francis.apprenticeship_game_teaching import (
     GameTeachingObservationRecorder,
+    game_teaching_episode_digest,
     start_game_teaching_session,
     stop_game_teaching_session,
 )
 
 
-def _observation(*, scene_id: str, observed_at: float) -> dict[str, object]:
+def _observation(*, scene_id: str, frame_id: str, observed_at: float) -> dict[str, object]:
     return {
         "kind": "lens.game.observation",
         "version": 1,
         "ready": True,
         "semantic_scene_ready": True,
-        "source_frame_id": f"frame-{scene_id}",
+        "source_frame_id": f"frame-{scene_id}-{frame_id}",
         "target": {"id": "sand", "configured": True, "foreground": True},
         "foreground": {"target_match": True},
         "scene": {
@@ -32,7 +33,7 @@ def _observation(*, scene_id: str, observed_at: float) -> dict[str, object]:
             "margin": 0.7,
         },
         "classification": {
-            "source_frame_id": f"classified-{scene_id}",
+            "source_frame_id": f"classified-{scene_id}-{frame_id}",
             "classified_at": observed_at,
         },
         "model": {"id": "test/siglip", "remote_inference": False},
@@ -69,7 +70,19 @@ def _episode(*, scenes: tuple[str, ...] = ("loading", "main_menu", "active_gamep
     for index, scene_id in enumerate(scenes, start=1):
         observed_at = 100.0 + index
         recorder.record(
-            _observation(scene_id=scene_id, observed_at=observed_at),
+            _observation(
+                scene_id=scene_id,
+                frame_id=f"{index}-pending",
+                observed_at=observed_at - 0.25,
+            ),
+            observed_at=observed_at - 0.25,
+        )
+        recorder.record(
+            _observation(
+                scene_id=scene_id,
+                frame_id=f"{index}-confirmed",
+                observed_at=observed_at,
+            ),
             observed_at=observed_at,
         )
     return stop_game_teaching_session(
@@ -216,3 +229,32 @@ def test_game_episode_review_rejects_digest_tampering_without_receipt_write(
     assert review["ok"] is False
     assert review["writes_receipt"] is False
     assert not (tmp_path / "logs" / "apprenticeship" / "game_teaching_episode_review_receipts.jsonl").exists()
+
+
+def test_game_episode_review_rejects_invalid_declared_scene_confirmation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    episode = _episode(scenes=("loading",))
+    episode_path = tmp_path / "logs" / "apprenticeship" / "game_teaching_episode_receipts.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["scene_sequence"][0]["confirmation_source_frame_ids"] = ["one-frame-only"]
+    row["episode_digest"] = game_teaching_episode_digest(row)
+    episode_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    status = game_teaching_episode_review_status(episode_receipt_id=episode["receipt_id"])
+    review = record_game_teaching_episode_review(
+        actor="test.game.reviewer",
+        reason="review malformed confirmation evidence",
+        episode_receipt_id=episode["receipt_id"],
+        decision="accepted",
+        summary="This should be rejected despite the recomputed source digest.",
+        now=120.0,
+    )
+
+    assert status["status"] == "episode_invalid"
+    assert "game_teaching_episode_scene_confirmation_invalid" in status["blockers"]
+    assert review["ok"] is False
+    assert review["writes_receipt"] is False

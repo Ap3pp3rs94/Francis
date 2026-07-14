@@ -12,14 +12,20 @@ from francis.apprenticeship_game_teaching import (
 )
 
 
-def _observation(*, scene_id: str = "loading", target_id: str = "sand") -> dict[str, object]:
+def _observation(
+    *,
+    scene_id: str = "loading",
+    target_id: str = "sand",
+    frame_id: str = "1",
+    classified_at: float = 100.0,
+) -> dict[str, object]:
     return {
         "kind": "lens.game.observation",
         "version": 1,
         "status": "scene_classified",
         "ready": True,
         "semantic_scene_ready": True,
-        "source_frame_id": f"frame-{scene_id}",
+        "source_frame_id": f"frame-{scene_id}-{frame_id}",
         "target": {
             "id": target_id,
             "configured": True,
@@ -38,8 +44,8 @@ def _observation(*, scene_id: str = "loading", target_id: str = "sand") -> dict[
             "raw_pixels": "must-not-persist",
         },
         "classification": {
-            "source_frame_id": f"classified-{scene_id}",
-            "classified_at": 100.0,
+            "source_frame_id": f"classified-{scene_id}-{frame_id}",
+            "classified_at": classified_at,
             "frame_bytes": "must-not-persist",
         },
         "model": {
@@ -113,9 +119,26 @@ def test_game_teaching_records_only_semantic_transitions_and_finalizes_for_revie
     started = _start()
     recorder = GameTeachingObservationRecorder()
 
-    first = recorder.record(_observation(scene_id="loading"), observed_at=101.0)
-    duplicate = recorder.record(_observation(scene_id="loading"), observed_at=102.0)
-    second = recorder.record(_observation(scene_id="active_gameplay"), observed_at=103.0)
+    first_pending = recorder.record(
+        _observation(scene_id="loading", frame_id="1", classified_at=100.5),
+        observed_at=101.0,
+    )
+    first = recorder.record(
+        _observation(scene_id="loading", frame_id="2", classified_at=101.5),
+        observed_at=102.0,
+    )
+    duplicate = recorder.record(
+        _observation(scene_id="loading", frame_id="3", classified_at=102.5),
+        observed_at=103.0,
+    )
+    second_pending = recorder.record(
+        _observation(scene_id="active_gameplay", frame_id="4", classified_at=103.5),
+        observed_at=104.0,
+    )
+    second = recorder.record(
+        _observation(scene_id="active_gameplay", frame_id="5", classified_at=104.5),
+        observed_at=105.0,
+    )
     receipt = stop_game_teaching_session(
         actor="test.game.teacher",
         reason="demonstration complete",
@@ -125,13 +148,24 @@ def test_game_teaching_records_only_semantic_transitions_and_finalizes_for_revie
         now=110.0,
     )
 
+    assert first_pending["event_written"] is False
+    assert first_pending["capture_status"] == "scene_confirmation_pending"
+    assert first_pending["pending_confirmation_count"] == 1
     assert first["event_written"] is True
+    assert first["confirmation_count"] == 2
     assert duplicate["event_written"] is False
     assert duplicate["capture_status"] == "scene_unchanged"
+    assert second_pending["event_written"] is False
+    assert second_pending["capture_status"] == "scene_confirmation_pending"
     assert second["event_written"] is True
     assert second["event_count"] == 2
     assert receipt["ok"] is True
     assert receipt["event_count"] == 2
+    assert receipt["scene_confirmation_policy"] == {
+        "basis": "distinct_classification_source_frames",
+        "requirements_observed": [2],
+        "all_events_temporally_confirmed": True,
+    }
     assert receipt["integrity_algorithm"] == "sha256"
     assert len(receipt["episode_digest"]) == 64
     assert [item["scene_id"] for item in receipt["scene_sequence"]] == ["loading", "active_gameplay"]
@@ -150,6 +184,8 @@ def test_game_teaching_records_only_semantic_transitions_and_finalizes_for_revie
     assert all("raw_pixels" not in event for event in events)
     assert all("window_title" not in event for event in events)
     assert all("process_name" not in event for event in events)
+    assert all(event["confirmation_count"] == 2 for event in events)
+    assert all(len(event["confirmation_source_frame_ids"]) == 2 for event in events)
     assert "must-not-persist" not in event_path.read_text(encoding="utf-8")
 
     stopped = game_teaching_session_status(now=111.0)
@@ -185,6 +221,40 @@ def test_game_teaching_rejects_target_and_governance_mismatches(
     assert not event_path.exists()
 
 
+def test_game_teaching_requires_distinct_consecutive_classification_frames(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    started = _start()
+    recorder = GameTeachingObservationRecorder()
+
+    first_pending = recorder.record(_observation(scene_id="loading", frame_id="1"), observed_at=101.0)
+    same_frame = recorder.record(_observation(scene_id="loading", frame_id="1"), observed_at=102.0)
+    loading = recorder.record(_observation(scene_id="loading", frame_id="2"), observed_at=103.0)
+    transient = recorder.record(_observation(scene_id="paused", frame_id="3"), observed_at=104.0)
+    reset = recorder.record(_observation(scene_id="active_gameplay", frame_id="4"), observed_at=105.0)
+    active = recorder.record(_observation(scene_id="active_gameplay", frame_id="5"), observed_at=106.0)
+    receipt = stop_game_teaching_session(
+        actor="test.game.teacher",
+        reason="stable demonstration complete",
+        session_id=started["session_id"],
+        outcome="completed",
+        notes="transient paused classification was not recorded",
+        now=110.0,
+    )
+
+    assert first_pending["pending_confirmation_count"] == 1
+    assert same_frame["pending_confirmation_count"] == 1
+    assert loading["event_written"] is True
+    assert transient["pending_scene_id"] == "paused"
+    assert reset["pending_scene_id"] == "active_gameplay"
+    assert reset["pending_confirmation_count"] == 1
+    assert active["event_written"] is True
+    assert [item["scene_id"] for item in receipt["scene_sequence"]] == ["loading", "active_gameplay"]
+
+
 def test_game_teaching_stops_recording_at_declared_limits_until_explicit_stop(
     monkeypatch,
     tmp_path: Path,
@@ -194,9 +264,11 @@ def test_game_teaching_stops_recording_at_declared_limits_until_explicit_stop(
     started = _start(max_events=1)
     recorder = GameTeachingObservationRecorder()
 
-    recorded = recorder.record(_observation(), observed_at=101.0)
-    limited = recorder.record(_observation(scene_id="active_gameplay"), observed_at=102.0)
+    pending = recorder.record(_observation(frame_id="1"), observed_at=101.0)
+    recorded = recorder.record(_observation(frame_id="2"), observed_at=102.0)
+    limited = recorder.record(_observation(scene_id="active_gameplay", frame_id="3"), observed_at=103.0)
 
+    assert pending["event_written"] is False
     assert recorded["event_written"] is True
     assert limited["recording_active"] is False
     assert limited["status"] == "awaiting_explicit_stop"

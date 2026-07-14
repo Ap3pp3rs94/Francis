@@ -60,6 +60,7 @@ def game_teaching_episode_review_contract() -> dict[str, Any]:
         "requires_nonempty_episode": True,
         "requires_episode_digest": True,
         "requires_explicit_operator_review": True,
+        "validates_declared_scene_confirmation_policy": True,
         "review_decisions": sorted(_ALLOWED_DECISIONS),
         "correction_types": sorted(_ALLOWED_CORRECTION_TYPES),
         "max_corrections": MAX_REVIEW_CORRECTIONS,
@@ -463,6 +464,8 @@ def _validate_episode(episode: dict[str, Any]) -> dict[str, Any]:
     transition_count = _safe_int(episode.get("scene_transition_count"))
     if event_count < 1 or event_count != len(sequence) or transition_count != len(sequence):
         blockers.append("game_teaching_episode_sequence_count_invalid")
+    if "scene_confirmation_policy" in episode and not _scene_confirmation_policy_valid(episode, sequence):
+        blockers.append("game_teaching_episode_scene_confirmation_invalid")
     previous_time: float | None = None
     for index, raw_step in enumerate(sequence, start=1):
         step = _as_dict(raw_step)
@@ -494,6 +497,41 @@ def _validate_episode(episode: dict[str, Any]) -> dict[str, Any]:
         "event_count": event_count,
         "blockers": _dedupe_text(blockers),
     }
+
+
+def _scene_confirmation_policy_valid(episode: dict[str, Any], sequence: list[Any]) -> bool:
+    policy = _as_dict(episode.get("scene_confirmation_policy"))
+    requirements_observed = sorted(
+        {_safe_int(item) for item in _as_list(policy.get("requirements_observed")) if _safe_int(item) > 0}
+    )
+    sequence_requirements: set[int] = set()
+    if (
+        policy.get("basis") != "distinct_classification_source_frames"
+        or policy.get("all_events_temporally_confirmed") is not True
+        or not sequence
+    ):
+        return False
+
+    for raw_step in sequence:
+        step = _as_dict(raw_step)
+        required = _safe_int(step.get("confirmation_required"))
+        count = _safe_int(step.get("confirmation_count"))
+        source_frame_ids = _string_items(step.get("confirmation_source_frame_ids"))
+        first_classified_at = _safe_float(step.get("confirmation_first_classified_at"))
+        last_classified_at = _safe_float(step.get("confirmation_last_classified_at"))
+        if (
+            required < 1
+            or count < required
+            or count != len(source_frame_ids)
+            or len(set(source_frame_ids)) != len(source_frame_ids)
+            or first_classified_at is None
+            or last_classified_at is None
+            or first_classified_at > last_classified_at
+        ):
+            return False
+        sequence_requirements.add(required)
+
+    return requirements_observed == sorted(sequence_requirements)
 
 
 def _semantic_replay_steps(episode: dict[str, Any]) -> list[dict[str, Any]]:

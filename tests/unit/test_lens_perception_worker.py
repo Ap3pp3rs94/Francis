@@ -76,7 +76,11 @@ class _GameObserver:
                 "window_title_included": False,
             },
             "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.8, "margin": 0.5},
-            "classification": {"source_frame_id": source_frame_id, "device": "cpu"},
+            "classification": {
+                "source_frame_id": source_frame_id,
+                "classified_at": observed_at,
+                "device": "cpu",
+            },
             "model": {"id": "test/siglip", "remote_inference": False},
             "runtime_identity": {"authority_receipt_id": authority_receipt_id},
             "blockers": [],
@@ -235,13 +239,15 @@ def test_worker_records_explicit_game_teaching_transition_and_exposes_lens_state
         execution_status=_active_execution,
         supervision_status=_active_supervision,
         game_observer=_GameObserver(),
-        clock=iter((100.0, 100.1)).__next__,
+        clock=iter((100.0, 100.1, 100.5, 100.6)).__next__,
         process_id=800,
         parent_process_id=900,
     )
 
+    pending_state = worker.capture_once()
     state = worker.capture_once()
 
+    pending_teaching = pending_state["situation_model"]["present"]["game"]["teaching_session"]
     teaching = state["situation_model"]["present"]["game"]["teaching_session"]
     review = state["situation_model"]["present"]["game"]["teaching_review"]
     assert started["status"] == "active"
@@ -250,6 +256,7 @@ def test_worker_records_explicit_game_teaching_transition_and_exposes_lens_state
     assert teaching["session_id"] == started["session_id"]
     assert teaching["target_id"] == "sand"
     assert teaching["recording_active"] is True
+    assert pending_teaching["event_count"] == 0
     assert teaching["event_count"] == 1
     assert teaching["latest_scene_id"] == "active_gameplay"
     assert review["status"] == "awaiting_episode"
