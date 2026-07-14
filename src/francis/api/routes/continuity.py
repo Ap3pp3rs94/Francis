@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
-from francis.api.errors import api_error_message
+from francis.api.errors import api_error_message, log_api_exception
 from francis.chat.continuity.ledger import tail
 from francis.chat.continuity.prompt_context import continuity_prompt_context_readback
 from francis.lens.host_manifest import lens_overlay_runtime_readback
@@ -415,8 +415,9 @@ def presence_contracts() -> dict[str, object]:
 
 def _safe_unreal_presence_selection_readback(*, route: str) -> dict[str, object]:
     try:
-        return unreal_presence_selection_readback()
+        return _public_unreal_presence_selection_readback(unreal_presence_selection_readback())
     except Exception as exc:
+        log_api_exception(exc, route=route)
         return {
             "kind": "francis.grounded_presence.unreal_selection_readback",
             "schema_version": UNREAL_PRESENCE_SELECTION_SCHEMA_VERSION,
@@ -429,11 +430,28 @@ def _safe_unreal_presence_selection_readback(*, route: str) -> dict[str, object]
             "selection_id": "",
             "project_selection_status": "operator_confirmation_required",
             "technology_selection_status": "operator_confirmation_required",
-            "error": api_error_message(exc, route=route),
+            "confirmed_at": "",
+            "engine": {},
+            "project": {},
+            "technology_stack": [],
+            "runtime_configured": False,
+            "runtime_observed": False,
+            "error": "internal_api_error",
             "validation": {
                 "ok": False,
                 "reasons": ["selection_readback_unavailable"],
             },
+            "authority": {
+                "francis_core_authoritative": True,
+                "grants_execution_authority": False,
+                "grants_desktop_authority": False,
+                "grants_network_authority": False,
+                "grants_memory_write_authority": False,
+                "grants_approval_authority": False,
+            },
+            "read_only": True,
+            "writes_state": False,
+            "launches_unreal": False,
         }
 
 
@@ -443,8 +461,9 @@ def _safe_unreal_presence_runtime_readback(
     route: str,
 ) -> dict[str, object]:
     try:
-        return unreal_presence_runtime_readback(selection=selection)
+        return _public_unreal_presence_runtime_readback(unreal_presence_runtime_readback(selection=selection))
     except Exception as exc:
+        log_api_exception(exc, route=route)
         return {
             "kind": "francis.grounded_presence.unreal_runtime_readback",
             "schema_version": UNREAL_PRESENCE_RUNTIME_STATUS_SCHEMA_VERSION,
@@ -457,7 +476,7 @@ def _safe_unreal_presence_runtime_readback(
             "status_digest": "",
             "age_seconds": None,
             "runtime": {},
-            "error": api_error_message(exc, route=route),
+            "error": "internal_api_error",
             "validation": {
                 "ok": False,
                 "reasons": ["runtime_readback_unavailable"],
@@ -473,3 +492,110 @@ def _safe_unreal_presence_runtime_readback(
             "stores_presence_payload": False,
             "grants_execution_authority": False,
         }
+
+
+def _public_unreal_presence_selection_readback(payload: dict[str, Any]) -> dict[str, object]:
+    status = _known_status(
+        payload.get("status"),
+        allowed={
+            "operator_confirmation_required",
+            "operator_selection_confirmed",
+            "selection_invalid",
+            "selection_stale",
+        },
+        fallback="selection_invalid",
+    )
+    valid = bool(payload.get("valid"))
+    return {
+        "kind": "francis.grounded_presence.unreal_selection_readback",
+        "schema_version": UNREAL_PRESENCE_SELECTION_SCHEMA_VERSION,
+        "schema_path": "schemas/grounded_presence_unreal_selection.schema.json",
+        "status": status,
+        "configured": bool(payload.get("configured")),
+        "valid": valid,
+        "selection_path": str(payload.get("selection_path") or "")[:1024],
+        "manifest_sha256": _hex_digest(payload.get("manifest_sha256")),
+        "selection_id": _public_identifier(payload.get("selection_id"), prefix="gpu_"),
+        "confirmed_at": str(payload.get("confirmed_at") or "")[:80] if valid else "",
+        "engine": _as_dict(payload.get("engine")) if valid else {},
+        "project": _as_dict(payload.get("project")) if valid else {},
+        "technology_stack": _as_list(payload.get("technology_stack")) if valid else [],
+        "project_selection_status": "operator_confirmed" if valid else "operator_confirmation_required",
+        "technology_selection_status": "operator_confirmed" if valid else "operator_confirmation_required",
+        "runtime_configured": False,
+        "runtime_observed": False,
+        "validation": _public_validation(payload, fallback_reason=status),
+        "authority": _public_presence_authority(payload.get("authority")),
+        "read_only": True,
+        "writes_state": False,
+        "launches_unreal": False,
+    }
+
+
+def _public_unreal_presence_runtime_readback(payload: dict[str, Any]) -> dict[str, object]:
+    status = _known_status(
+        payload.get("status"),
+        allowed={
+            "selection_required",
+            "runtime_not_observed",
+            "runtime_status_invalid",
+            "runtime_stale",
+            "runtime_not_ready",
+            "runtime_observed",
+        },
+        fallback="runtime_not_observed",
+    )
+    validation = _public_validation(payload, fallback_reason=status)
+    observed = bool(payload.get("observed")) and bool(validation.get("ok"))
+    return {
+        "kind": "francis.grounded_presence.unreal_runtime_readback",
+        "schema_version": UNREAL_PRESENCE_RUNTIME_STATUS_SCHEMA_VERSION,
+        "schema_path": "schemas/grounded_presence_unreal_runtime_status.schema.json",
+        "status": status,
+        "observed": observed,
+        "fresh": bool(payload.get("fresh")) and observed,
+        "process_alive": bool(payload.get("process_alive")) and observed,
+        "status_path": str(payload.get("status_path") or "")[:1024],
+        "status_digest": _hex_digest(payload.get("status_digest")),
+        "age_seconds": payload.get("age_seconds") if isinstance(payload.get("age_seconds"), int | float) else None,
+        "runtime": _as_dict(payload.get("runtime")) if observed else {},
+        "validation": validation,
+        "authority": _public_presence_authority(payload.get("authority")),
+        "stores_presence_payload": False,
+        "grants_execution_authority": False,
+    }
+
+
+def _public_validation(payload: dict[str, Any], *, fallback_reason: str) -> dict[str, object]:
+    validation = _as_dict(payload.get("validation"))
+    ok = bool(validation.get("ok")) if validation else bool(payload.get("observed") or payload.get("valid"))
+    return {"ok": ok, "reasons": [] if ok else [fallback_reason]}
+
+
+def _public_presence_authority(value: object) -> dict[str, bool]:
+    authority = _as_dict(value)
+    return {
+        "francis_core_authoritative": bool(authority.get("francis_core_authoritative", True)),
+        "grants_execution_authority": False,
+        "grants_desktop_authority": False,
+        "grants_network_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_approval_authority": False,
+    }
+
+
+def _known_status(value: object, *, allowed: set[str], fallback: str) -> str:
+    text = str(value or "").strip()
+    return text if text in allowed else fallback
+
+
+def _hex_digest(value: object) -> str:
+    text = str(value or "").strip().lower()
+    return text if len(text) == 64 and all(character in "0123456789abcdef" for character in text) else ""
+
+
+def _public_identifier(value: object, *, prefix: str) -> str:
+    text = str(value or "").strip()
+    if not text.startswith(prefix):
+        return ""
+    return text if all(character.isalnum() or character in "._-" for character in text) and len(text) <= 160 else ""

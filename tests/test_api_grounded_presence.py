@@ -221,7 +221,11 @@ def test_continuity_contract_status_reflects_selection_without_runtime_claim(mon
     assert body["unreal"]["technology_selection_status"] == "operator_confirmed"
     assert body["unreal"]["runtime_configured"] is False
     assert body["unreal"]["runtime_observed"] is False
-    assert selection_body == selection
+    assert selection_body["status"] == selection["status"]
+    assert selection_body["valid"] is True
+    assert selection_body["selection_id"] == selection["selection_id"]
+    assert selection_body["project_selection_status"] == "operator_confirmed"
+    assert selection_body["technology_selection_status"] == "operator_confirmed"
 
 
 def test_continuity_contract_status_reflects_observed_unreal_runtime(monkeypatch) -> None:
@@ -252,7 +256,10 @@ def test_continuity_contract_status_reflects_observed_unreal_runtime(monkeypatch
     assert body["unreal"]["runtime_status"] == "runtime_observed"
     assert body["unreal"]["runtime_configured"] is True
     assert body["unreal"]["runtime_observed"] is True
-    assert continuity.presence_unreal_runtime() == runtime
+    runtime_body = continuity.presence_unreal_runtime()
+    assert runtime_body["status"] == runtime["status"]
+    assert runtime_body["observed"] is True
+    assert runtime_body["runtime"] == runtime["runtime"]
 
 
 def test_continuity_surfaces_preserve_source_timestamps_and_backlog(monkeypatch) -> None:
