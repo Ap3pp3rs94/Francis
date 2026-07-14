@@ -7,6 +7,7 @@ name = "francis"
 version = "0.3.1"
 description = "Local-first, policy-guarded, auditable AI operator layer."
 readme = "README.md"
+authors = [{ name = "Austin Peppers", email = "peppera091@gmail.com" }]
 license = { text = "Proprietary. All rights reserved." }
 requires-python = ">=3.11"
 dependencies = []

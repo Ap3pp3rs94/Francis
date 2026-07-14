@@ -28,20 +28,17 @@ transferable, and sublicensable license to use, reproduce, modify, distribute,
 prepare derivative works from, publicly display, publicly perform, commercialize,
 and otherwise exploit the submitted materials for any purpose.
 
-Contributor ownership consideration: only clean additions that Austin Peppers
-fully accepts and incorporates into Francis, and that materially improve Francis
-by creating measurable build momentum or acceleration, are eligible for
-ownership consideration of up to one percent (1%) of Francis project ownership.
-Submission, review, discussion, partial acceptance, experimental use, temporary
-use, or rejection of a contribution does not qualify for ownership
-consideration. Contributions that create advantages beyond Austin Peppers' own
-current implementation capacity may open a broader ownership conversation. No
-ownership right, equity interest, partnership, employment relationship,
-compensation obligation, or transfer is created automatically by submitting a
-contribution, by full acceptance of a contribution, or by this public license
-text. Any ownership grant, transfer, exception, or compensation arrangement must
-be documented in a separate written agreement signed by Austin Peppers and the
-contributor.
+Contributor recognition: accepted contributions may be acknowledged at Austin
+Peppers' sole discretion, on an individual basis, through credits or other
+public recognition. Recognition is a courtesy, not consideration, and carries no
+rights. No ownership right, equity interest, revenue share, partnership,
+employment relationship, compensation obligation, or any other proprietary
+interest in Francis is offered, implied, or created by submitting a
+contribution, by acceptance or incorporation of a contribution, by recognition
+of a contribution, or by this public license text. Any exception must be
+documented in a separate written agreement signed by Austin Peppers and the
+contributor; no such agreement may be formed by conduct, course of dealing, or
+public statement.
 
 Third-party dependencies, vendored materials, and external packages referenced by
 Francis remain governed by their own licenses. This license does not grant rights
@@ -51,3 +48,6 @@ original Francis materials.
 Any permission exception, commercial license, transfer, assignment, or waiver must
 be in a separate written agreement signed by Austin Peppers. All rights not
 expressly granted in such a written agreement are reserved.
+
+Contact for permissions, licensing, and written agreements:
+Austin Peppers <peppera091@gmail.com>

@@ -6,6 +6,8 @@ Francis is built as a governed, local-first operator layer. The repo workflow ne
 
 Francis is proprietary and all rights are reserved by Austin Peppers. Do not submit code, documentation, designs, issues, pull requests, assets, or other materials unless you have the right to submit them and agree that the submitted materials are assigned to Austin Peppers under the terms in [LICENSE](LICENSE).
 
+Licensing questions and permission requests: peppera091@gmail.com
+
 ## Branch Management
 
 - `main` is the canonical branch. Keep it releasable and reflective of the current repo state on GitHub.

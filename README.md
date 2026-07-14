@@ -322,12 +322,13 @@ cloning, forking, or submitting material to this repository does not grant
 permission to use, copy, distribute, commercialize, or create derivative works
 from Francis except under a separate written agreement. See [LICENSE](LICENSE).
 
-Clean additions that Austin Peppers fully accepts and incorporates into Francis
-may be recognized as accepted contributions when they materially improve Francis
-by creating measurable build momentum or acceleration. Submission, review,
-discussion, partial acceptance, experimental use, temporary use, or rejection
-does not create ownership rights. Any ownership or compensation discussion must
-be documented in a separate written agreement before it exists.
+Accepted contributions may be recognized individually — credit and
+acknowledgment are given at Austin Peppers' sole discretion. No ownership,
+equity, or compensation is offered, implied, or created by submitting a
+contribution or by having one accepted. Any exception exists only in a separate
+written agreement signed by Austin Peppers.
+
+Licensing and permission inquiries: peppera091@gmail.com
 
 ## GitHub Engagement
 

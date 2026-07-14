@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.3.1",
   "license": "UNLICENSED",
+  "author": "Austin Peppers <peppera091@gmail.com>",
+  "description": "Operator UI for Francis — governed local-first AI operator layer.",
   "type": "module",
   "scripts": {
     "dev": "vite",

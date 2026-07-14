@@ -38,19 +38,13 @@ Instead, report privately and include enough detail to reproduce.
 
 **Preferred contact**
 
-- Email: `security@YOUR-DOMAIN-HERE`  
-
-  (Replace with your real mailbox, or a distribution list)
+- Email: `peppera091@gmail.com` (subject line starting with `[FRANCIS SECURITY]`)
 
 
 
 **Alternate contact**
 
-- IT/Admin contact: `YOUR-ADMIN-EMAIL-HERE`
-
-
-
-If you don’t have a dedicated mailbox, create one (or use a private shared inbox) so reports don’t get lost.
+- GitHub: open a private security advisory on the `Ap3pp3rs94/Francis` repository (Security tab → Report a vulnerability)
 
 
 
@@ -384,9 +378,9 @@ Example:
 
 **Maintainers:**  
 
-- Name/Team: `YOUR-NAME-OR-TEAM`  
+- Name/Team: Austin Peppers  
 
-- Contact: `security@YOUR-DOMAIN-HERE`
+- Contact: `peppera091@gmail.com`
 
 
 
