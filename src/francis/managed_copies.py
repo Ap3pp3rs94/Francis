@@ -29,8 +29,15 @@ from francis.managed_copy_approval import (
     managed_copy_creation_approval_requests_readback,
     record_managed_copy_creation_approval_request,
 )
+from francis.managed_copy_isolation import (
+    latest_managed_copy_isolation_verification_for_provision,
+    managed_copy_isolation_verification_plan,
+    managed_copy_isolation_verification_receipts_readback,
+    record_managed_copy_isolation_verification,
+)
 from francis.managed_copy_provisioning import (
     latest_managed_copy_provision_for_approval,
+    managed_copy_provision_for_copy,
     managed_copy_provision_plan,
     managed_copy_provision_receipts_readback,
     record_managed_copy_provision,
@@ -464,6 +471,18 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     copy_provision_recovery_required = bool(latest_aligned_provision.get("recovery_required"))
     copy_provision_receipt_id = _safe_str(latest_aligned_provision.get("receipt_id")).strip()
     provisioned_copy_id = _safe_str(latest_aligned_provision.get("copy_id")).strip()
+    latest_aligned_isolation = (
+        latest_managed_copy_isolation_verification_for_provision(
+            copy_provision_receipt_id,
+            provision_fingerprint=_safe_str(latest_aligned_provision.get("provision_fingerprint")).strip(),
+            copy_id=provisioned_copy_id,
+        )
+        if copy_provisioned
+        else {}
+    )
+    copy_structural_isolation_verified = bool(latest_aligned_isolation.get("live_state_aligned"))
+    copy_isolation_drift_detected = bool(latest_aligned_isolation.get("live_drift_detected"))
+    copy_isolation_receipt_id = _safe_str(latest_aligned_isolation.get("receipt_id")).strip()
     deliverables = [
         _deliverable(
             "stage17_ledger_closure_backstop",
@@ -484,6 +503,8 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             status=(
                 "provision_recovery_required"
                 if copy_provision_recovery_required
+                else "provisioned_structurally_verified"
+                if copy_structural_isolation_verified
                 else "provisioned_unverified"
                 if copy_provisioned
                 else f"approval_{copy_approval_status}"
@@ -499,6 +520,10 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             next_gap=(
                 "stage18_copy_provision_recovery"
                 if copy_provision_recovery_required
+                else "stage18_copy_isolation_runtime_access_boundary"
+                if copy_structural_isolation_verified
+                else "stage18_copy_isolation_reverification"
+                if copy_isolation_drift_detected
                 else "stage18_copy_isolation_verification"
                 if copy_provisioned
                 else _copy_approval_next_gap(copy_approval_status)
@@ -539,16 +564,39 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
                     if copy_provisioned
                     else "No managed-copy tenant state or runtime has been created."
                 ),
+                (
+                    f"Structural isolation receipt: {copy_isolation_receipt_id}; ACL and runtime boundaries remain open."
+                    if copy_structural_isolation_verified
+                    else f"Structural isolation receipt drifted from live tenant state: {copy_isolation_receipt_id}."
+                    if copy_isolation_drift_detected
+                    else "No live-aligned structural isolation receipt is recorded."
+                ),
             ],
         ),
         _deliverable(
             "isolation_rules",
             "Isolation rules",
             ready=False,
-            status="contract_readback_ready",
-            next_gap="stage18_copy_isolation_rules",
+            status=(
+                "structural_verification_recorded"
+                if copy_structural_isolation_verified
+                else "structural_verification_drifted"
+                if copy_isolation_drift_detected
+                else "contract_readback_ready"
+            ),
+            next_gap=(
+                "stage18_copy_isolation_runtime_access_boundary"
+                if copy_structural_isolation_verified
+                else "stage18_copy_isolation_reverification"
+                if copy_isolation_drift_detected
+                else "stage18_copy_isolation_rules"
+            ),
             evidence=[
-                "GET /managed-copies/isolation-rules-contract exposes tenant boundary rules without enforcing them.",
+                (
+                    f"Structural tenant isolation is live-aligned to receipt {copy_isolation_receipt_id}; ACL, runtime, and cross-tenant denial proof remain open."
+                    if copy_structural_isolation_verified
+                    else "GET /managed-copies/isolation-rules-contract exposes tenant boundary rules without claiming full enforcement."
+                ),
             ],
         ),
         _deliverable(
@@ -633,6 +681,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "copy_creation_provisions": "/managed-copies/copy-creation-provisions",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "isolation_verification": "/managed-copies/isolation-verification",
+            "isolation_verifications": "/managed-copies/isolation-verifications",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "safe_delta_review": "/managed-copies/safe-delta-review",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
@@ -694,6 +743,10 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "copy_provision_receipt_id": copy_provision_receipt_id,
         "provisioned_copy_id": provisioned_copy_id,
         "copy_provision_approval_aligned": bool(latest_aligned_provision),
+        "copy_structural_isolation_verified": copy_structural_isolation_verified,
+        "copy_isolation_drift_detected": copy_isolation_drift_detected,
+        "copy_isolation_receipt_id": copy_isolation_receipt_id,
+        "copy_full_customer_isolation_verified": False,
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
         "copy_creation_enabled": governance["copy_creation_enabled"],
@@ -711,6 +764,10 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "next_smallest_truthful_gap": (
             "stage18_copy_provision_recovery"
             if stage17_closed and copy_provision_recovery_required
+            else "stage18_copy_isolation_runtime_access_boundary"
+            if stage17_closed and copy_structural_isolation_verified
+            else "stage18_copy_isolation_reverification"
+            if stage17_closed and copy_isolation_drift_detected
             else "stage18_copy_isolation_verification"
             if stage17_closed and copy_provisioned
             else _copy_approval_next_gap(copy_approval_status)
@@ -744,6 +801,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
     copy_approval_status = _safe_str(status.get("copy_approval_status")).strip()
     copy_provisioned = bool(status["copy_provisioned"])
     copy_provision_recovery_required = bool(status["copy_provision_recovery_required"])
+    copy_structural_isolation_verified = bool(status["copy_structural_isolation_verified"])
+    copy_isolation_drift_detected = bool(status["copy_isolation_drift_detected"])
 
     def request_field_ready(field: str) -> bool:
         return copy_request_recorded and bool(request_field_presence.get(field))
@@ -859,7 +918,15 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         _contract_step(
             "verify",
             "Verify isolation, lineage, policy, support boundaries, and decommission readiness",
-            status="required_not_implemented" if copy_provisioned else "disabled",
+            status=(
+                "structural_complete"
+                if copy_structural_isolation_verified
+                else "drift_detected"
+                if copy_isolation_drift_detected
+                else "enabled"
+                if copy_provisioned
+                else "disabled"
+            ),
             writes_receipt=True,
         ),
         _contract_step(
@@ -901,6 +968,10 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "copy_provision_receipt_id": _safe_str(status.get("copy_provision_receipt_id")).strip(),
         "provisioned_copy_id": _safe_str(status.get("provisioned_copy_id")).strip(),
         "copy_provision_approval_aligned": bool(status["copy_provision_approval_aligned"]),
+        "copy_structural_isolation_verified": copy_structural_isolation_verified,
+        "copy_isolation_drift_detected": copy_isolation_drift_detected,
+        "copy_isolation_receipt_id": _safe_str(status.get("copy_isolation_receipt_id")).strip(),
+        "copy_full_customer_isolation_verified": False,
         "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
         "stage17_blocker": status["stage17_blocker"],
         "requirements": requirements,
@@ -911,6 +982,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
             "current_state": (
                 "provision_recovery_required"
                 if copy_provision_recovery_required
+                else "structurally_verified"
+                if copy_structural_isolation_verified
                 else "provisioned_unverified"
                 if copy_provisioned
                 else _copy_approval_state(copy_approval_status)
@@ -940,6 +1013,7 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
                 "provision_recovery_required",
                 "provisioned_unverified",
                 "verifying",
+                "structurally_verified",
                 "active",
                 "quarantined",
                 "decommissioned",
@@ -947,6 +1021,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
             "active_transitions_enabled": bool(status["stage17_closed_by_receipt"]),
             "enabled_transitions": (
                 []
+                if copy_structural_isolation_verified
+                else ["verify_isolation"]
                 if copy_provisioned
                 else ["recover_provision"]
                 if copy_provision_recovery_required
@@ -988,6 +1064,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
             "copy_creation_approval_requests": "/managed-copies/copy-creation-approval-requests",
             "copy_creation_provision": "/managed-copies/copy-creation-provision",
             "copy_creation_provisions": "/managed-copies/copy-creation-provisions",
+            "isolation_verification": "/managed-copies/isolation-verification",
+            "isolation_verifications": "/managed-copies/isolation-verifications",
         },
         "isolation_boundaries": [
             "tenant_data",
@@ -2106,6 +2184,17 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
             verification_gap="stage18_support_operator_authority_verification",
         ),
     ]
+    structural_verified = bool(status["copy_structural_isolation_verified"])
+    structural_drift = bool(status["copy_isolation_drift_detected"])
+    for domain in isolation_domains:
+        domain["structurally_verified"] = structural_verified
+        domain["structural_verification_status"] = (
+            "verified" if structural_verified else "drift_detected" if structural_drift else "not_verified"
+        )
+        if structural_verified:
+            domain["verification_gap"] = "stage18_copy_isolation_runtime_access_boundary"
+        elif structural_drift:
+            domain["verification_gap"] = "stage18_copy_isolation_reverification"
     return {
         "ok": True,
         "kind": MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND,
@@ -2115,12 +2204,19 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "contract_readback_ready": True,
         "isolation_rules_ready": False,
         "isolation_enforcement_enabled": False,
+        "structural_isolation_verified": structural_verified,
+        "structural_isolation_drift_detected": structural_drift,
+        "structural_isolation_receipt_id": status["copy_isolation_receipt_id"],
+        "filesystem_acl_isolation_verified": False,
+        "runtime_access_boundary_verified": False,
+        "full_customer_isolation_verified": False,
         "copy_creation_enabled": False,
         "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
         "stage17_blocker": status["stage17_blocker"],
         "isolation_domains": isolation_domains,
         "required_domain_count": len(isolation_domains),
         "enforced_domain_count": sum(1 for domain in isolation_domains if domain["isolated"]),
+        "structurally_verified_domain_count": sum(1 for domain in isolation_domains if domain["structurally_verified"]),
         "support_access_rules": [
             "support_operator_identity_required",
             "tenant_admin_approval_required",
@@ -2152,6 +2248,7 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
             **status["routes"],
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "isolation_verification": "/managed-copies/isolation-verification",
+            "isolation_verifications": "/managed-copies/isolation-verifications",
         },
         "blocked_failure_modes": [
             "privacy_weak_pooling",
@@ -2183,7 +2280,7 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
     }
 
 
-def managed_copy_isolation_verification_blocked_snapshot(
+def _managed_copy_isolation_verification_blocked_snapshot(
     payload: dict[str, Any],
     *,
     actor: str,
@@ -2282,6 +2379,188 @@ def managed_copy_isolation_verification_blocked_snapshot(
         "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
+
+
+def managed_copy_isolation_verification_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Verify provisioned tenant structure and optionally record bounded evidence."""
+    status = managed_copies_status_snapshot()
+    if not bool(status["stage17_closed_by_receipt"]):
+        return _managed_copy_isolation_verification_blocked_snapshot(payload, actor=actor)
+
+    governance = _governance()
+    copy_id = _safe_str(payload.get("copy_id")).strip()
+    provisioning_receipt_id = _safe_str(payload.get("provisioning_receipt_id")).strip()
+    provision_receipt = managed_copy_provision_for_copy(
+        copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+    )
+    plan = managed_copy_isolation_verification_plan(
+        payload,
+        actor=actor,
+        provision_receipt=provision_receipt,
+    )
+    dry_run_value = payload.get("dry_run", True)
+    dry_run_type_valid = isinstance(dry_run_value, bool)
+    dry_run = dry_run_value if dry_run_type_valid else True
+    outcome: dict[str, Any] = {
+        "ok": False,
+        "status": "blocked_isolation_verification_contract",
+        "error": "isolation_verification_contract_not_ready",
+        "receipt": None,
+        "receipt_id": "",
+        "structural_isolation_verified": False,
+        "full_customer_isolation_verified": False,
+        "writes_receipt": False,
+        "writes_tenant_state": False,
+        "starts_runtime": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+    if not provision_receipt:
+        outcome.update(
+            status="blocked_copy_provision_required",
+            error="copy_provision_receipt_missing_or_mismatch",
+        )
+    elif not dry_run_type_valid:
+        outcome.update(error="dry_run_must_be_boolean")
+    elif not plan["structural_isolation_ready"]:
+        outcome.update(error="isolation_verification_contract_not_ready")
+    elif dry_run:
+        outcome.update(ok=True, status="structural_isolation_verification_ready", error="")
+    else:
+        outcome = record_managed_copy_isolation_verification(
+            plan,
+            provision_receipt=provision_receipt,
+            provided_fingerprint=_safe_str(payload.get("verification_fingerprint")).strip(),
+            confirm_verification=payload.get("confirm_isolation_verification") is True,
+        )
+
+    structural_verified = bool(outcome.get("structural_isolation_verified"))
+    writes_receipt = bool(outcome.get("writes_receipt"))
+    next_gap = (
+        "stage18_copy_isolation_runtime_access_boundary"
+        if structural_verified
+        else "stage18_copy_isolation_verification"
+        if provision_receipt
+        else status["next_smallest_truthful_gap"]
+    )
+    return {
+        "ok": bool(outcome["ok"]),
+        "kind": MANAGED_COPIES_ISOLATION_VERIFICATION_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": outcome["status"],
+        "error": outcome["error"],
+        "actor": plan["actor"],
+        "copy_id": plan["copy_id"],
+        "copy_id_present": bool(copy_id),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "tenant_key": plan["tenant_key"],
+        "provisioning_receipt_id": plan["provisioning_receipt_id"],
+        "provision_fingerprint": plan["provision_fingerprint"],
+        "state_root": plan["state_root"],
+        "requested_domains": plan["requested_domains"],
+        "requested_domain_count": len(plan["requested_domains"]),
+        "requested_unknown_domains": plan["unknown_domains"],
+        "required_domain_count": plan["required_domain_count"],
+        "verified_domain_count": plan["verified_domain_count"],
+        "domain_checks": plan["domain_checks"],
+        "required_artifact_count": plan["required_artifact_count"],
+        "verified_artifact_count": plan["verified_artifact_count"],
+        "artifact_checks": plan["artifact_checks"],
+        "stage17_closed_by_receipt": True,
+        "stage17_blocker": "",
+        "copy_provisioned": bool(provision_receipt),
+        "isolation_rules_ready": False,
+        "isolation_enforcement_enabled": False,
+        "isolation_verification_enabled": bool(provision_receipt),
+        "structural_isolation_ready": bool(plan["structural_isolation_ready"]),
+        "structural_isolation_verified": structural_verified,
+        "isolation_verified": False,
+        "filesystem_acl_isolation_verified": False,
+        "runtime_access_boundary_verified": False,
+        "cross_tenant_denial_executed": False,
+        "full_customer_isolation_verified": False,
+        "tenant_state_shared": False,
+        "cross_tenant_data_flow_allowed": False,
+        "raw_private_pooling_allowed": False,
+        "support_backdoor_allowed": False,
+        "blockers": plan["blockers"],
+        "dry_run": dry_run,
+        "verification_fingerprint": plan["verification_fingerprint"],
+        "dry_run_confirmation": {
+            **plan["dry_run_confirmation"],
+            "fingerprint_matched": bool(
+                not dry_run
+                and plan["verification_fingerprint"]
+                and _safe_str(payload.get("verification_fingerprint")).strip() == plan["verification_fingerprint"]
+            ),
+            "verification_confirmed": payload.get("confirm_isolation_verification") is True,
+        },
+        "receipt_ready": bool(outcome.get("receipt_id")),
+        "receipt_id": _safe_str(outcome.get("receipt_id")).strip(),
+        "receipt": outcome.get("receipt"),
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": writes_receipt,
+        "writes_receipts": writes_receipt,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "starts_runtime": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_verification_receipt_path": (
+            "managed_copies/tenants/{tenant_key}/receipts/isolation_verification.json"
+        ),
+        "required_scope": MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+        "routes": {
+            **status["routes"],
+            "isolation_verification": "/managed-copies/isolation-verification",
+            "isolation_verifications": "/managed-copies/isolation-verifications",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": dry_run,
+            "permission_scope": MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+            "permission_checked": True,
+            "copy_provision_receipt_required": True,
+            "copy_provision_receipt_aligned": bool(provision_receipt),
+            "structural_verification_only": True,
+            "filesystem_acl_isolation_claimed": False,
+            "runtime_access_boundary_claimed": False,
+            "cross_tenant_denial_claimed": False,
+            "does_not_echo_raw_tenant_payload": True,
+            "starts_runtime": False,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": writes_receipt,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": not writes_receipt,
+        "projection_only": not writes_receipt,
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def managed_copy_isolation_verifications_snapshot(*, limit: int = 20) -> dict[str, Any]:
+    """Return tenant-local structural-isolation receipts with live drift checks."""
+    return managed_copy_isolation_verification_receipts_readback(limit=limit)
 
 
 def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:

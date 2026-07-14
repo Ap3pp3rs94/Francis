@@ -334,6 +334,31 @@ def latest_managed_copy_provision_for_approval(
     return latest
 
 
+def managed_copy_provision_for_copy(
+    copy_id: str,
+    *,
+    provisioning_receipt_id: str = "",
+) -> dict[str, Any]:
+    expected_copy_id = _safe_text(copy_id)
+    expected_receipt_id = _safe_text(provisioning_receipt_id)
+    if not expected_copy_id:
+        return {}
+    for path in _tenant_roots_path().glob("*/receipts/provisioning.json"):
+        item = _read_json(path)
+        if (
+            _safe_text(item.get("copy_id")) == expected_copy_id
+            and (not expected_receipt_id or _safe_text(item.get("receipt_id")) == expected_receipt_id)
+            and _provision_complete(item)
+        ):
+            return {
+                **item,
+                "registry_aligned": True,
+                "provision_complete": True,
+                "recovery_required": False,
+            }
+    return {}
+
+
 def _write_staged_tenant(staging_root: Path, plan: dict[str, Any]) -> None:
     staging_root.mkdir(parents=True, exist_ok=False)
     for relative_path in _ISOLATION_LAYOUT.values():

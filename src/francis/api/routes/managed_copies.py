@@ -31,7 +31,8 @@ from francis.managed_copies import (
     managed_copy_decommission_contract_snapshot,
     managed_copy_decommission_review_blocked_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
-    managed_copy_isolation_verification_blocked_snapshot,
+    managed_copy_isolation_verification_snapshot,
+    managed_copy_isolation_verifications_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
     managed_copy_rogue_recovery_review_blocked_snapshot,
     managed_copy_role_authority_review_blocked_snapshot,
@@ -354,7 +355,12 @@ def isolation_verification(payload: dict[str, Any], request: Request) -> dict[st
             required_scope=MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
             next_step="configure_actor_scope_before_verifying_managed_copy_isolation",
         )
-    return managed_copy_isolation_verification_blocked_snapshot(payload, actor=actor)
+    return managed_copy_isolation_verification_snapshot(payload, actor=actor)
+
+
+@router.get("/isolation-verifications")
+def isolation_verifications(limit: int = 20) -> dict[str, Any]:
+    return managed_copy_isolation_verifications_snapshot(limit=limit)
 
 
 @router.get("/safe-delta-model-contract")

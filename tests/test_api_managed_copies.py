@@ -43,6 +43,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "copy_creation_provisions": "/managed-copies/copy-creation-provisions",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "isolation_verification": "/managed-copies/isolation-verification",
+        "isolation_verifications": "/managed-copies/isolation-verifications",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "safe_delta_review": "/managed-copies/safe-delta-review",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
@@ -786,7 +787,10 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
         "FRANCIS_API_ACTOR_SCOPES",
         json.dumps(
             {
-                actor: ["managed_copies.copy_creation.write"],
+                actor: [
+                    "managed_copies.copy_creation.write",
+                    "managed_copies.isolation_verification.write",
+                ],
                 decision_actor: ["approvals.decide"],
             }
         ),
@@ -1396,9 +1400,157 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     provisioned_contract = client.get("/managed-copies/copy-creation-contract").json()
     provisioned_step_by_id = {item["id"]: item for item in provisioned_contract["process_steps"]}
     assert provisioned_step_by_id["provision"]["status"] == "complete"
-    assert provisioned_step_by_id["verify"]["status"] == "required_not_implemented"
+    assert provisioned_step_by_id["verify"]["status"] == "enabled"
     assert provisioned_contract["state_machine"]["current_state"] == "provisioned_unverified"
-    assert provisioned_contract["state_machine"]["enabled_transitions"] == []
+    assert provisioned_contract["state_machine"]["enabled_transitions"] == ["verify_isolation"]
+
+    isolation_payload = {
+        "request_actor": actor,
+        "copy_id": provisioned["copy_id"],
+        "provisioning_receipt_id": provisioned["receipt_id"],
+        "domains": [
+            "tenant_data",
+            "tenant_memory",
+            "tenant_receipts",
+            "tenant_connectors",
+            "tenant_capability_packs",
+            "tenant_policy",
+            "support_operator_authority",
+        ],
+        "dry_run": True,
+    }
+    isolation_plan = client.post(
+        "/managed-copies/isolation-verification",
+        json=isolation_payload,
+    ).json()
+    assert isolation_plan["ok"] is True
+    assert isolation_plan["status"] == "structural_isolation_verification_ready"
+    assert isolation_plan["structural_isolation_ready"] is True
+    assert isolation_plan["structural_isolation_verified"] is False
+    assert isolation_plan["full_customer_isolation_verified"] is False
+    assert isolation_plan["filesystem_acl_isolation_verified"] is False
+    assert isolation_plan["runtime_access_boundary_verified"] is False
+    assert isolation_plan["cross_tenant_denial_executed"] is False
+    assert isolation_plan["verified_domain_count"] == 7
+    assert isolation_plan["required_domain_count"] == 7
+    assert isolation_plan["verified_artifact_count"] == isolation_plan["required_artifact_count"]
+    assert all(check["status"] == "verified" for check in isolation_plan["domain_checks"])
+    assert all(check["status"] == "verified" for check in isolation_plan["artifact_checks"])
+    assert len(isolation_plan["verification_fingerprint"]) == 64
+    assert isolation_plan["writes_receipts"] is False
+    assert isolation_plan["writes_tenant_state"] is False
+    assert isolation_plan["starts_runtime"] is False
+    assert isolation_plan["next_smallest_truthful_gap"] == "stage18_copy_isolation_verification"
+
+    isolation_receipt_path = tenant_root / "receipts" / "isolation_verification.json"
+    assert not isolation_receipt_path.exists()
+    wrong_isolation_fingerprint = client.post(
+        "/managed-copies/isolation-verification",
+        json={
+            **isolation_payload,
+            "dry_run": False,
+            "verification_fingerprint": "0" * 64,
+            "confirm_isolation_verification": True,
+        },
+    ).json()
+    assert wrong_isolation_fingerprint["ok"] is False
+    assert wrong_isolation_fingerprint["error"] == "isolation_verification_fingerprint_mismatch"
+    assert wrong_isolation_fingerprint["writes_receipts"] is False
+    assert not isolation_receipt_path.exists()
+
+    connectors_path = tenant_root / "connectors"
+    displaced_connectors_path = tenant_root / "connectors-displaced"
+    connectors_path.rename(displaced_connectors_path)
+    drifted_plan = client.post(
+        "/managed-copies/isolation-verification",
+        json=isolation_payload,
+    ).json()
+    assert drifted_plan["ok"] is False
+    assert drifted_plan["error"] == "isolation_verification_contract_not_ready"
+    assert "tenant_connectors_directory_missing" in drifted_plan["blockers"]
+    connectors_check = {check["id"]: check for check in drifted_plan["domain_checks"]}
+    assert connectors_check["tenant_connectors"]["status"] == "blocked"
+    assert drifted_plan["writes_receipts"] is False
+    displaced_connectors_path.rename(connectors_path)
+
+    isolation_recorded = client.post(
+        "/managed-copies/isolation-verification",
+        json={
+            **isolation_payload,
+            "dry_run": False,
+            "verification_fingerprint": isolation_plan["verification_fingerprint"],
+            "confirm_isolation_verification": True,
+        },
+    ).json()
+    assert isolation_recorded["ok"] is True, (
+        isolation_recorded["status"],
+        isolation_recorded["error"],
+        isolation_recorded["dry_run_confirmation"],
+    )
+    assert isolation_recorded["status"] == "structural_isolation_verified"
+    assert isolation_recorded["structural_isolation_verified"] is True
+    assert isolation_recorded["isolation_verified"] is False
+    assert isolation_recorded["full_customer_isolation_verified"] is False
+    assert isolation_recorded["writes_receipts"] is True
+    assert isolation_recorded["writes_tenant_state"] is False
+    assert isolation_recorded["starts_runtime"] is False
+    assert isolation_recorded["grants_execution_authority"] is False
+    assert isolation_recorded["grants_mutation_authority"] is False
+    assert isolation_recorded["next_smallest_truthful_gap"] == ("stage18_copy_isolation_runtime_access_boundary")
+    assert isolation_receipt_path.exists()
+    isolation_receipt_text = isolation_receipt_path.read_text(encoding="utf-8")
+    assert raw_tenant_id not in isolation_receipt_text
+    assert raw_tenant_name not in isolation_receipt_text
+    assert raw_admin not in isolation_receipt_text
+
+    isolation_readback = client.get("/managed-copies/isolation-verifications").json()
+    assert isolation_readback["status"] == "ready"
+    assert isolation_readback["valid_count"] == 1
+    assert isolation_readback["live_aligned_count"] == 1
+    assert isolation_readback["structural_isolation_verified"] is True
+    assert isolation_readback["full_customer_isolation_verified"] is False
+    assert isolation_readback["latest_valid_receipt_id"] == isolation_recorded["receipt_id"]
+    assert isolation_readback["next_smallest_truthful_gap"] == ("stage18_copy_isolation_runtime_access_boundary")
+
+    structurally_verified_status = client.get("/managed-copies/status").json()
+    creation = next(
+        item for item in structurally_verified_status["deliverables"] if item["id"] == "copy_creation_process"
+    )
+    isolation_deliverable = next(
+        item for item in structurally_verified_status["deliverables"] if item["id"] == "isolation_rules"
+    )
+    assert creation["status"] == "provisioned_structurally_verified"
+    assert isolation_deliverable["status"] == "structural_verification_recorded"
+    assert structurally_verified_status["copy_structural_isolation_verified"] is True
+    assert structurally_verified_status["copy_full_customer_isolation_verified"] is False
+    assert structurally_verified_status["copy_isolation_drift_detected"] is False
+    assert structurally_verified_status["copy_isolation_receipt_id"] == isolation_recorded["receipt_id"]
+    assert structurally_verified_status["next_smallest_truthful_gap"] == (
+        "stage18_copy_isolation_runtime_access_boundary"
+    )
+
+    structurally_verified_contract = client.get("/managed-copies/copy-creation-contract").json()
+    verified_step_by_id = {item["id"]: item for item in structurally_verified_contract["process_steps"]}
+    assert verified_step_by_id["verify"]["status"] == "structural_complete"
+    assert structurally_verified_contract["state_machine"]["current_state"] == "structurally_verified"
+    assert structurally_verified_contract["state_machine"]["enabled_transitions"] == []
+
+    policy_path = tenant_root / "policy"
+    displaced_policy_path = tenant_root / "policy-displaced"
+    policy_path.rename(displaced_policy_path)
+    drifted_status = client.get("/managed-copies/status").json()
+    assert drifted_status["copy_structural_isolation_verified"] is False
+    assert drifted_status["copy_isolation_drift_detected"] is True
+    assert drifted_status["next_smallest_truthful_gap"] == "stage18_copy_isolation_reverification"
+    drifted_readback = client.get("/managed-copies/isolation-verifications").json()
+    assert drifted_readback["status"] == "drift_detected"
+    assert drifted_readback["live_aligned_count"] == 0
+    assert "tenant_policy_directory_missing" in drifted_readback["latest_valid_receipt"]["live_blockers"]
+    displaced_policy_path.rename(policy_path)
+
+    restored_status = client.get("/managed-copies/status").json()
+    assert restored_status["copy_structural_isolation_verified"] is True
+    assert restored_status["copy_isolation_drift_detected"] is False
 
     invalid_approval_path = approvals_root / "pending" / "managed-copy-invalid.json"
     invalid_approval_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3822,6 +3974,7 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
             "provision_recovery_required",
             "provisioned_unverified",
             "verifying",
+            "structurally_verified",
             "active",
             "quarantined",
             "decommissioned",
