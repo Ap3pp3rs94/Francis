@@ -488,7 +488,12 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     copy_structural_isolation_verified = bool(latest_aligned_isolation.get("live_state_aligned"))
     copy_isolation_drift_detected = bool(latest_aligned_isolation.get("live_drift_detected"))
     copy_isolation_receipt_id = _safe_str(latest_aligned_isolation.get("receipt_id")).strip()
-    safe_delta_reviews = managed_copy_safe_delta_review_receipts_readback(limit=20)
+    safe_delta_reviews = managed_copy_safe_delta_review_receipts_readback(
+        copy_id=provisioned_copy_id,
+        provisioning_receipt_id=copy_provision_receipt_id,
+        isolation_verification_receipt_id=copy_isolation_receipt_id,
+        limit=20,
+    )
     latest_safe_delta_review = safe_delta_reviews.get("latest_valid_receipt")
     latest_safe_delta_review = latest_safe_delta_review if isinstance(latest_safe_delta_review, dict) else {}
     safe_delta_review_recorded = bool(
@@ -2596,7 +2601,12 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
     """Return the safe-delta model contract without exporting tenant data."""
     governance = _governance()
     status = managed_copies_status_snapshot()
-    reviews = managed_copy_safe_delta_review_receipts_readback(limit=20)
+    reviews = managed_copy_safe_delta_review_receipts_readback(
+        copy_id=_safe_str(status["provisioned_copy_id"]).strip(),
+        provisioning_receipt_id=_safe_str(status["copy_provision_receipt_id"]).strip(),
+        isolation_verification_receipt_id=_safe_str(status["copy_isolation_receipt_id"]).strip(),
+        limit=20,
+    )
     review_recorded = bool(status["safe_delta_review_recorded"])
     allowed_signal_classes = [
         _safe_delta_signal_class(
@@ -2782,9 +2792,10 @@ def _managed_copy_safe_delta_review_blocked_snapshot(
     governance = _governance()
     contract = managed_copy_safe_delta_model_contract_snapshot()
     blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
-    signal_class = _safe_str(payload.get("signal_class")).strip()
+    raw_signal_class = _safe_str(payload.get("signal_class")).strip()
     allowed_signal_ids = {item["id"] for item in contract["allowed_signal_classes"]}
     denied_signal_ids = {item["id"] for item in contract["denied_signal_classes"]}
+    signal_class = raw_signal_class if raw_signal_class in allowed_signal_ids | denied_signal_ids else "unknown"
     raw_direction = _safe_str(payload.get("direction")).strip()
     direction = raw_direction if raw_direction in {"export", "import", "ingest"} else "unknown"
     return {
@@ -2829,7 +2840,9 @@ def _managed_copy_safe_delta_review_blocked_snapshot(
         "captures_screen": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
-        "expected_review_receipt_path": "logs/managed_copies/safe_delta_reviews.jsonl",
+        "expected_review_receipt_path": (
+            "managed_copies/tenants/{tenant_key}/receipts/sd/{review_fingerprint_prefix}.json"
+        ),
         "required_scope": MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
         "routes": {
             **contract["routes"],
@@ -3062,9 +3075,22 @@ def managed_copy_safe_delta_review_snapshot(
     }
 
 
-def managed_copy_safe_delta_reviews_snapshot(*, limit: int = 20) -> dict[str, Any]:
+def managed_copy_safe_delta_reviews_snapshot(
+    *,
+    copy_id: str = "",
+    provisioning_receipt_id: str = "",
+    isolation_verification_receipt_id: str = "",
+    review_fingerprint: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
     """Return hash-only safe-delta review receipts without exporting data."""
-    return managed_copy_safe_delta_review_receipts_readback(limit=limit)
+    return managed_copy_safe_delta_review_receipts_readback(
+        copy_id=copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+        isolation_verification_receipt_id=isolation_verification_receipt_id,
+        review_fingerprint=review_fingerprint,
+        limit=limit,
+    )
 
 
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:

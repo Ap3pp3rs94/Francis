@@ -388,8 +388,20 @@ def safe_delta_review(payload: dict[str, Any], request: Request) -> dict[str, An
 
 
 @router.get("/safe-delta-reviews")
-def safe_delta_reviews(limit: int = 20) -> dict[str, Any]:
-    return managed_copy_safe_delta_reviews_snapshot(limit=limit)
+def safe_delta_reviews(
+    copy_id: str = "",
+    provisioning_receipt_id: str = "",
+    isolation_verification_receipt_id: str = "",
+    review_fingerprint: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    return managed_copy_safe_delta_reviews_snapshot(
+        copy_id=copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+        isolation_verification_receipt_id=isolation_verification_receipt_id,
+        review_fingerprint=review_fingerprint,
+        limit=limit,
+    )
 
 
 @router.get("/rogue-recovery-contract")

@@ -1658,7 +1658,14 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert raw_admin not in safe_delta_receipt_text
     assert raw_candidate_summary not in safe_delta_receipt_text
 
-    safe_delta_readback = client.get("/managed-copies/safe-delta-reviews").json()
+    safe_delta_readback = client.get(
+        "/managed-copies/safe-delta-reviews",
+        params={
+            "copy_id": provisioned["copy_id"],
+            "provisioning_receipt_id": provisioned["receipt_id"],
+            "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+        },
+    ).json()
     assert safe_delta_readback["status"] == "operator_approval_required"
     assert safe_delta_readback["valid_count"] == 1
     assert safe_delta_readback["live_aligned_count"] == 1
@@ -3556,15 +3563,21 @@ def _configure_safe_delta_receipt_test_sources(
     data_root: Path,
 ) -> tuple[dict[str, dict[str, Any]], Path]:
     tenant_key = "a" * 64
+    state_root = f"managed_copies/tenants/{tenant_key}"
     source_state: dict[str, dict[str, Any]] = {
         "provision": {
             "copy_id": "managed_copy_safe_delta_test",
             "tenant_key": tenant_key,
             "receipt_id": "managed_copy_provision_safe_delta_test",
             "provision_fingerprint": "b" * 64,
+            "state_root": state_root,
         },
         "isolation": {
             "receipt_id": "managed_copy_isolation_safe_delta_test",
+            "copy_id": "managed_copy_safe_delta_test",
+            "tenant_key": tenant_key,
+            "provisioning_receipt_id": "managed_copy_provision_safe_delta_test",
+            "state_root": state_root,
             "live_state_aligned": True,
         },
     }
@@ -3605,6 +3618,7 @@ def _configure_safe_delta_receipt_test_sources(
     )
     config_path = data_root / "managed_copies" / "tenants" / tenant_key / "config" / "managed_copy.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    (config_path.parents[1] / "receipts").mkdir(exist_ok=True)
     config_path.write_text(
         json.dumps(
             {
@@ -3663,6 +3677,30 @@ def _record_safe_delta_receipt(plan: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _safe_delta_receipt_test_path(
+    source_state: dict[str, dict[str, Any]],
+    plan: dict[str, Any],
+) -> Path:
+    review_directory = managed_copy_safe_delta._guarded_review_directory(
+        source_state["provision"],
+        source_state["isolation"],
+        create=False,
+    )
+    assert review_directory is not None
+    return managed_copy_safe_delta._review_receipt_path(
+        review_directory,
+        str(plan["review_fingerprint"]),
+    )
+
+
+def _safe_delta_receipt_test_readback(plan: dict[str, Any]) -> dict[str, Any]:
+    return managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback(
+        copy_id=str(plan["copy_id"]),
+        provisioning_receipt_id=str(plan["provisioning_receipt_id"]),
+        isolation_verification_receipt_id=str(plan["isolation_verification_receipt_id"]),
+    )
+
+
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(
     monkeypatch,
     tmp_path,
@@ -3672,10 +3710,7 @@ def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(
         tmp_path.parent / "sd-malformed",
     )
     plan = _safe_delta_receipt_test_plan(source_state)
-    receipt_path = managed_copy_safe_delta._review_receipt_path(
-        str(plan["tenant_key"]),
-        str(plan["review_fingerprint"]),
-    )
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
     malformed_receipt = '{"raw_customer_data":"must-not-overwrite"'
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(malformed_receipt, encoding="utf-8")
@@ -3705,13 +3740,10 @@ def test_managed_copy_safe_delta_full_fingerprint_prefix_collision_fails_closed(
         summary_fingerprint="4" * 64,
     )
     assert first_plan["review_fingerprint"] != colliding_plan["review_fingerprint"]
-    collision_path = managed_copy_safe_delta._review_receipt_path(
-        str(first_plan["tenant_key"]),
-        str(first_plan["review_fingerprint"]),
-    )
+    collision_path = _safe_delta_receipt_test_path(source_state, first_plan)
 
-    def colliding_receipt_path(tenant_key: str, review_fingerprint: str) -> Path:
-        assert tenant_key == first_plan["tenant_key"]
+    def colliding_receipt_path(review_directory: Path, review_fingerprint: str) -> Path:
+        assert review_directory == collision_path.parent
         assert review_fingerprint in {
             first_plan["review_fingerprint"],
             colliding_plan["review_fingerprint"],
@@ -3742,10 +3774,7 @@ def test_managed_copy_safe_delta_readback_redacts_invalid_latest_candidate(
     )
     plan = _safe_delta_receipt_test_plan(source_state)
     recorded = _record_safe_delta_receipt(plan)
-    receipt_path = managed_copy_safe_delta._review_receipt_path(
-        str(plan["tenant_key"]),
-        str(plan["review_fingerprint"]),
-    )
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
     raw_customer_marker = "private-customer-latest-marker"
     invalid_path = receipt_path.with_name("ffffffffffffffff.json")
     invalid_path.write_text(
@@ -3760,7 +3789,7 @@ def test_managed_copy_safe_delta_readback_redacts_invalid_latest_candidate(
         encoding="utf-8",
     )
 
-    readback = managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback()
+    readback = _safe_delta_receipt_test_readback(plan)
 
     assert readback["status"] == "receipt_validation_failed"
     assert readback["count"] == 2
@@ -3784,7 +3813,7 @@ def test_managed_copy_safe_delta_readback_reports_post_write_source_drift(
     recorded = _record_safe_delta_receipt(plan)
     source_state["isolation"]["live_state_aligned"] = False
 
-    readback = managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback()
+    readback = _safe_delta_receipt_test_readback(plan)
 
     assert recorded["ok"] is True
     assert readback["status"] == "source_drift_detected"
@@ -3808,10 +3837,7 @@ def test_managed_copy_safe_delta_short_receipt_path_supports_long_windows_data_r
     data_root = tmp_path.parent / ("l" * padding_length)
     source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, data_root)
     plan = _safe_delta_receipt_test_plan(source_state)
-    receipt_path = managed_copy_safe_delta._review_receipt_path(
-        str(plan["tenant_key"]),
-        str(plan["review_fingerprint"]),
-    )
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
     full_fingerprint_path = receipt_path.with_name(f"{plan['review_fingerprint']}.json")
 
     result = _record_safe_delta_receipt(plan)
@@ -3846,10 +3872,7 @@ def test_managed_copy_safe_delta_receipt_creation_is_exclusive(
     )
 
     result = _record_safe_delta_receipt(plan)
-    receipt_path = managed_copy_safe_delta._review_receipt_path(
-        str(plan["tenant_key"]),
-        str(plan["review_fingerprint"]),
-    )
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
 
     assert result["ok"] is False
     assert result["status"] == "blocked_safe_delta_review_receipt_conflict"
@@ -3857,6 +3880,204 @@ def test_managed_copy_safe_delta_receipt_creation_is_exclusive(
     assert result["writes_receipt"] is False
     assert receipt_path.read_text(encoding="utf-8") == competing_receipt
     assert "private-race-marker" not in json.dumps(result)
+
+
+def test_managed_copy_safe_delta_readback_recomputes_candidate_checks(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-recomputed-checks",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    original_path = _safe_delta_receipt_test_path(source_state, plan)
+    receipt = dict(recorded["receipt"])
+    receipt["candidate"] = dict(receipt["candidate"])
+    receipt["candidate"]["contains_raw_private_data"] = True
+    receipt["candidate_fingerprint"] = managed_copy_safe_delta._fingerprint(receipt["candidate"])
+    receipt["review_fingerprint"] = managed_copy_safe_delta._review_fingerprint(
+        actor=str(receipt["actor"]),
+        copy_id=str(receipt["copy_id"]),
+        tenant_key=str(receipt["tenant_key"]),
+        provisioning_receipt_id=str(receipt["provisioning_receipt_id"]),
+        isolation_receipt_id=str(receipt["isolation_verification_receipt_id"]),
+        signal_class=str(receipt["signal_class"]),
+        direction=str(receipt["direction"]),
+        candidate=receipt["candidate"],
+        candidate_checks=receipt["candidate_checks"],
+        tenant_policy_checks=receipt["tenant_policy_checks"],
+    )
+    receipt["receipt_id"] = f"managed_copy_safe_delta_review_{receipt['review_fingerprint'][:16]}"
+    receipt["receipt_fingerprint"] = managed_copy_safe_delta._receipt_fingerprint(receipt)
+    tampered_path = original_path.with_name(f"{receipt['review_fingerprint'][:16]}.json")
+    original_path.unlink()
+    tampered_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    readback = _safe_delta_receipt_test_readback(plan)
+
+    assert readback["status"] == "receipt_validation_failed"
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 1
+    assert readback["items"] == []
+    assert "contains_raw_private_data" not in json.dumps(readback)
+
+
+def test_managed_copy_safe_delta_readback_rejects_unknown_schema_without_echoing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-exact-schema",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
+    receipt = dict(recorded["receipt"])
+    raw_marker = "private-schema-marker"
+    receipt["raw_customer_data"] = raw_marker
+    receipt["governance"] = dict(receipt["governance"])
+    receipt["governance"]["raw_governance_data"] = raw_marker
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    readback = _safe_delta_receipt_test_readback(plan)
+
+    assert readback["status"] == "receipt_validation_failed"
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 1
+    assert raw_marker not in json.dumps(readback)
+
+
+def test_managed_copy_safe_delta_receipt_binds_id_timestamp_filename_and_tenant(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-receipt-binding",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    receipt = dict(recorded["receipt"])
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
+    validation = {
+        "path": receipt_path,
+        "review_directory": receipt_path.parent,
+        "copy_id": str(plan["copy_id"]),
+        "tenant_key": str(plan["tenant_key"]),
+        "provisioning_receipt_id": str(plan["provisioning_receipt_id"]),
+        "isolation_receipt_id": str(plan["isolation_verification_receipt_id"]),
+    }
+    assert managed_copy_safe_delta._valid_review_receipt(receipt, **validation)
+
+    mismatched_id = dict(receipt)
+    mismatched_id["receipt_id"] = "managed_copy_safe_delta_review_0000000000000000"
+    mismatched_id["receipt_fingerprint"] = managed_copy_safe_delta._receipt_fingerprint(mismatched_id)
+    timestamp_changed = dict(receipt)
+    timestamp_changed["recorded_ts"] = int(receipt["recorded_ts"]) + 1
+    wrong_filename = receipt_path.with_name("ffffffffffffffff.json")
+    transplanted_directory = receipt_path.parents[3] / ("b" * 64) / "receipts" / "sd"
+    transplanted_path = transplanted_directory / receipt_path.name
+
+    assert not managed_copy_safe_delta._valid_review_receipt(mismatched_id, **validation)
+    assert not managed_copy_safe_delta._valid_review_receipt(timestamp_changed, **validation)
+    assert not managed_copy_safe_delta._valid_review_receipt(
+        receipt,
+        **{**validation, "path": wrong_filename},
+    )
+    assert not managed_copy_safe_delta._valid_review_receipt(
+        receipt,
+        **{
+            **validation,
+            "path": transplanted_path,
+            "review_directory": transplanted_directory,
+            "tenant_key": "b" * 64,
+        },
+    )
+
+
+def test_managed_copy_safe_delta_latest_selection_does_not_trust_timestamp(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-latest-order",
+    )
+    plans = [
+        _safe_delta_receipt_test_plan(source_state),
+        _safe_delta_receipt_test_plan(
+            source_state,
+            actor="safe-delta.timestamp-order-reviewer",
+            summary_fingerprint="4" * 64,
+        ),
+    ]
+    recorded = {str(plan["review_fingerprint"]): _record_safe_delta_receipt(plan) for plan in plans}
+    canonical_latest_fingerprint = max(recorded)
+    for fingerprint, result in recorded.items():
+        receipt = dict(result["receipt"])
+        receipt["recorded_ts"] = 1 if fingerprint == canonical_latest_fingerprint else 2_000_000_000
+        receipt["receipt_fingerprint"] = managed_copy_safe_delta._receipt_fingerprint(receipt)
+        plan = next(item for item in plans if item["review_fingerprint"] == fingerprint)
+        _safe_delta_receipt_test_path(source_state, plan).write_text(json.dumps(receipt), encoding="utf-8")
+
+    readback = _safe_delta_receipt_test_readback(plans[0])
+
+    assert readback["valid_count"] == 2
+    assert readback["latest_valid_receipt_id"] == recorded[canonical_latest_fingerprint]["receipt_id"]
+
+
+def test_managed_copy_safe_delta_readback_scopes_invalidity_to_requested_lineage(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path.parent / "sd-lineage-scope"
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, data_root)
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    unrelated_marker = "private-unrelated-tenant-marker"
+    unrelated_path = data_root / "managed_copies" / "tenants" / ("b" * 64) / "receipts" / "sd" / "ffffffffffffffff.json"
+    unrelated_path.parent.mkdir(parents=True)
+    unrelated_path.write_text(json.dumps({"raw_customer_data": unrelated_marker}), encoding="utf-8")
+
+    readback = _safe_delta_receipt_test_readback(plan)
+
+    assert readback["status"] == "operator_approval_required"
+    assert readback["count"] == 1
+    assert readback["valid_count"] == 1
+    assert readback["invalid_receipt_count"] == 0
+    assert readback["latest_valid_receipt_id"] == recorded["receipt_id"]
+    assert unrelated_marker not in json.dumps(readback)
+
+
+def test_managed_copy_safe_delta_rejects_link_like_review_directory(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-link-boundary",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    original_link_check = managed_copy_safe_delta._path_is_link_like
+
+    def link_like_review_directory(path: Path) -> bool:
+        return path.name == "sd" or original_link_check(path)
+
+    monkeypatch.setattr(managed_copy_safe_delta, "_path_is_link_like", link_like_review_directory)
+
+    result = _record_safe_delta_receipt(plan)
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked_safe_delta_review_path_boundary"
+    assert result["error"] == "safe_delta_review_path_boundary_invalid"
+    assert result["writes_receipt"] is False
+    review_directory = (
+        tmp_path.parent / "sd-link-boundary" / "managed_copies" / "tenants" / ("a" * 64) / "receipts" / "sd"
+    )
+    assert list(review_directory.glob("*.json")) == []
 
 
 def test_managed_copy_safe_delta_model_contract_denies_raw_pooling_and_exports(
@@ -4090,10 +4311,32 @@ def test_managed_copy_safe_delta_review_blocks_scoped_actor_until_stage17_closes
     assert body["runs_git"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
-    assert body["expected_review_receipt_path"] == "logs/managed_copies/safe_delta_reviews.jsonl"
+    assert body["expected_review_receipt_path"] == (
+        "managed_copies/tenants/{tenant_key}/receipts/sd/{review_fingerprint_prefix}.json"
+    )
     assert body["required_scope"] == "managed_copies.safe_delta.write"
     assert body["routes"]["safe_delta_review"] == "/managed-copies/safe-delta-review"
     assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
+
+    unknown_signal = "private-signal-class-marker"
+    unknown_direction = "private-direction-marker"
+    redacted_unknowns = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/safe-delta-review",
+            json={
+                "request_actor": actor,
+                "signal_class": unknown_signal,
+                "direction": unknown_direction,
+            },
+        )
+        .json()
+    )
+    assert redacted_unknowns["signal_class"] == "unknown"
+    assert redacted_unknowns["signal_class_known"] is False
+    assert redacted_unknowns["direction"] == "unknown"
+    assert unknown_signal not in json.dumps(redacted_unknowns)
+    assert unknown_direction not in json.dumps(redacted_unknowns)
 
     governance = body["governance"]
     assert governance["write_route"] is True
