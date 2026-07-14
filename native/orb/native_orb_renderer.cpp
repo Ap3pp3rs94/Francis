@@ -21,6 +21,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -35,6 +36,7 @@ using Json = nlohmann::json;
 namespace {
 
 constexpr wchar_t kWindowClassName[] = L"FrancisNativeOrbRendererWindow";
+constexpr wchar_t kLocalUiWindowClassName[] = L"FrancisNativeOrbLocalUiWindow";
 constexpr wchar_t kDefaultSnapshotPath[] = L"schemas\\native_orb_state_snapshot.fixture.json";
 constexpr std::uintmax_t kMaxSnapshotBytes = 64 * 1024;
 constexpr int kDefaultOrbSize = 270;
@@ -44,6 +46,12 @@ constexpr int kDefaultRunSeconds = 600;
 constexpr int kMinRunSeconds = 0;
 constexpr int kMaxRunSeconds = 3600;
 constexpr UINT kMoveCenterMessage = WM_APP + 0x46;
+constexpr UINT kContactPulseMessage = WM_APP + 0x47;
+constexpr UINT kShowLocalUiMessage = WM_APP + 0x48;
+constexpr wchar_t kNativeRightClickRequestFile[] = L"right-click-request.json";
+constexpr int kLocalUiPanelWidth = 320;
+constexpr int kLocalUiPanelHeight = 146;
+constexpr int kLocalUiMinimizeButtonId = 6101;
 constexpr double kPi = 3.14159265358979323846;
 constexpr int kThreeDRingCount = 38;
 constexpr int kFineOrbitCount = 56;
@@ -56,7 +64,7 @@ constexpr int kCoreFluidTrailSamples = 72;
 constexpr int kSingleFlowOrbitRingSamples = 112;
 constexpr int kFlowGapFadeSegments = 112;
 constexpr int kFlowGapElectricShimmerCount = 10;
-constexpr int kFlowStreamerRingInstanceCount = 15;
+constexpr int kFlowStreamerRingInstanceCount = 8;
 constexpr int kFineFlowStreamerRingInstanceCount = 5;
 constexpr int kGlowSingleFlowRingCount = 20;
 constexpr int kMainFlowLightStreamerCount = 7;
@@ -77,6 +85,7 @@ struct RendererConfig {
     int size = kDefaultOrbSize;
     int x = -1;
     int y = -1;
+    fs::path runtime_dir;
 };
 
 [[noreturn]] void fail(std::string const& message) {
@@ -137,6 +146,38 @@ fs::path bounded_snapshot_path(fs::path const& candidate) {
     return normalized;
 }
 
+fs::path bounded_runtime_dir(fs::path const& candidate) {
+    if (candidate.empty()) {
+        return {};
+    }
+
+    fs::path normalized = fs::absolute(candidate).lexically_normal();
+    if (normalized.filename() != L"native-orb-renderer" ||
+        normalized.parent_path().filename() != L"runtime" ||
+        normalized.parent_path().parent_path().filename() != L"data") {
+        fail("runtime dir must stay under data/runtime/native-orb-renderer");
+    }
+    return normalized;
+}
+
+std::string utc_now_iso8601() {
+    SYSTEMTIME now{};
+    GetSystemTime(&now);
+    char buffer[64]{};
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
+        static_cast<unsigned>(now.wYear),
+        static_cast<unsigned>(now.wMonth),
+        static_cast<unsigned>(now.wDay),
+        static_cast<unsigned>(now.wHour),
+        static_cast<unsigned>(now.wMinute),
+        static_cast<unsigned>(now.wSecond),
+        static_cast<unsigned>(now.wMilliseconds));
+    return buffer;
+}
+
 RendererConfig parse_args(int argc, wchar_t** argv) {
     RendererConfig config;
     for (int index = 1; index < argc; ++index) {
@@ -166,6 +207,11 @@ RendererConfig parse_args(int argc, wchar_t** argv) {
                 fail("--y requires a value");
             }
             config.y = parse_int(argv[index], "y", 0, 32767);
+        } else if (arg == L"--runtime-dir") {
+            if (++index >= argc) {
+                fail("--runtime-dir requires a value");
+            }
+            config.runtime_dir = bounded_runtime_dir(fs::path(argv[index]));
         } else if (arg == L"--help" || arg == L"-h") {
             fail("usage: native_orb_renderer.exe [--snapshot schemas/native_orb_state_snapshot.fixture.json] [--run-seconds 600] [--size 220] [--x 120] [--y 120]");
         } else {
@@ -371,6 +417,12 @@ struct FlowOrbitRingPoint {
     float z = 0.0f;
 };
 
+struct OrbMotionKinetics {
+    float heading_degrees = 0.0f;
+    float speed_pixels_per_second = 0.0f;
+    float spin_degrees = 0.0f;
+};
+
 struct FlowStreamerInstance {
     double phase_offset = 0.0;
     double phase_speed = 1.0;
@@ -388,10 +440,29 @@ struct FlowStreamerInstance {
     float rotation_speed = 0.18f;
     float rotation_wobble = 0.22f;
     float rotation_wobble_speed = 0.37f;
+    float spin_x_offset = 0.0f;
+    float spin_y_offset = 0.0f;
+    float spin_z_offset = 0.0f;
+    float spin_x_speed = 0.09f;
+    float spin_y_speed = 0.11f;
+    float spin_z_speed = 0.17f;
+    float flare_offset = 0.0f;
+    float flare_speed = 0.0f;
+    float flare_depth = 0.0f;
+    float flare_sharpness = 1.0f;
 };
 
 float flow_streamer_pulse(double phase, FlowStreamerInstance const& streamer, float local_offset = 0.0f) {
     return 1.0f - streamer.pulse_depth + (streamer.pulse_depth * wave(phase + streamer.pulse_offset, streamer.pulse_speed, local_offset));
+}
+
+float flow_streamer_flare_scale(double phase, FlowStreamerInstance const& streamer, float local_offset = 0.0f) {
+    if (streamer.flare_depth <= 0.0f || streamer.flare_speed <= 0.0f) {
+        return 1.0f;
+    }
+    float const flare =
+        std::pow(wave(phase + streamer.flare_offset, streamer.flare_speed, local_offset), std::max(1.0f, streamer.flare_sharpness));
+    return 1.0f + (streamer.flare_depth * flare);
 }
 
 float flow_single_ring_identity_pulse(double phase, FlowStreamerInstance const& streamer, float local_offset = 0.0f) {
@@ -408,6 +479,22 @@ float flow_single_ring_identity_pulse(double phase, FlowStreamerInstance const& 
 
 float radians(float degrees) {
     return degrees * static_cast<float>(kPi / 180.0);
+}
+
+float normalize_degrees(float degrees) {
+    float normalized = std::fmod(degrees, 360.0f);
+    if (normalized < 0.0f) {
+        normalized += 360.0f;
+    }
+    return normalized;
+}
+
+float shortest_angle_delta_degrees(float from, float to) {
+    float delta = normalize_degrees(to - from);
+    if (delta > 180.0f) {
+        delta -= 360.0f;
+    }
+    return delta;
 }
 
 ProjectedOrbitPoint project_orbit_point(
@@ -668,7 +755,7 @@ FlowStreamerInstance flow_streamer_instance(int stream) {
         (2.0f * static_cast<float>(kPi) * fraction) + deterministic_range(stream, 107, -0.18f, 0.18f),
         stream == 0 ? 0.88f : deterministic_range(stream, 109, 0.28f, 0.52f),
         0.78f + (0.42f * size_step) + deterministic_range(stream, 111, -0.014f, 0.014f),
-        longer_streamer ? deterministic_range(stream, 139, 1.18f, 1.32f) : deterministic_range(stream, 139, 0.96f, 1.06f),
+        longer_streamer ? deterministic_range(stream, 139, 1.08f, 1.20f) : deterministic_range(stream, 139, 0.90f, 0.98f),
         deterministic_range(stream, 149, 0.62f, 1.46f),
         main_inner_radius_scale,
         main_inner_radius_scale + main_radius_gap,
@@ -679,6 +766,12 @@ FlowStreamerInstance flow_streamer_instance(int stream) {
         rotation_direction * deterministic_range(stream, 127, 0.060f, 0.22f),
         deterministic_range(stream, 131, 0.10f, 0.36f),
         deterministic_range(stream, 137, 0.13f, 0.38f),
+        deterministic_range(stream, 159, -0.46f, 0.46f),
+        deterministic_range(stream, 161, -0.52f, 0.52f),
+        deterministic_range(stream, 163, -0.74f, 0.74f),
+        rotation_direction * deterministic_range(stream, 165, 0.045f, 0.12f),
+        deterministic_range(stream, 167, 0.050f, 0.14f),
+        rotation_direction * deterministic_range(stream, 169, 0.080f, 0.18f),
     };
 }
 
@@ -689,13 +782,14 @@ FlowStreamerInstance flow_fine_streamer_instance(int stream) {
     float const rotation_direction = spin_bias < 0.0f ? -1.0f : 1.0f;
     float const fine_inner_radius_scale = deterministic_range(stream, 183, 1.070f, 1.095f);
     float const fine_radius_gap = deterministic_range(stream, 191, 0.040f, 0.060f);
+    bool const longer_fine_streamer = stream % 3 == 1;
     return {
         static_cast<double>(deterministic_range(stream, 151, 0.0f, 5.8f)),
         static_cast<double>(deterministic_range(stream, 167, 0.46f, 0.88f)),
         (2.0f * static_cast<float>(kPi) * randomized_fraction) + deterministic_range(stream, 171, -0.36f, 0.36f),
         deterministic_range(stream, 163, 0.24f, 0.40f),
         deterministic_range(stream, 181, 0.86f, 1.06f),
-        deterministic_range(stream, 173, 1.38f, 1.56f),
+        longer_fine_streamer ? deterministic_range(stream, 173, 1.08f, 1.22f) : deterministic_range(stream, 173, 1.00f, 1.12f),
         deterministic_range(stream, 179, 0.20f, 0.36f),
         fine_inner_radius_scale,
         fine_inner_radius_scale + fine_radius_gap,
@@ -706,6 +800,12 @@ FlowStreamerInstance flow_fine_streamer_instance(int stream) {
         rotation_direction * deterministic_range(stream, 197, 0.16f, 0.40f),
         deterministic_range(stream, 199, 0.30f, 0.74f),
         deterministic_range(stream, 211, 0.20f, 0.55f),
+        deterministic_range(stream, 221, -0.68f, 0.68f),
+        deterministic_range(stream, 223, -0.58f, 0.58f),
+        deterministic_range(stream, 227, -0.92f, 0.92f),
+        rotation_direction * deterministic_range(stream, 229, 0.070f, 0.18f),
+        deterministic_range(stream, 231, 0.075f, 0.20f),
+        rotation_direction * deterministic_range(stream, 237, 0.12f, 0.26f),
     };
 }
 
@@ -716,8 +816,11 @@ FlowStreamerInstance flow_glow_single_ring_instance(int stream) {
     float const rotation_direction = single_spin_bias < 0.0f ? -1.0f : 1.0f;
     float const glow_radius_scale = deterministic_range(stream, 239, 1.035f, 1.330f);
     float const single_alpha_scale = deterministic_range(stream, 245, 0.16f, 0.42f);
-    float const single_length_scale = deterministic_range(stream, 271, 1.32f, 1.94f);
-    float const single_width_scale = deterministic_range(stream, 277, 0.18f, 0.52f);
+    bool const longer_single_streamer = stream % 3 == 2;
+    bool const flare_single_streamer = stream % 3 == 0;
+    float const single_length_scale =
+        longer_single_streamer ? deterministic_range(stream, 271, 1.16f, 1.36f) : deterministic_range(stream, 271, 0.98f, 1.18f);
+    float const single_width_scale = deterministic_range(stream, 277, 0.20f, 0.46f);
     return {
         static_cast<double>(deterministic_range(stream, 241, 0.0f, 6.2f)),
         static_cast<double>(deterministic_range(stream, 251, 0.16f, 0.94f)),
@@ -735,6 +838,16 @@ FlowStreamerInstance flow_glow_single_ring_instance(int stream) {
         rotation_direction * deterministic_range(stream, 307, 0.07f, 0.32f),
         deterministic_range(stream, 311, 0.12f, 0.80f),
         deterministic_range(stream, 313, 0.10f, 0.82f),
+        deterministic_range(stream, 317, -0.86f, 0.86f),
+        deterministic_range(stream, 319, -0.74f, 0.74f),
+        deterministic_range(stream, 331, -1.08f, 1.08f),
+        rotation_direction * deterministic_range(stream, 337, 0.050f, 0.15f),
+        deterministic_range(stream, 347, 0.060f, 0.18f),
+        rotation_direction * deterministic_range(stream, 349, 0.11f, 0.24f),
+        deterministic_range(stream, 353, 0.0f, 7.8f),
+        flare_single_streamer ? deterministic_range(stream, 359, 0.070f, 0.16f) : 0.0f,
+        flare_single_streamer ? deterministic_range(stream, 367, 0.18f, 0.34f) : 0.0f,
+        deterministic_range(stream, 373, 3.0f, 6.0f),
     };
 }
 
@@ -760,8 +873,10 @@ FlowOrbitRingPoint flow_orbit_ring_point(
         1.0f + (0.040f * std::sin((t * 3.0f) + static_cast<float>(local_phase * 0.38))) +
         (0.026f * std::cos((t * 5.0f) - static_cast<float>(local_phase * 0.26))) +
         (0.014f * std::sin((t * 7.0f) + static_cast<float>(local_phase * 0.19)));
-    float const ring_radius_x = blob.radius * 1.26f * resolved_radius_scale * streamer.size_scale * streamer.length_scale * liquid_edge;
-    float const ring_radius_y = blob.radius * 0.52f * resolved_radius_scale * streamer.size_scale * liquid_edge;
+    float const flare_length_scale = flow_streamer_flare_scale(local_phase, streamer, t * 0.11f);
+    float const ring_radius_x =
+        blob.radius * 1.00f * resolved_radius_scale * streamer.size_scale * streamer.length_scale * flare_length_scale * liquid_edge;
+    float const ring_radius_y = blob.radius * 0.86f * resolved_radius_scale * streamer.size_scale * liquid_edge;
     float const fold_depth =
         std::clamp(
             std::sin(orbit) +
@@ -775,18 +890,47 @@ FlowOrbitRingPoint flow_orbit_ring_point(
     float const local_y =
         (std::sin(orbit) * ring_radius_y) + (std::cos((t * 2.4f) - static_cast<float>(local_phase * 0.18)) * blob.radius * 0.018f) +
         (signed_streamer_twist * blob.radius * 0.038f * streamer.size_scale * resolved_radius_scale);
+    float const local_z =
+        (fold_depth * blob.radius * 0.42f * streamer.size_scale) +
+        (std::sin((t * 3.0f) + static_cast<float>(local_phase * 0.31)) * blob.radius * 0.055f);
     float const rotation =
         static_cast<float>(local_phase * static_cast<double>(streamer.rotation_speed)) +
         (streamer.rotation_wobble * std::sin(static_cast<float>(local_phase * static_cast<double>(streamer.rotation_wobble_speed)))) +
         streamer.rotation_offset;
     float const rotation_cos = std::cos(rotation);
     float const rotation_sin = std::sin(rotation);
+    float const spin_x =
+        streamer.spin_x_offset + static_cast<float>(local_phase * static_cast<double>(streamer.spin_x_speed));
+    float const spin_y =
+        streamer.spin_y_offset + static_cast<float>(local_phase * static_cast<double>(streamer.spin_y_speed));
+    float const spin_z =
+        streamer.spin_z_offset + static_cast<float>(local_phase * static_cast<double>(streamer.spin_z_speed));
+    float const spin_x_cos = std::cos(spin_x);
+    float const spin_x_sin = std::sin(spin_x);
+    float const spin_y_cos = std::cos(spin_y);
+    float const spin_y_sin = std::sin(spin_y);
+    float const spin_z_cos = std::cos(spin_z);
+    float const spin_z_sin = std::sin(spin_z);
+    float const rotated_x = (local_x * rotation_cos) - (local_y * rotation_sin);
+    float const rotated_y = (local_x * rotation_sin) + (local_y * rotation_cos);
+    float const rotated_z = local_z;
+    float const x_spin_x = rotated_x;
+    float const x_spin_y = (rotated_y * spin_x_cos) - (rotated_z * spin_x_sin);
+    float const x_spin_z = (rotated_y * spin_x_sin) + (rotated_z * spin_x_cos);
+    float const y_spin_x = (x_spin_x * spin_y_cos) + (x_spin_z * spin_y_sin);
+    float const y_spin_y = x_spin_y;
+    float const y_spin_z = (-x_spin_x * spin_y_sin) + (x_spin_z * spin_y_cos);
+    float const xyz_spin_x = (y_spin_x * spin_z_cos) - (y_spin_y * spin_z_sin);
+    float const xyz_spin_y = (y_spin_x * spin_z_sin) + (y_spin_y * spin_z_cos);
+    float const xyz_spin_z = y_spin_z;
+    float const normalized_z = std::clamp(xyz_spin_z / std::max(1.0f, blob.radius * 0.72f), -1.0f, 1.0f);
+    float const xyz_perspective = 0.88f + (0.12f * ((normalized_z + 1.0f) * 0.5f));
 
     return {
         Gdiplus::PointF(
-            blob.x + (((local_x * rotation_cos) - (local_y * rotation_sin)) * perspective),
-            blob.y + (((local_x * rotation_sin) + (local_y * rotation_cos)) * perspective)),
-        fold_depth,
+            blob.x + (xyz_spin_x * perspective * xyz_perspective),
+            blob.y + (xyz_spin_y * perspective * xyz_perspective)),
+        normalized_z,
     };
 }
 
@@ -860,10 +1004,13 @@ void draw_wavy_transparent_gap_fade(
         float const rolling_fade =
             wave(phase + streamer.phase_offset, 0.34 * twist_direction, static_cast<float>(segment) * 0.11f) *
             wave(phase + streamer.phase_offset, 0.19 * twist_direction, static_cast<float>(segment) * 0.27f);
+        float const smoothed_fade = 0.42f + (0.58f * rolling_fade);
         BYTE const fade_alpha =
             byte_clamp(
-                (front_pass ? 44.0f : 19.0f) * (0.20f + (0.80f * rolling_fade)) * (0.62f + (0.38f * depth)) *
+                (front_pass ? 32.0f : 14.0f) * smoothed_fade * (0.62f + (0.38f * depth)) *
                 streamer.alpha_scale * band_pulse);
+        BYTE const edge_alpha = byte_clamp(static_cast<float>(fade_alpha) * 0.18f);
+        BYTE const center_alpha = byte_clamp(static_cast<float>(fade_alpha) * 0.72f);
 
         Gdiplus::PointF gap_points[] = {
             inner_start.point,
@@ -873,8 +1020,17 @@ void draw_wavy_transparent_gap_fade(
         };
         Gdiplus::GraphicsPath gap_fade_path;
         gap_fade_path.AddPolygon(gap_points, 4);
-        Gdiplus::SolidBrush gap_fade_paint(
-            blocked ? alpha_color(fade_alpha, 255, 236, 210) : alpha_color(fade_alpha, 255, 255, 255));
+        Gdiplus::PathGradientBrush gap_fade_paint(&gap_fade_path);
+        gap_fade_paint.SetCenterPoint(Gdiplus::PointF(
+            (inner_start.point.X + inner_end.point.X + outer_end.point.X + outer_start.point.X) * 0.25f,
+            (inner_start.point.Y + inner_end.point.Y + outer_end.point.Y + outer_start.point.Y) * 0.25f));
+        gap_fade_paint.SetCenterColor(
+            blocked ? alpha_color(center_alpha, 255, 236, 210) : alpha_color(center_alpha, 255, 255, 255));
+        Gdiplus::Color gap_surround[] = {
+            blocked ? alpha_color(edge_alpha, 255, 236, 210) : alpha_color(edge_alpha, 255, 255, 255),
+        };
+        INT gap_surround_count = 1;
+        gap_fade_paint.SetSurroundColors(gap_surround, &gap_surround_count);
         graphics.FillPath(&gap_fade_paint, &gap_fade_path);
     }
 }
@@ -1208,9 +1364,34 @@ void draw_core_sphere(Gdiplus::Graphics& graphics, float center, float core_radi
     draw_glow_single_ring_field(graphics, core_blob, phase, blocked, true);
 }
 
-void draw_orb(Gdiplus::Graphics& graphics, int size, OrbState const& state, double phase) {
+void draw_contact_press_ring(Gdiplus::Graphics& graphics, float center, float core_radius, float contact_strength, bool blocked) {
+    if (contact_strength <= 0.001f) {
+        return;
+    }
+    float const eased = contact_strength * contact_strength * (3.0f - (2.0f * contact_strength));
+    float const radius = core_radius * (1.18f + ((1.0f - eased) * 0.28f));
+    BYTE const outer_alpha = byte_clamp(120.0f * eased);
+    BYTE const inner_alpha = byte_clamp(220.0f * eased);
+    Gdiplus::Pen outer_pen(blocked ? alpha_color(outer_alpha, 255, 232, 204) : alpha_color(outer_alpha, 232, 246, 255), 1.6f);
+    outer_pen.SetStartCap(Gdiplus::LineCapRound);
+    outer_pen.SetEndCap(Gdiplus::LineCapRound);
+    Gdiplus::Pen inner_pen(blocked ? alpha_color(inner_alpha, 255, 246, 224) : alpha_color(inner_alpha, 255, 255, 255), 0.82f);
+    inner_pen.SetStartCap(Gdiplus::LineCapRound);
+    inner_pen.SetEndCap(Gdiplus::LineCapRound);
+    graphics.DrawEllipse(&outer_pen, center - radius, center - radius, radius * 2.0f, radius * 2.0f);
+    graphics.DrawEllipse(&inner_pen, center - (radius * 0.88f), center - (radius * 0.88f), radius * 1.76f, radius * 1.76f);
+}
+
+void draw_orb(
+    Gdiplus::Graphics& graphics,
+    int size,
+    OrbState const& state,
+    double phase,
+    OrbMotionKinetics const& kinetics,
+    float contact_strength) {
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
     graphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
     graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
 
@@ -1221,6 +1402,10 @@ void draw_orb(Gdiplus::Graphics& graphics, int size, OrbState const& state, doub
     bool const active = state.posture == "active_feedback";
     bool const blocked = state.posture == "blocked" || state.unsafe_source_flags_denied;
     float const pulse = wave(phase, active ? 4.8 : 2.2);
+    float const travel_strength = std::clamp(kinetics.speed_pixels_per_second / 620.0f, 0.0f, 1.0f);
+    float const travel_phase_degrees =
+        normalize_degrees((kinetics.heading_degrees * travel_strength * 0.18f) + (kinetics.spin_degrees * 0.16f));
+    double const directed_phase = phase + (static_cast<double>(travel_phase_degrees) * 0.0035);
 
     if constexpr (!kCoreFocusOnly) {
         for (int ring = 0; ring < kThreeDRingCount; ++ring) {
@@ -1233,7 +1418,8 @@ void draw_orb(Gdiplus::Graphics& graphics, int size, OrbState const& state, doub
         float const roll = static_cast<float>((ring * 37) % 360);
         BYTE const alpha = byte_clamp(static_cast<float>(58 + ((ring * 23) % 132)) * 0.42f);
         float const stroke = 0.36f + (static_cast<float>((ring * 11) % 8) / 120.0f);
-        draw_projected_energy_orbit(graphics, center, radius, scale_y, yaw, pitch, roll, phase, ring, alpha, stroke, blocked, false, false);
+        draw_projected_energy_orbit(
+            graphics, center, radius, scale_y, yaw, pitch, roll, directed_phase, ring, alpha, stroke, blocked, false, false);
         }
 
         for (int index = 0; index < kFineOrbitCount; ++index) {
@@ -1245,11 +1431,19 @@ void draw_orb(Gdiplus::Graphics& graphics, int size, OrbState const& state, doub
         float const pitch = static_cast<float>(((index * 17) % 74) - 37);
         float const roll = static_cast<float>(std::fmod(index * 137.507, 360.0));
         BYTE const alpha = byte_clamp((52.0f + static_cast<float>((index * 11) % 95)) * 0.55f);
-        draw_projected_energy_orbit(graphics, center, radius, y_scale, yaw, pitch, roll, phase, index, alpha, 0.55f, blocked, false, true);
+        draw_projected_energy_orbit(
+            graphics, center, radius, y_scale, yaw, pitch, roll, directed_phase, index, alpha, 0.55f, blocked, false, true);
         }
     }
 
-    draw_core_sphere(graphics, center, core_radius * (0.94f + (0.08f * pulse)), pulse, phase, blocked);
+    draw_core_sphere(
+        graphics,
+        center,
+        core_radius * (0.94f + (0.08f * pulse) - (0.035f * contact_strength)),
+        pulse,
+        directed_phase,
+        blocked);
+    draw_contact_press_ring(graphics, center, core_radius, contact_strength, blocked);
 
     if constexpr (!kCoreFocusOnly) {
         for (int ring = 0; ring < kThreeDRingCount; ++ring) {
@@ -1262,7 +1456,8 @@ void draw_orb(Gdiplus::Graphics& graphics, int size, OrbState const& state, doub
         float const roll = static_cast<float>((ring * 37) % 360);
         BYTE const alpha = byte_clamp(static_cast<float>(58 + ((ring * 23) % 132)) * 0.82f);
         float const stroke = 0.48f + (static_cast<float>((ring * 11) % 8) / 95.0f);
-        draw_projected_energy_orbit(graphics, center, radius, scale_y, yaw, pitch, roll, phase, ring, alpha, stroke, blocked, true, false);
+        draw_projected_energy_orbit(
+            graphics, center, radius, scale_y, yaw, pitch, roll, directed_phase, ring, alpha, stroke, blocked, true, false);
         }
 
         for (int index = 0; index < kBrightOrbitCount; ++index) {
@@ -1273,7 +1468,8 @@ void draw_orb(Gdiplus::Graphics& graphics, int size, OrbState const& state, doub
         float const yaw = static_cast<float>(((index * 29) % 76) - 38);
         float const pitch = static_cast<float>(((index * 23) % 68) - 34);
         float const roll = static_cast<float>((index * 41) % 360);
-        draw_projected_energy_orbit(graphics, center, radius, y_scale, yaw, pitch, roll, phase, index, 142, 0.85f, blocked, true, true);
+        draw_projected_energy_orbit(
+            graphics, center, radius, y_scale, yaw, pitch, roll, directed_phase, index, 142, 0.85f, blocked, true, true);
         }
     }
 
@@ -1295,6 +1491,7 @@ public:
         : config_(config), state_(std::move(state)), start_(std::chrono::steady_clock::now()) {}
 
     int run(HINSTANCE instance) {
+        instance_ = instance;
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = &NativeOrbWindow::window_proc;
@@ -1305,6 +1502,17 @@ public:
             fail("native Orb window class registration failed");
         }
 
+        WNDCLASSEXW panel_wc{};
+        panel_wc.cbSize = sizeof(panel_wc);
+        panel_wc.lpfnWndProc = &NativeOrbWindow::local_ui_window_proc;
+        panel_wc.hInstance = instance;
+        panel_wc.lpszClassName = kLocalUiWindowClassName;
+        panel_wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        panel_wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+        if (RegisterClassExW(&panel_wc) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+            fail("native Orb local UI window class registration failed");
+        }
+
         int const screen_width = GetSystemMetrics(SM_CXSCREEN);
         int const screen_height = GetSystemMetrics(SM_CYSCREEN);
         if (config_.x < 0) {
@@ -1313,9 +1521,13 @@ public:
         if (config_.y < 0) {
             config_.y = std::max(12, screen_height - config_.size - 96);
         }
+        target_center_x_ = static_cast<double>(config_.x) + (static_cast<double>(config_.size) / 2.0);
+        target_center_y_ = static_cast<double>(config_.y) + (static_cast<double>(config_.size) / 2.0);
+        current_center_x_ = target_center_x_;
+        current_center_y_ = target_center_y_;
 
         hwnd_ = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
             kWindowClassName,
             L"Francis Native Orb",
             WS_POPUP,
@@ -1332,7 +1544,7 @@ public:
         }
 
         ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
-        SetTimer(hwnd_, 1, 16, nullptr);
+        SetTimer(hwnd_, 1, 8, nullptr);
 
         MSG message{};
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
@@ -1358,6 +1570,19 @@ private:
         case kMoveCenterMessage:
             self->move_center_to(message_coordinate_to_int(wparam), message_coordinate_to_int(static_cast<WPARAM>(lparam)));
             return 0;
+        case kContactPulseMessage:
+            self->trigger_contact_pulse();
+            return 0;
+        case kShowLocalUiMessage:
+            self->show_local_ui_panel();
+            return 0;
+        case WM_RBUTTONDOWN:
+        case WM_NCRBUTTONDOWN:
+        case WM_CONTEXTMENU:
+            self->show_local_ui_panel();
+            self->request_local_ui_panel_from_right_click();
+            self->trigger_contact_pulse();
+            return 0;
         case WM_TIMER:
             self->on_timer();
             return 0;
@@ -1366,15 +1591,275 @@ private:
             PostQuitMessage(0);
             return 0;
         case WM_NCHITTEST:
+            if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
+                return HTCLIENT;
+            }
             return HTTRANSPARENT;
         default:
             return DefWindowProcW(hwnd, message, wparam, lparam);
         }
     }
 
+    static LRESULT CALLBACK local_ui_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+        NativeOrbWindow* self = reinterpret_cast<NativeOrbWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (message == WM_NCCREATE) {
+            CREATESTRUCTW const* create = reinterpret_cast<CREATESTRUCTW const*>(lparam);
+            self = reinterpret_cast<NativeOrbWindow*>(create->lpCreateParams);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+            return TRUE;
+        }
+        if (self == nullptr) {
+            return DefWindowProcW(hwnd, message, wparam, lparam);
+        }
+
+        switch (message) {
+        case WM_COMMAND:
+            if (LOWORD(wparam) == kLocalUiMinimizeButtonId) {
+                self->minimize_local_ui_panel();
+                return 0;
+            }
+            break;
+        case WM_PAINT:
+            self->paint_local_ui_panel(hwnd);
+            return 0;
+        case WM_CLOSE:
+            self->minimize_local_ui_panel();
+            return 0;
+        case WM_DESTROY:
+            self->local_ui_panel_visible_ = false;
+            self->local_ui_panel_hwnd_ = nullptr;
+            self->local_ui_minimize_button_hwnd_ = nullptr;
+            return 0;
+        default:
+            break;
+        }
+        return DefWindowProcW(hwnd, message, wparam, lparam);
+    }
+
+    void ensure_local_ui_panel() {
+        if (local_ui_panel_hwnd_ != nullptr && IsWindow(local_ui_panel_hwnd_)) {
+            return;
+        }
+
+        int const screen_width = GetSystemMetrics(SM_CXSCREEN);
+        int const screen_height = GetSystemMetrics(SM_CYSCREEN);
+        int const panel_x = std::clamp(config_.x - 18, 12, std::max(12, screen_width - kLocalUiPanelWidth - 12));
+        int const panel_y =
+            std::clamp(config_.y - kLocalUiPanelHeight + 36, 12, std::max(12, screen_height - kLocalUiPanelHeight - 12));
+
+        local_ui_panel_hwnd_ = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            kLocalUiWindowClassName,
+            L"Francis Local UI",
+            WS_POPUP | WS_BORDER,
+            panel_x,
+            panel_y,
+            kLocalUiPanelWidth,
+            kLocalUiPanelHeight,
+            hwnd_,
+            nullptr,
+            instance_,
+            this);
+        if (local_ui_panel_hwnd_ == nullptr) {
+            return;
+        }
+
+        local_ui_minimize_button_hwnd_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"_",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            kLocalUiPanelWidth - 38,
+            8,
+            26,
+            22,
+            local_ui_panel_hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLocalUiMinimizeButtonId)),
+            instance_,
+            nullptr);
+    }
+
+    void show_local_ui_panel() {
+        ensure_local_ui_panel();
+        if (local_ui_panel_hwnd_ == nullptr) {
+            return;
+        }
+
+        int const screen_width = GetSystemMetrics(SM_CXSCREEN);
+        int const screen_height = GetSystemMetrics(SM_CYSCREEN);
+        int const panel_x = std::clamp(config_.x - 18, 12, std::max(12, screen_width - kLocalUiPanelWidth - 12));
+        int const panel_y =
+            std::clamp(config_.y - kLocalUiPanelHeight + 36, 12, std::max(12, screen_height - kLocalUiPanelHeight - 12));
+        SetWindowPos(
+            local_ui_panel_hwnd_,
+            HWND_TOPMOST,
+            panel_x,
+            panel_y,
+            kLocalUiPanelWidth,
+            kLocalUiPanelHeight,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        local_ui_panel_visible_ = true;
+        local_ui_panel_minimized_ = false;
+        InvalidateRect(local_ui_panel_hwnd_, nullptr, TRUE);
+    }
+
+    void minimize_local_ui_panel() {
+        if (local_ui_panel_hwnd_ != nullptr && IsWindow(local_ui_panel_hwnd_)) {
+            ShowWindow(local_ui_panel_hwnd_, SW_HIDE);
+        }
+        local_ui_panel_visible_ = false;
+        local_ui_panel_minimized_ = true;
+        write_local_ui_control_request("minimize_native_local_ui_panel", "native_cpp_local_ui_minimize");
+    }
+
+    void paint_local_ui_panel(HWND hwnd) {
+        PAINTSTRUCT paint{};
+        HDC dc = BeginPaint(hwnd, &paint);
+        if (dc == nullptr) {
+            return;
+        }
+
+        RECT bounds{};
+        GetClientRect(hwnd, &bounds);
+        HBRUSH background = CreateSolidBrush(RGB(11, 18, 32));
+        FillRect(dc, &bounds, background);
+        DeleteObject(background);
+
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(248, 250, 252));
+        HFONT title_font = CreateFontW(
+            17,
+            0,
+            0,
+            0,
+            FW_SEMIBOLD,
+            FALSE,
+            FALSE,
+            FALSE,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY,
+            DEFAULT_PITCH | FF_SWISS,
+            L"Segoe UI");
+        HFONT old_font = reinterpret_cast<HFONT>(SelectObject(dc, title_font));
+        RECT title_rect{12, 9, kLocalUiPanelWidth - 46, 31};
+        DrawTextW(dc, L"Francis Local UI", -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        HFONT body_font = CreateFontW(
+            13,
+            0,
+            0,
+            0,
+            FW_NORMAL,
+            FALSE,
+            FALSE,
+            FALSE,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY,
+            DEFAULT_PITCH | FF_SWISS,
+            L"Segoe UI");
+        SelectObject(dc, body_font);
+        SetTextColor(dc, RGB(203, 213, 225));
+        RECT body_rect{12, 42, kLocalUiPanelWidth - 12, 80};
+        DrawTextW(
+            dc,
+            L"Native C++ panel. No browser, cursor takeover, or desktop action authority.",
+            -1,
+            &body_rect,
+            DT_LEFT | DT_WORDBREAK);
+
+        SetTextColor(dc, RGB(147, 197, 253));
+        RECT status_rect{12, 95, kLocalUiPanelWidth - 12, 126};
+        DrawTextW(
+            dc,
+            L"Listen  |  PTT  |  LLM  |  Drift",
+            -1,
+            &status_rect,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        SelectObject(dc, old_font);
+        DeleteObject(title_font);
+        DeleteObject(body_font);
+        EndPaint(hwnd, &paint);
+    }
+
     void move_center_to(int center_x, int center_y) {
-        config_.x = center_x - (config_.size / 2);
-        config_.y = center_y - (config_.size / 2);
+        double const dx = static_cast<double>(center_x) - current_center_x_;
+        double const dy = static_cast<double>(center_y) - current_center_y_;
+        double const distance = std::sqrt((dx * dx) + (dy * dy));
+        if (distance > 0.50) {
+            target_heading_degrees_ = normalize_degrees(static_cast<float>(std::atan2(dy, dx) * (180.0 / kPi)));
+        }
+        target_center_x_ = static_cast<double>(center_x);
+        target_center_y_ = static_cast<double>(center_y);
+    }
+
+    void trigger_contact_pulse() {
+        contact_pulse_started_seconds_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_).count();
+    }
+
+    void write_local_ui_control_request(char const* action, char const* trigger) {
+        if (config_.runtime_dir.empty()) {
+            return;
+        }
+        ULONGLONG const now_ticks = GetTickCount64();
+        if (last_right_click_request_ticks_ != 0 && (now_ticks - last_right_click_request_ticks_) < 250) {
+            return;
+        }
+        last_right_click_request_ticks_ = now_ticks;
+
+        POINT cursor{};
+        GetCursorPos(&cursor);
+        fs::path const request_path = config_.runtime_dir / fs::path(kNativeRightClickRequestFile);
+        fs::path const temp_path =
+            config_.runtime_dir /
+            fs::path(L"right-click-request." + std::to_wstring(GetCurrentProcessId()) + L"." + std::to_wstring(now_ticks) + L".tmp");
+
+        Json payload = {
+            {"kind", "francis.native_orb_renderer.right_click_request"},
+            {"schema_version", "francis.native_orb_renderer.right_click_request.v1"},
+            {"request_id", "native-orb-right-click-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(now_ticks)},
+            {"status", "native_local_ui_panel_control_requested"},
+            {"trigger", trigger},
+            {"action", action},
+            {"authority_scope", "runtime_overlay_panel_only"},
+            {"renderer", "native_cpp_orb_renderer"},
+            {"native_local_ui_panel", true},
+            {"native_local_ui_panel_visible", local_ui_panel_visible_},
+            {"native_local_ui_panel_minimized", local_ui_panel_minimized_},
+            {"native_local_ui_panel_width", kLocalUiPanelWidth},
+            {"native_local_ui_panel_height", kLocalUiPanelHeight},
+            {"process_id", static_cast<int>(GetCurrentProcessId())},
+            {"screen_x", cursor.x},
+            {"screen_y", cursor.y},
+            {"created_at_utc", utc_now_iso8601()},
+            {"opened_external_process", false},
+            {"controls_user_os_cursor", false},
+            {"desktop_effect_performed", false},
+            {"grants_execution_authority", false},
+            {"grants_mutation_authority", false},
+        };
+
+        try {
+            fs::create_directories(config_.runtime_dir);
+            {
+                std::ofstream output(temp_path, std::ios::binary | std::ios::trunc);
+                output << payload.dump(2);
+                output << "\n";
+                if (!output) {
+                    return;
+                }
+            }
+            MoveFileExW(temp_path.c_str(), request_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+        } catch (std::exception const&) {
+        }
+    }
+
+    void request_local_ui_panel_from_right_click() {
+        write_local_ui_control_request("open_native_local_ui_panel", "native_orb_right_click");
     }
 
     void on_timer() {
@@ -1398,6 +1883,10 @@ private:
     }
 
     void render(double elapsed) {
+        update_motion(elapsed);
+        double const contact_age = elapsed - contact_pulse_started_seconds_;
+        float const contact_strength =
+            (contact_age >= 0.0 && contact_age <= 0.34) ? static_cast<float>(1.0 - (contact_age / 0.34)) : 0.0f;
         int const size = config_.size;
         HDC screen_dc = GetDC(nullptr);
         HDC memory_dc = CreateCompatibleDC(screen_dc);
@@ -1430,7 +1919,17 @@ private:
         HGDIOBJ old_bitmap = SelectObject(memory_dc, bitmap);
         {
             Gdiplus::Graphics graphics(memory_dc);
-            draw_orb(graphics, size, state_, elapsed);
+            draw_orb(
+                graphics,
+                size,
+                state_,
+                elapsed,
+                OrbMotionKinetics{
+                    heading_degrees_,
+                    speed_pixels_per_second_,
+                    spin_degrees_,
+                },
+                contact_strength);
         }
 
         POINT destination{config_.x, config_.y};
@@ -1448,11 +1947,51 @@ private:
         ReleaseDC(nullptr, screen_dc);
     }
 
+    void update_motion(double elapsed) {
+        double const delta_seconds = std::clamp(elapsed - last_render_seconds_, 0.0, 0.050);
+        last_render_seconds_ = elapsed;
+        if (delta_seconds <= 0.0) {
+            return;
+        }
+
+        double const dx = target_center_x_ - current_center_x_;
+        double const dy = target_center_y_ - current_center_y_;
+        double const distance = std::sqrt((dx * dx) + (dy * dy));
+        double const follow = 1.0 - std::exp(-9.0 * delta_seconds);
+        current_center_x_ += dx * follow;
+        current_center_y_ += dy * follow;
+        config_.x = static_cast<int>(std::round(current_center_x_ - (static_cast<double>(config_.size) / 2.0)));
+        config_.y = static_cast<int>(std::round(current_center_y_ - (static_cast<double>(config_.size) / 2.0)));
+
+        float const target_speed = static_cast<float>((distance * follow) / std::max(delta_seconds, 0.001));
+        speed_pixels_per_second_ += (target_speed - speed_pixels_per_second_) * static_cast<float>(std::min(1.0, delta_seconds * 4.0));
+        heading_degrees_ =
+            normalize_degrees(heading_degrees_ + (shortest_angle_delta_degrees(heading_degrees_, target_heading_degrees_) *
+                                                  static_cast<float>(std::min(1.0, delta_seconds * 5.0))));
+        spin_degrees_ = normalize_degrees(spin_degrees_ + (speed_pixels_per_second_ * static_cast<float>(delta_seconds) * 0.060f));
+    }
+
     RendererConfig config_;
     OrbState state_;
+    HINSTANCE instance_ = nullptr;
     HWND hwnd_ = nullptr;
+    HWND local_ui_panel_hwnd_ = nullptr;
+    HWND local_ui_minimize_button_hwnd_ = nullptr;
     std::chrono::steady_clock::time_point start_;
     double last_reload_seconds_ = -10.0;
+    double last_render_seconds_ = 0.0;
+    double target_center_x_ = 0.0;
+    double target_center_y_ = 0.0;
+    double current_center_x_ = 0.0;
+    double current_center_y_ = 0.0;
+    float target_heading_degrees_ = 0.0f;
+    float heading_degrees_ = 0.0f;
+    float speed_pixels_per_second_ = 0.0f;
+    float spin_degrees_ = 0.0f;
+    double contact_pulse_started_seconds_ = -10.0;
+    ULONGLONG last_right_click_request_ticks_ = 0;
+    bool local_ui_panel_visible_ = false;
+    bool local_ui_panel_minimized_ = false;
 };
 
 }  // namespace

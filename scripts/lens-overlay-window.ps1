@@ -14,6 +14,10 @@ param(
 
   [switch]$DisableAutonomousMotion,
 
+  [switch]$EnableOrbLiveExploration,
+
+  [switch]$EnableOrbExplorationPreview,
+
   [switch]$EnableManualOrbDrag,
 
   [switch]$EnableWakeListen,
@@ -207,6 +211,46 @@ function Get-IntegerProperty {
   } catch {
     return $Default
   }
+}
+
+function Get-DoubleProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [double]$Default = 0.0
+  )
+
+  $Value = Get-StringProperty -Payload $Payload -Name $Name -Default ''
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+  try {
+    return [double]$Value
+  } catch {
+    return $Default
+  }
+}
+
+function Get-OverlayPropertyValue {
+  param(
+    [object]$Payload,
+    [string]$Name
+  )
+
+  if ($null -eq $Payload) {
+    return $null
+  }
+  if ($Payload -is [System.Collections.IDictionary]) {
+    if ($Payload.Contains($Name)) {
+      return $Payload[$Name]
+    }
+    return $null
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property) {
+    return $null
+  }
+  return $Property.Value
 }
 
 function Get-BoolProperty {
@@ -544,7 +588,7 @@ function Get-OrbHitBoxSize {
   if ($null -ne $Variable) {
     return [double]$Variable.Value
   }
-  return 72.0
+  return 270.0
 }
 
 function Test-OrbFullScreenOverlayPlane {
@@ -641,7 +685,7 @@ function Get-OrbWindowPlacementForTarget {
     overlay_window_stationary = $FullScreenOverlayPlane
     full_screen_overlay_plane = $FullScreenOverlayPlane
     click_hit_box_size = Get-OrbHitBoxSize
-    click_hit_box_scope = 'orb_core_only'
+    click_hit_box_scope = 'orb_visual_bounds'
     reach_mode = if ($FullScreenOverlayPlane) { 'full_screen_overlay_orb_offset' } else { 'window_plus_in_window_offset' }
   }
 }
@@ -674,7 +718,7 @@ function Get-OverlayWpfRenderProfile {
     process_render_mode = $ProcessRenderMode
     render_tier = $Tier
     hardware_acceleration_expected = ($Tier -ge 1 -and $ProcessRenderMode -ne 'SoftwareOnly')
-    frame_clock = if ($FrameSyncedMotion) { 'composition_target_rendering' } else { 'manual_drag_only' }
+    frame_clock = if ($FrameSyncedMotion) { 'composition_target_rendering_with_dispatcher_timer_fallback' } else { 'manual_drag_only' }
     frame_synced_motion = $FrameSyncedMotion
     motion_integrator = 'elapsed_time_delta_clamped'
   }
@@ -761,9 +805,10 @@ function New-OrbRingColorContract {
     grants_mutation_authority = $false
     ring_family = [ordered]@{
       material = 'pearlescent_liquid_streamer_rings'
-      main_streamer_ring_count = 15
+      main_streamer_ring_count = 8
       fine_streamer_ring_count = 5
       single_identity_ring_count = 20
+      timed_outer_ring_flares = $true
       follows_blob_flow = $true
       independent_ring_pulses = $true
     }
@@ -802,7 +847,8 @@ function Add-OrbVisualRingColorContract {
 function New-OrbVisualProjection {
   param(
     [bool]$AutonomousMotion = $false,
-    [bool]$ManualDrag = $false
+    [bool]$ManualDrag = $false,
+    [bool]$LiveExploration = $false
   )
 
   return [ordered]@{
@@ -821,8 +867,14 @@ function New-OrbVisualProjection {
     right_corner_locked = (-not $AutonomousMotion -and -not $ManualDrag)
     default_anchor = if ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
     motion_profile = if ($AutonomousMotion) { 'bounded_desktop_roam' } elseif ($ManualDrag) { 'manual_drag_only' } else { 'right_corner_locked' }
-    motion_clock = if ($AutonomousMotion) { 'composition_target_rendering' } elseif ($ManualDrag) { 'manual_drag_only' } else { 'anchored_static' }
+    motion_pattern = if ($LiveExploration) { 'live_semantic_exploration_or_ambient_body_motion' } elseif ($AutonomousMotion) { 'full_360_liquid_roam' } elseif ($ManualDrag) { 'operator_positioned' } else { 'anchored_static' }
+    motion_clock = if ($AutonomousMotion) { 'composition_target_rendering_with_dispatcher_timer_fallback' } elseif ($ManualDrag) { 'manual_drag_only' } else { 'anchored_static' }
     render_profile = Get-OverlayWpfRenderProfile -FrameSyncedMotion $AutonomousMotion
+    live_exploration_supported = $true
+    live_exploration_enabled = $LiveExploration
+    live_exploration_requires_semantic_targets = $true
+    live_exploration_grants_execution_authority = $false
+    live_exploration_grants_mutation_authority = $false
     manual_drag_supported = $ManualDrag
     desktop_roam_supported = $AutonomousMotion
     desktop_roam_bounds = 'virtual_screen'
@@ -832,7 +884,7 @@ function New-OrbVisualProjection {
     overlay_includes_taskbar = $true
     overlay_window_is_coordinate_plane = $true
     click_hit_box_size = Get-OrbHitBoxSize
-    click_hit_box_scope = 'orb_core_only'
+    click_hit_box_scope = 'orb_visual_bounds'
     orb_visual_can_extend_beyond_click_box = $true
     reach_mode = 'full_screen_overlay_orb_offset'
     route = '/?francis_lens=orb_overlay'
@@ -875,7 +927,200 @@ function New-OrbAutonomousMotionState {
     full_screen_overlay_plane = $FullScreenOverlayPlane
     overlay_includes_taskbar = ($WorkArea.PSObject.Properties['source'] -and [string]$WorkArea.source -eq 'virtual_screen_including_taskbar')
     last_frame_seconds = -1.0
+    motion_pattern = 'full_360_liquid_roam'
+    autonomous_orb_margin = ([double](Get-NativeOrbRendererSize) / 2.0)
+    live_exploration_enabled = $false
+    exploration_waypoints = @()
+    exploration_waypoint_index = 0
+    exploration_last_waypoint_phase = 0.0
   }
+}
+
+function Get-OrbLiveExplorationEnabled {
+  $EnabledVariable = Get-Variable -Name LensOverlayOrbLiveExplorationEnabled -Scope Script -ErrorAction SilentlyContinue
+  if ($null -eq $EnabledVariable) {
+    return $false
+  }
+  return [bool]$EnabledVariable.Value
+}
+
+function Get-OrbExplorationCandidateItems {
+  param([object]$BodyState)
+
+  $Candidates = @()
+  $Containers = @()
+  if ($null -ne $BodyState) {
+    $Containers += $BodyState
+    $OrbSemanticState = Get-OverlayPropertyValue -Payload $BodyState -Name 'orb_semantic_state'
+    if ($null -ne $OrbSemanticState) {
+      $Containers += $OrbSemanticState
+    }
+    $Perspective = Get-OverlayPropertyValue -Payload $BodyState -Name 'perspective'
+    if ($null -ne $Perspective) {
+      $Containers += $Perspective
+    }
+    $Now = Get-OverlayPropertyValue -Payload $BodyState -Name 'now'
+    if ($null -ne $Now) {
+      $Containers += $Now
+    }
+  }
+  foreach ($Container in $Containers) {
+    if ($null -eq $Container) {
+      continue
+    }
+    foreach ($Name in @('semantic_waypoints', 'semantic_targets', 'safe_targets', 'highlight_targets', 'targets')) {
+      $Items = Get-OverlayPropertyValue -Payload $Container -Name $Name
+      if ($null -eq $Items) {
+        continue
+      }
+      foreach ($Item in @($Items)) {
+        if ($null -ne $Item) {
+          $Candidates += $Item
+        }
+      }
+    }
+  }
+  return @($Candidates)
+}
+
+function Convert-OrbExplorationCandidateToWaypoint {
+  param(
+    [object]$Candidate,
+    [object]$MotionState
+  )
+
+  if ($null -eq $Candidate -or $null -eq $MotionState) {
+    return $null
+  }
+  $Kind = Get-StringProperty -Payload $Candidate -Name 'kind' -Default (Get-StringProperty -Payload $Candidate -Name 'target_kind' -Default '')
+  $Kind = $Kind.Trim().ToLowerInvariant()
+  if ($Kind -in @('', 'unknown', 'forbidden')) {
+    return $null
+  }
+  if ((Get-BoolProperty -Payload $Candidate -Name 'forbidden' -Default $false) -or
+      (Get-BoolProperty -Payload $Candidate -Name 'ambiguous' -Default $false)) {
+    return $null
+  }
+
+  $X = Get-DoubleProperty -Payload $Candidate -Name 'center_x' -Default ([double]::NaN)
+  if ([double]::IsNaN($X)) {
+    $X = Get-DoubleProperty -Payload $Candidate -Name 'x' -Default ([double]::NaN)
+  }
+  $Y = Get-DoubleProperty -Payload $Candidate -Name 'center_y' -Default ([double]::NaN)
+  if ([double]::IsNaN($Y)) {
+    $Y = Get-DoubleProperty -Payload $Candidate -Name 'y' -Default ([double]::NaN)
+  }
+  if ([double]::IsNaN($X) -or [double]::IsNaN($Y)) {
+    return $null
+  }
+
+  $MinimumX = [double]$MotionState['roam_left']
+  $MaximumX = [double]$MotionState['roam_right']
+  $MinimumY = [double]$MotionState['roam_top']
+  $MaximumY = [double]$MotionState['roam_bottom']
+  $TargetId = Get-StringProperty -Payload $Candidate -Name 'semantic_target_id' -Default (Get-StringProperty -Payload $Candidate -Name 'target_id' -Default '')
+  if ([string]::IsNullOrWhiteSpace($TargetId)) {
+    $TargetId = 'semantic_target'
+  }
+  if ($TargetId.Length -gt 80) {
+    $TargetId = $TargetId.Substring(0, 80)
+  }
+  return [ordered]@{
+    semantic_target_id = $TargetId
+    target_kind = $Kind
+    center_x = Clamp-OverlayDouble -Value $X -Minimum $MinimumX -Maximum $MaximumX
+    center_y = Clamp-OverlayDouble -Value $Y -Minimum $MinimumY -Maximum $MaximumY
+    source = Get-StringProperty -Payload $Candidate -Name 'source' -Default 'lens_semantic_target'
+  }
+}
+
+function New-OrbLiveExplorationState {
+  param(
+    [bool]$Enabled,
+    [object]$BodyState,
+    [object]$MotionState
+  )
+
+  $SemanticState = Get-StringProperty -Payload $BodyState -Name 'semantic_state' -Default 'unknown'
+  $SemanticSource = Get-StringProperty -Payload $BodyState -Name 'semantic_source' -Default 'unknown'
+  $Waypoints = @()
+  if ($Enabled -and $null -ne $MotionState) {
+    foreach ($Candidate in @(Get-OrbExplorationCandidateItems -BodyState $BodyState)) {
+      $Waypoint = Convert-OrbExplorationCandidateToWaypoint -Candidate $Candidate -MotionState $MotionState
+      if ($null -ne $Waypoint) {
+        $Waypoints += $Waypoint
+      }
+      if ($Waypoints.Count -ge 12) {
+        break
+      }
+    }
+  }
+  $Blockers = @()
+  if ($Enabled -and $Waypoints.Count -eq 0) {
+    $Blockers += 'lens_live_semantic_targets_unavailable'
+  }
+  return [ordered]@{
+    kind = 'lens.overlay.orb_live_exploration'
+    enabled = $Enabled
+    status = if (-not $Enabled) { 'disabled' } elseif ($Blockers.Count -gt 0) { 'live_blocked' } else { 'live_ready' }
+    mode = if ($Enabled) { 'non_mutating_live_semantic_exploration' } else { 'disabled' }
+    current_motion = if ($Enabled -and $Blockers.Count -eq 0) { 'live_semantic_waypoint_following' } elseif ($Enabled) { 'ambient_body_motion_waiting_for_lens' } else { 'ambient_or_static' }
+    semantic_state = $SemanticState
+    semantic_source = $SemanticSource
+    semantic_waypoint_count = [int]$Waypoints.Count
+    semantic_waypoints = $Waypoints
+    blockers = $Blockers
+    fallback_motion = 'bounded_desktop_roam'
+    live = $Enabled
+    observation_only = $true
+    non_mutating = $true
+    reads_semantic_targets = $Enabled
+    requires_lens_semantic_targets = $true
+    writes_receipt = $false
+    status_readback = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    can_click = $false
+    can_drag = $false
+    can_type = $false
+    controls_user_os_cursor = $false
+  }
+}
+
+function Set-OrbLiveExplorationRuntimeState {
+  param(
+    [object]$BodyState,
+    [object]$MotionState
+  )
+
+  $LiveExploration = New-OrbLiveExplorationState -Enabled (Get-OrbLiveExplorationEnabled) -BodyState $BodyState -MotionState $MotionState
+  $script:LensOverlayOrbLiveExploration = $LiveExploration
+  if ($null -ne $MotionState) {
+    $MotionState['live_exploration_enabled'] = [bool]$LiveExploration.enabled
+    $MotionState['exploration_waypoints'] = @($LiveExploration.semantic_waypoints)
+  }
+  return $LiveExploration
+}
+
+function Get-OrbLiveExplorationWaypoint {
+  param(
+    [object]$MotionState,
+    [double]$Phase
+  )
+
+  if ($null -eq $MotionState -or -not [bool]$MotionState['live_exploration_enabled']) {
+    return $null
+  }
+  $Waypoints = @($MotionState['exploration_waypoints'])
+  if ($Waypoints.Count -le 0) {
+    return $null
+  }
+  $LastPhase = [double]$MotionState['exploration_last_waypoint_phase']
+  if (($Phase - $LastPhase) -gt 1.8) {
+    $MotionState['exploration_waypoint_index'] = (([int]$MotionState['exploration_waypoint_index'] + 1) % $Waypoints.Count)
+    $MotionState['exploration_last_waypoint_phase'] = $Phase
+  }
+  return $Waypoints[[int]$MotionState['exploration_waypoint_index']]
 }
 
 function Set-OrbWindowDockPosition {
@@ -936,20 +1181,30 @@ function Update-OrbAutonomousMotion {
     }
     $MotionState['last_frame_seconds'] = $FrameSeconds
   }
-  $DeltaSeconds = [Math]::Min(0.05, $DeltaSeconds)
-  $Phase = [double]$MotionState['phase'] + ($DeltaSeconds * 0.425)
+  $DeltaSeconds = [Math]::Min(0.020, $DeltaSeconds)
+  $Phase = [double]$MotionState['phase'] + ($DeltaSeconds * 0.24)
   $MotionState['phase'] = $Phase
-  $DriftX = ([Math]::Sin($Phase * 0.72) * [double]$MotionState['range_x']) + ([Math]::Sin($Phase * 0.23) * 24.0)
-  $DriftY = ([Math]::Sin($Phase * 0.61) * [double]$MotionState['range_y']) + ([Math]::Sin($Phase * 0.31) * 18.0)
+  $RadiusBreathX = 0.68 + (0.22 * [Math]::Sin($Phase * 0.19))
+  $RadiusBreathY = 0.62 + (0.24 * [Math]::Sin($Phase * 0.23))
+  $DriftX = ([Math]::Sin($Phase * 0.82) * [double]$MotionState['range_x'] * $RadiusBreathX) + ([Math]::Sin($Phase * 1.47) * [double]$MotionState['range_x'] * 0.10)
+  $DriftY = ([Math]::Sin($Phase * 1.06) * [double]$MotionState['range_y'] * $RadiusBreathY) + ([Math]::Sin($Phase * 0.41) * [double]$MotionState['range_y'] * 0.12)
+  $ExplorationWaypoint = Get-OrbLiveExplorationWaypoint -MotionState $MotionState -Phase $Phase
   $MinimumLeft = [double]$MotionState['work_left']
   $MinimumTop = [double]$MotionState['work_top']
   $FullScreenOverlayPlane = if ($MotionState.Contains('full_screen_overlay_plane')) { [bool]$MotionState['full_screen_overlay_plane'] } else { $false }
   if ($FullScreenOverlayPlane) {
-    $TargetCenterX = Clamp-OverlayDouble -Value ([double]$MotionState['anchor_left'] + $DriftX) -Minimum $MinimumLeft -Maximum ([double]$MotionState['work_right'])
-    $TargetCenterY = Clamp-OverlayDouble -Value ([double]$MotionState['anchor_top'] + $DriftY) -Minimum $MinimumTop -Maximum ([double]$MotionState['work_bottom'])
+    $OrbMargin = if ($MotionState.Contains('autonomous_orb_margin')) { [double]$MotionState['autonomous_orb_margin'] } else { 0.0 }
+    $TargetMinimumX = [Math]::Min([double]$MotionState['work_right'], $MinimumLeft + $OrbMargin)
+    $TargetMaximumX = [Math]::Max($TargetMinimumX, [double]$MotionState['work_right'] - $OrbMargin)
+    $TargetMinimumY = [Math]::Min([double]$MotionState['work_bottom'], $MinimumTop + $OrbMargin)
+    $TargetMaximumY = [Math]::Max($TargetMinimumY, [double]$MotionState['work_bottom'] - $OrbMargin)
+    $RawTargetCenterX = if ($null -ne $ExplorationWaypoint) { [double]$ExplorationWaypoint.center_x } else { [double]$MotionState['anchor_left'] + $DriftX }
+    $RawTargetCenterY = if ($null -ne $ExplorationWaypoint) { [double]$ExplorationWaypoint.center_y } else { [double]$MotionState['anchor_top'] + $DriftY }
+    $TargetCenterX = Clamp-OverlayDouble -Value $RawTargetCenterX -Minimum $TargetMinimumX -Maximum $TargetMaximumX
+    $TargetCenterY = Clamp-OverlayDouble -Value $RawTargetCenterY -Minimum $TargetMinimumY -Maximum $TargetMaximumY
     $TargetOffsetX = $TargetCenterX - ([double]$Window.Left + ([double]$Window.Width / 2.0))
     $TargetOffsetY = $TargetCenterY - ([double]$Window.Top + ([double]$Window.Height / 2.0))
-    $Ease = [Math]::Min(1.0, [Math]::Max(0.18, $DeltaSeconds * 12.0))
+    $Ease = [Math]::Min(1.0, [Math]::Max(0.035, $DeltaSeconds * 4.5))
     $OffsetX = Get-OrbInWindowOffsetX
     $OffsetY = Get-OrbInWindowOffsetY
     Set-OrbInWindowOffset -OffsetX ($OffsetX + (($TargetOffsetX - $OffsetX) * $Ease)) -OffsetY ($OffsetY + (($TargetOffsetY - $OffsetY) * $Ease))
@@ -964,9 +1219,11 @@ function Update-OrbAutonomousMotion {
   }
   $MaximumLeft = [Math]::Max($MinimumLeft, [double]$MotionState['work_right'] - [double]$Window.Width)
   $MaximumTop = [Math]::Max($MinimumTop, [double]$MotionState['work_bottom'] - [double]$Window.Height)
-  $TargetLeft = Clamp-OverlayDouble -Value ([double]$MotionState['anchor_left'] + $DriftX) -Minimum $MinimumLeft -Maximum $MaximumLeft
-  $TargetTop = Clamp-OverlayDouble -Value ([double]$MotionState['anchor_top'] + $DriftY) -Minimum $MinimumTop -Maximum $MaximumTop
-  $Ease = [Math]::Min(1.0, [Math]::Max(0.18, $DeltaSeconds * 12.0))
+  $RawTargetLeft = if ($null -ne $ExplorationWaypoint) { [double]$ExplorationWaypoint.center_x - ([double]$Window.Width / 2.0) } else { [double]$MotionState['anchor_left'] + $DriftX }
+  $RawTargetTop = if ($null -ne $ExplorationWaypoint) { [double]$ExplorationWaypoint.center_y - ([double]$Window.Height / 2.0) } else { [double]$MotionState['anchor_top'] + $DriftY }
+  $TargetLeft = Clamp-OverlayDouble -Value $RawTargetLeft -Minimum $MinimumLeft -Maximum $MaximumLeft
+  $TargetTop = Clamp-OverlayDouble -Value $RawTargetTop -Minimum $MinimumTop -Maximum $MaximumTop
+  $Ease = [Math]::Min(1.0, [Math]::Max(0.035, $DeltaSeconds * 4.5))
   $Window.Left = [double]$Window.Left + (($TargetLeft - [double]$Window.Left) * $Ease)
   $Window.Top = [double]$Window.Top + (($TargetTop - [double]$Window.Top) * $Ease)
   $RootVariable = Get-Variable -Name LensOverlayDataRoot -Scope Script -ErrorAction SilentlyContinue
@@ -1030,6 +1287,8 @@ function New-OverlayWindowPositionProjection {
   $HitTestPassthroughEnabled = if ($null -ne $HitTestPassthroughVariable) { [bool]$HitTestPassthroughVariable.Value } else { $false }
   $TopMostPinVariable = Get-Variable -Name LensOverlayTopMostPinApplied -Scope Script -ErrorAction SilentlyContinue
   $TopMostPinApplied = if ($null -ne $TopMostPinVariable) { [bool]$TopMostPinVariable.Value } else { $false }
+  $ExplorationVariable = Get-Variable -Name LensOverlayOrbLiveExploration -Scope Script -ErrorAction SilentlyContinue
+  $OrbExploration = if ($null -ne $ExplorationVariable) { $ExplorationVariable.Value } else { New-OrbLiveExplorationState -Enabled $false -BodyState $null -MotionState $null }
   return [ordered]@{
     status = if ($OverlayWindowVisible -and $HasWindow) { 'visible_position_observed' } elseif ($HasWindow) { 'window_not_visible' } else { 'window_unavailable' }
     left = if ($HasWindow) { [double]$Window.Left } else { 0.0 }
@@ -1053,7 +1312,7 @@ function New-OverlayWindowPositionProjection {
     click_hit_box_size = $HitBoxSize
     click_hit_box_left = $OrbCenterX - ($HitBoxSize / 2.0)
     click_hit_box_top = $OrbCenterY - ($HitBoxSize / 2.0)
-    click_hit_box_scope = 'orb_core_only'
+    click_hit_box_scope = 'orb_visual_bounds'
     hit_test_passthrough_outside_click_box_supported = $true
     hit_test_passthrough_outside_click_box_enabled = $HitTestPassthroughEnabled
     orb_visual_can_extend_beyond_click_box = $true
@@ -1062,6 +1321,10 @@ function New-OverlayWindowPositionProjection {
     default_anchor = if ($OperatorPositionAnchored) { $OperatorPositionAnchor } elseif ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
     operator_position_anchor = $OperatorPositionAnchor
     voice_position_command_active = $OperatorPositionAnchor.StartsWith('voice_command_', [System.StringComparison]::OrdinalIgnoreCase)
+    orb_live_exploration_enabled = [bool](Get-BoolProperty -Payload $OrbExploration -Name 'enabled' -Default $false)
+    orb_exploration_enabled = [bool](Get-BoolProperty -Payload $OrbExploration -Name 'enabled' -Default $false)
+    orb_exploration_status = Get-StringProperty -Payload $OrbExploration -Name 'status' -Default 'disabled'
+    orb_exploration_current_motion = Get-StringProperty -Payload $OrbExploration -Name 'current_motion' -Default 'ambient_or_static'
     desktop_roam_supported = $AutonomousMotion
     desktop_roam_bounds = if ($OverlayIncludesTaskbar) { 'virtual_screen' } else { 'work_area' }
     manual_drag_supported = $ManualDrag
@@ -1100,7 +1363,11 @@ function Write-OverlayPositionState {
   }
 
   $Position = New-OverlayWindowPositionProjection -Window $Window -MotionState $MotionState -OverlayWindowVisible $OverlayWindowVisible
+  $BodyState = Get-OverlayPropertyValue -Payload $Status -Name 'mcp_body_state'
+  $OrbExploration = Set-OrbLiveExplorationRuntimeState -BodyState $BodyState -MotionState $MotionState
   Set-OverlayStatusProperty -Payload $Status -Name 'overlay_position' -Value $Position
+  Set-OverlayStatusProperty -Payload $Status -Name 'orb_live_exploration' -Value $OrbExploration
+  Set-OverlayStatusProperty -Payload $Status -Name 'orb_exploration' -Value $OrbExploration
   Set-OverlayStatusProperty -Payload $Status -Name 'overlay_window_visible' -Value $OverlayWindowVisible
   Set-OverlayStatusProperty -Payload $Status -Name 'always_on_top' -Value (($null -ne $Window) -and [bool]$Window.TopMost)
   Set-OverlayStatusProperty -Payload $Status -Name 'updated_at' -Value ([DateTimeOffset]::UtcNow.ToString('o'))
@@ -1137,6 +1404,49 @@ function Write-OrbAutonomousMotionPositionReceipt {
   Write-OverlayPositionState -Root $script:LensOverlayDataRoot -Window $Window -MotionState $MotionState -OverlayWindowVisible $true
 }
 
+function Invoke-OverlayQueuedRuntimeCommands {
+  param([double]$FrameSeconds)
+
+  if ($FrameSeconds -lt 0.0 -or [string]::IsNullOrWhiteSpace($script:LensOverlayDataRoot)) {
+    return
+  }
+  $LastPollVariable = Get-Variable -Name LensOverlayLastCommandPollSeconds -Scope Script -ErrorAction SilentlyContinue
+  $LastPollSeconds = if ($null -ne $LastPollVariable) { [double]$LastPollVariable.Value } else { -1.0 }
+  if ($LastPollSeconds -ge 0.0 -and (($FrameSeconds - $LastPollSeconds) -lt 0.25)) {
+    return
+  }
+  $script:LensOverlayLastCommandPollSeconds = $FrameSeconds
+  try {
+    [void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)
+  } catch {
+  }
+  try {
+    [void](Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot)
+  } catch {
+  }
+  try {
+    [void](Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot)
+  } catch {
+  }
+}
+
+function Invoke-OrbAutonomousMotionFrame {
+  param([double]$FrameSeconds)
+
+  if ($FrameSeconds -lt 0.0) {
+    return
+  }
+  $LastFrameVariable = Get-Variable -Name LensOverlayLastMotionFrameSeconds -Scope Script -ErrorAction SilentlyContinue
+  $LastFrameSeconds = if ($null -ne $LastFrameVariable) { [double]$LastFrameVariable.Value } else { -1.0 }
+  if ($LastFrameSeconds -ge 0.0 -and (($FrameSeconds - $LastFrameSeconds) -lt 0.006)) {
+    return
+  }
+  $script:LensOverlayLastMotionFrameSeconds = $FrameSeconds
+  Update-OrbAutonomousMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $FrameSeconds
+  Invoke-OverlayQueuedRuntimeCommands -FrameSeconds $FrameSeconds
+  Write-OrbAutonomousMotionPositionReceipt -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $FrameSeconds
+}
+
 function Start-OrbFrameSyncedMotion {
   param(
     [object]$Window,
@@ -1145,17 +1455,25 @@ function Start-OrbFrameSyncedMotion {
 
   $Clock = [System.Diagnostics.Stopwatch]::StartNew()
   $script:LensOverlayRenderFrameClock = $Clock
+  $script:LensOverlayLastMotionFrameSeconds = -1.0
   $Handler = [System.EventHandler]{
     param($Sender, $EventArgs)
 
     $FrameSeconds = if ($null -ne $script:LensOverlayRenderFrameClock) { $script:LensOverlayRenderFrameClock.Elapsed.TotalSeconds } else { -1.0 }
-    Update-OrbAutonomousMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $FrameSeconds
-    Write-OrbAutonomousMotionPositionReceipt -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $FrameSeconds
+    Invoke-OrbAutonomousMotionFrame -FrameSeconds $FrameSeconds
   }
   [System.Windows.Media.CompositionTarget]::add_Rendering($Handler)
+  $Timer = New-Object System.Windows.Threading.DispatcherTimer
+  $Timer.Interval = [TimeSpan]::FromMilliseconds(8)
+  $Timer.Add_Tick({
+      $FrameSeconds = if ($null -ne $script:LensOverlayRenderFrameClock) { $script:LensOverlayRenderFrameClock.Elapsed.TotalSeconds } else { -1.0 }
+      Invoke-OrbAutonomousMotionFrame -FrameSeconds $FrameSeconds
+    })
+  $Timer.Start()
   return [ordered]@{
     clock = $Clock
     handler = $Handler
+    timer = $Timer
   }
 }
 
@@ -1170,6 +1488,12 @@ function Stop-OrbFrameSyncedMotion {
   } catch {
   }
   try {
+    if ($null -ne $Subscription['timer']) {
+      $Subscription['timer'].Stop()
+    }
+  } catch {
+  }
+  try {
     $Subscription['clock'].Stop()
   } catch {
   }
@@ -1178,7 +1502,7 @@ function Stop-OrbFrameSyncedMotion {
 function New-NativeOrbControlSurface {
   param(
     [double]$Size = 270,
-    [double]$HitBoxSize = 72
+    [double]$HitBoxSize = 270
   )
 
   $Root = New-Object System.Windows.Controls.Grid
@@ -1459,6 +1783,12 @@ function Get-NativeOrbRendererStatusPath {
   return (Join-Path (Get-NativeOrbRendererRuntimeRoot -Root $Root) 'status.json')
 }
 
+function Get-NativeOrbRendererRightClickRequestPath {
+  param([string]$Root)
+
+  return (Join-Path (Get-NativeOrbRendererRuntimeRoot -Root $Root) 'right-click-request.json')
+}
+
 function Test-NativeOrbRendererProcess {
   param([int]$ProcessId)
 
@@ -1545,6 +1875,8 @@ using System.Text;
 public static class FrancisNativeOrbRendererNative
 {
     public const int MoveCenterMessage = 0x8000 + 0x46;
+    public const int ContactPulseMessage = 0x8000 + 0x47;
+    public const int ShowLocalUiMessage = 0x8000 + 0x48;
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -1593,6 +1925,7 @@ function Get-NativeOrbRendererReadback {
   $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
   $PidPath = Get-NativeOrbRendererPidPath -Root $Root
   $StatusPath = Get-NativeOrbRendererStatusPath -Root $Root
+  $RightClickRequestPath = Get-NativeOrbRendererRightClickRequestPath -Root $Root
   $Status = Read-JsonFile -Path $StatusPath
   $NativeRendererPid = 0
   if (Test-Path -LiteralPath $PidPath -PathType Leaf) {
@@ -1614,6 +1947,7 @@ function Get-NativeOrbRendererReadback {
     runtime_root = $RuntimeRoot
     pid_path = $PidPath
     status_path = $StatusPath
+    right_click_request_path = $RightClickRequestPath
     status_exists = (Test-Path -LiteralPath $StatusPath -PathType Leaf)
     pid_present = (Test-Path -LiteralPath $PidPath -PathType Leaf)
     pid = $NativeRendererPid
@@ -1627,6 +1961,12 @@ function Get-NativeOrbRendererReadback {
     center_x = Get-IntegerProperty -Payload $Status -Name 'center_x' -Default 0
     center_y = Get-IntegerProperty -Payload $Status -Name 'center_y' -Default 0
     move_message_supported = $true
+    contact_message_supported = $true
+    native_right_click_request_supported = Get-BoolProperty -Payload $Status -Name 'native_right_click_request_supported' -Default $true
+    can_open_backend_surface_directly = Get-BoolProperty -Payload $Status -Name 'can_open_backend_surface_directly' -Default $false
+    right_click_opens_local_ui_panel = Get-BoolProperty -Payload $Status -Name 'right_click_opens_local_ui_panel' -Default $true
+    native_local_ui_panel_supported = Get-BoolProperty -Payload $Status -Name 'native_local_ui_panel_supported' -Default $true
+    native_local_ui_panel_open_mode = Get-StringProperty -Payload $Status -Name 'native_local_ui_panel_open_mode' -Default 'native_cpp_panel'
     render_only = Get-BoolProperty -Payload $Status -Name 'render_only' -Default $true
     authority_granted = Get-BoolProperty -Payload $Status -Name 'authority_granted' -Default $false
     controls_user_os_cursor = Get-BoolProperty -Payload $Status -Name 'controls_user_os_cursor' -Default $false
@@ -1740,6 +2080,142 @@ function Set-NativeOrbRendererPosition {
   }
 
   return $MoveResult
+}
+
+function Set-NativeOrbRendererContactPulse {
+  param(
+    [string]$Root,
+    [string]$ContactPhase = ''
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return [ordered]@{
+      attempted = $false
+      applied = $false
+      status = 'native_renderer_root_not_configured'
+      contact_phase = $ContactPhase
+      controls_user_os_cursor = $false
+      grants_execution_authority = $false
+      grants_mutation_authority = $false
+    }
+  }
+
+  $Readback = Get-NativeOrbRendererReadback -Root $Root
+  $ProcessId = Get-IntegerProperty -Payload $Readback -Name 'pid' -Default 0
+  $Status = 'native_renderer_contact_unavailable'
+  $Applied = $false
+  $WindowHandle = [Int64]0
+
+  if ((Get-BoolProperty -Payload $Readback -Name 'process_alive' -Default $false) -and $ProcessId -gt 0) {
+    try {
+      Initialize-NativeOrbRendererInterop
+      $Handle = [FrancisNativeOrbRendererNative]::FindRendererWindow($ProcessId)
+      $WindowHandle = $Handle.ToInt64()
+      if ($Handle -ne [IntPtr]::Zero) {
+        $Applied = [bool][FrancisNativeOrbRendererNative]::PostMessage(
+          $Handle,
+          [FrancisNativeOrbRendererNative]::ContactPulseMessage,
+          [IntPtr]::Zero,
+          [IntPtr]::Zero
+        )
+        $Status = if ($Applied) { 'native_renderer_contact_posted' } else { 'native_renderer_contact_post_failed' }
+      } else {
+        $Status = 'native_renderer_window_not_found'
+      }
+    } catch {
+      $Status = 'native_renderer_contact_post_failed'
+    }
+  } else {
+    $Status = 'native_renderer_process_not_alive'
+  }
+
+  return [ordered]@{
+    attempted = $true
+    applied = $Applied
+    status = $Status
+    renderer = 'native_cpp_orb_renderer'
+    process_id = $ProcessId
+    window_handle = $WindowHandle
+    contact_phase = $ContactPhase
+    message = 'native_contact_pulse'
+    controls_user_os_cursor = $false
+    can_click = $false
+    can_drag = $false
+    can_type = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+}
+
+function Show-NativeOrbRendererLocalUiPanel {
+  param(
+    [string]$Root,
+    [string]$Trigger = 'right_click',
+    [string]$RequestId = ''
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return [ordered]@{
+      attempted = $false
+      applied = $false
+      status = 'native_renderer_root_not_configured'
+      trigger = $Trigger
+      request_id = $RequestId
+      controls_user_os_cursor = $false
+      grants_execution_authority = $false
+      grants_mutation_authority = $false
+    }
+  }
+
+  $Readback = Get-NativeOrbRendererReadback -Root $Root
+  $ProcessId = Get-IntegerProperty -Payload $Readback -Name 'pid' -Default 0
+  $Status = 'native_local_ui_panel_unavailable'
+  $Applied = $false
+  $WindowHandle = [Int64]0
+
+  if ((Get-BoolProperty -Payload $Readback -Name 'process_alive' -Default $false) -and $ProcessId -gt 0) {
+    try {
+      Initialize-NativeOrbRendererInterop
+      $Handle = [FrancisNativeOrbRendererNative]::FindRendererWindow($ProcessId)
+      $WindowHandle = $Handle.ToInt64()
+      if ($Handle -ne [IntPtr]::Zero) {
+        $Applied = [bool][FrancisNativeOrbRendererNative]::PostMessage(
+          $Handle,
+          [FrancisNativeOrbRendererNative]::ShowLocalUiMessage,
+          [IntPtr]::Zero,
+          [IntPtr]::Zero
+        )
+        $Status = if ($Applied) { 'native_local_ui_panel_show_posted' } else { 'native_local_ui_panel_show_post_failed' }
+      } else {
+        $Status = 'native_renderer_window_not_found'
+      }
+    } catch {
+      $Status = 'native_local_ui_panel_show_post_failed'
+    }
+  } else {
+    $Status = 'native_renderer_process_not_alive'
+  }
+
+  return [ordered]@{
+    attempted = $true
+    applied = $Applied
+    status = $Status
+    renderer = 'native_cpp_orb_renderer'
+    process_id = $ProcessId
+    window_handle = $WindowHandle
+    trigger = $Trigger
+    request_id = $RequestId
+    message = 'native_show_local_ui_panel'
+    native_local_ui_panel = $true
+    native_local_ui_panel_supported = Get-BoolProperty -Payload $Readback -Name 'native_local_ui_panel_supported' -Default $true
+    native_local_ui_panel_open_mode = 'native_cpp_panel'
+    controls_user_os_cursor = $false
+    can_click = $false
+    can_drag = $false
+    can_type = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
 }
 
 function Stop-NativeOrbRenderer {
@@ -3294,6 +3770,7 @@ function Write-OverlayOrbVirtualPointerReceipt {
   $LastAction = if ($null -ne $Pointer -and $null -ne $Pointer.PSObject.Properties['last_action']) { $Pointer.last_action } else { $null }
   $PublicAction = if ($null -ne $LastAction -and $null -ne $LastAction.PSObject.Properties['public_action']) { $LastAction.public_action } else { $null }
   $Gesture = if ($null -ne $LastAction -and $null -ne $LastAction.PSObject.Properties['gesture']) { $LastAction.gesture } else { $null }
+  $ContactState = if ($null -ne $LastAction -and $null -ne $LastAction.PSObject.Properties['contact_state']) { $LastAction.contact_state } else { $null }
   $DragStart = if ($null -ne $Gesture -and $null -ne $Gesture.PSObject.Properties['start']) { $Gesture.start } else { $null }
   $DragEnd = if ($null -ne $Gesture -and $null -ne $Gesture.PSObject.Properties['end']) { $Gesture.end } else { $null }
   $Receipt = [ordered]@{
@@ -3312,11 +3789,19 @@ function Write-OverlayOrbVirtualPointerReceipt {
     last_action_button = Get-StringProperty -Payload $PublicAction -Name 'button' -Default ''
     last_action_clicks = Get-StringProperty -Payload $PublicAction -Name 'clicks' -Default ''
     gesture_kind = Get-StringProperty -Payload $Gesture -Name 'kind' -Default ''
+    orb_action_phase = Get-StringProperty -Payload $LastAction -Name 'orb_action_phase' -Default (Get-StringProperty -Payload $Gesture -Name 'orb_action_phase' -Default '')
+    pending_contact_phase = Get-StringProperty -Payload $ContactState -Name 'pending_contact_phase' -Default (Get-StringProperty -Payload $Gesture -Name 'pending_contact_phase' -Default '')
+    contact_visual_required = Get-BoolProperty -Payload $ContactState -Name 'required' -Default $false
+    contact_visual_applied = Get-BoolProperty -Payload $Result -Name 'contact_visual_applied' -Default $false
     drag_start_x = Get-StringProperty -Payload $DragStart -Name 'x' -Default ''
     drag_start_y = Get-StringProperty -Payload $DragStart -Name 'y' -Default ''
     drag_target_x = Get-StringProperty -Payload $DragEnd -Name 'x' -Default ''
     drag_target_y = Get-StringProperty -Payload $DragEnd -Name 'y' -Default ''
     applied = Get-BoolProperty -Payload $Result -Name 'runtime_overlay_position_changed' -Default $false
+    travelled_to_target = Get-BoolProperty -Payload $Result -Name 'travelled_to_target' -Default $false
+    travel_duration_ms = Get-IntegerProperty -Payload $Result -Name 'travel_duration_ms' -Default 0
+    travel_timing_source = Get-StringProperty -Payload $Result -Name 'travel_timing_source' -Default ''
+    travel_easing = Get-StringProperty -Payload $Result -Name 'travel_easing' -Default ''
     overlay_left = Get-StringProperty -Payload $Result -Name 'overlay_left' -Default ''
     overlay_top = Get-StringProperty -Payload $Result -Name 'overlay_top' -Default ''
     source = 'francis.orb_operator.virtual_pointer_state'
@@ -3329,6 +3814,9 @@ function Write-OverlayOrbVirtualPointerReceipt {
     native_renderer_move_attempted = Get-BoolProperty -Payload $Result -Name 'native_renderer_move_attempted' -Default $false
     native_renderer_move_applied = Get-BoolProperty -Payload $Result -Name 'native_renderer_move_applied' -Default $false
     native_renderer_move_status = Get-StringProperty -Payload $Result -Name 'native_renderer_move_status' -Default ''
+    native_renderer_contact_attempted = Get-BoolProperty -Payload $Result -Name 'native_renderer_contact_attempted' -Default $false
+    native_renderer_contact_applied = Get-BoolProperty -Payload $Result -Name 'native_renderer_contact_applied' -Default $false
+    native_renderer_contact_status = Get-StringProperty -Payload $Result -Name 'native_renderer_contact_status' -Default ''
     mutation_authority_scope = 'runtime_overlay_position_only'
     controls_user_os_cursor = $false
     user_mouse_taken = $false
@@ -3696,14 +4184,22 @@ function Get-OverlayOrbControlState {
   if ($null -eq $Variable -or $null -eq $Variable.Value) {
     $script:LensOverlayOrbControlState = [ordered]@{
       right_click_panel_supported = $true
+      right_click_backend_surface_supported = $false
+      right_click_local_ui_supported = $true
       panel_visible = $false
-      panel_width = 292
-      panel_max_height = 268
-      chat_input_max_length = 600
-      conversation_surface = 'lens.overlay.orb.right_click_chat'
-      chat_bridge_route = '/chat/send'
-      chat_bridge_actor = 'lens.overlay.voice'
-      voice_reply_requested = $true
+      panel_minimize_supported = $true
+      panel_minimized = $false
+      panel_width = 0
+      panel_max_height = 0
+      chat_input_max_length = 0
+      conversation_surface = 'francis.native_cpp_orb.local_ui_panel'
+      backend_surface_path = ''
+      backend_surface_url = ''
+      local_ui_surface = 'native.cpp.orb.local_ui_panel'
+      local_ui_open_mode = 'native_cpp_panel'
+      chat_bridge_route = ''
+      chat_bridge_actor = ''
+      voice_reply_requested = $false
       latest_status = 'not_opened'
       latest_action = ''
       latest_feature = ''
@@ -3735,13 +4231,55 @@ function Get-OverlayOrbControlFeatures {
 function Get-OverlayOrbControlReadback {
   $State = Get-OverlayOrbControlState
   $State['features'] = Get-OverlayOrbControlFeatures
-  $State['voice_reply_requested'] = $true
-  $State['chat_bridge_route'] = '/chat/send'
-  $State['chat_bridge_actor'] = 'lens.overlay.voice'
-  $State['conversation_surface'] = 'lens.overlay.orb.right_click_chat'
+  $State['right_click_panel_supported'] = $true
+  $State['right_click_backend_surface_supported'] = $false
+  $State['right_click_local_ui_supported'] = $true
+  $State['panel_minimize_supported'] = $true
+  $State['voice_reply_requested'] = $false
+  $State['chat_bridge_route'] = ''
+  $State['chat_bridge_actor'] = ''
+  $State['conversation_surface'] = 'francis.native_cpp_orb.local_ui_panel'
+  $State['backend_surface_path'] = ''
+  $State['backend_surface_url'] = ''
+  $State['local_ui_surface'] = 'native.cpp.orb.local_ui_panel'
+  $State['local_ui_open_mode'] = 'native_cpp_panel'
   $State['grants_execution_authority'] = $false
   $State['grants_mutation_authority'] = $false
   return $State
+}
+
+function Get-OverlayOrbBackendSurfaceUrl {
+  $BaseUrl = ([string]$ChatUiBaseUrl).Trim()
+  if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+    $BaseUrl = 'http://127.0.0.1:5173'
+  }
+
+  try {
+    $Uri = [System.Uri]::new($BaseUrl)
+    return '{0}/backend' -f $Uri.GetLeftPart([System.UriPartial]::Authority).TrimEnd('/')
+  } catch {
+    return 'http://127.0.0.1:5173/backend'
+  }
+}
+
+function Test-OverlayLocalBackendSurfaceUrl {
+  param([string]$Url)
+
+  try {
+    $Uri = [System.Uri]::new(([string]$Url).Trim())
+  } catch {
+    return $false
+  }
+  if (@('http', 'https') -notcontains $Uri.Scheme.ToLowerInvariant()) {
+    return $false
+  }
+  $TargetHost = $Uri.Host.Trim().ToLowerInvariant()
+  return (
+    $TargetHost -eq 'localhost' -or
+    $TargetHost -eq '127.0.0.1' -or
+    $TargetHost.StartsWith('127.') -or
+    $TargetHost -eq '::1'
+  )
 }
 
 function Get-OverlayOrbControlReceiptRoot {
@@ -3769,11 +4307,15 @@ function Write-OverlayOrbControlReceipt {
     kind = 'lens.overlay.orb_control.receipt'
     receipt_id = $ReceiptId
     action = $Action
-    control_surface = 'lens.overlay.orb.right_click_panel'
-    conversation_surface = 'lens.overlay.orb.right_click_chat'
-    chat_bridge_route = '/chat/send'
-    chat_bridge_actor = 'lens.overlay.voice'
-    voice_reply_requested = $true
+    control_surface = 'native.cpp.orb.local_ui_panel'
+    conversation_surface = 'francis.native_cpp_orb.local_ui_panel'
+    backend_surface_path = ''
+    backend_surface_url = ''
+    local_ui_surface = 'native.cpp.orb.local_ui_panel'
+    local_ui_open_mode = 'native_cpp_panel'
+    chat_bridge_route = ''
+    chat_bridge_actor = ''
+    voice_reply_requested = $false
     bounded_overlay_control = $true
     overlay_runtime_owns_execution = $true
     overlay_stores_transcript = $false
@@ -4479,7 +5021,14 @@ function Start-OrbWindowCoordinateTravel {
         $TravelWindow.Left = [double]$Context['target_left']
         $TravelWindow.Top = [double]$Context['target_top']
         Set-OrbInWindowOffset -OffsetX ([double]$Context['target_offset_x']) -OffsetY ([double]$Context['target_offset_y'])
-        if (-not [string]::IsNullOrWhiteSpace([string]$Context['target_anchor'])) {
+        $ContextRequest = $Context['request']
+        $ContextRequestKind = if ($null -ne $ContextRequest) { Get-StringProperty -Payload $ContextRequest -Name 'kind' -Default '' } else { '' }
+        $IsVirtualPointerTravel = ($ContextRequestKind -eq 'francis.orb_operator.virtual_pointer_state')
+        $OperatorAnchorReleasedAfterVirtualPointer = $false
+        if ($IsVirtualPointerTravel) {
+          $script:LensOverlayOperatorPositionAnchor = ''
+          $OperatorAnchorReleasedAfterVirtualPointer = $true
+        } elseif (-not [string]::IsNullOrWhiteSpace([string]$Context['target_anchor'])) {
           $script:LensOverlayOperatorPositionAnchor = [string]$Context['target_anchor']
         }
         $NativeRendererMove = if (-not [string]::IsNullOrWhiteSpace([string]$Context['root'])) {
@@ -4523,6 +5072,7 @@ function Start-OrbWindowCoordinateTravel {
           click_hit_box_scope = [string]$Context['click_hit_box_scope']
           reach_mode = [string]$Context['reach_mode']
           overlay_position_anchor = [string]$Context['target_anchor']
+          operator_anchor_released_after_virtual_pointer = $OperatorAnchorReleasedAfterVirtualPointer
           position_receipt_written = $PositionReceiptWritten
           travelled_to_target = $true
           travel_duration_ms = [int][Math]::Round($ElapsedMilliseconds)
@@ -4544,8 +5094,39 @@ function Start-OrbWindowCoordinateTravel {
           error = ''
         }
         if ($null -ne $Context['request'] -and -not [string]::IsNullOrWhiteSpace([string]$Context['root'])) {
-          Write-OverlayOrbPositionCommandReceipt -Root ([string]$Context['root']) -RequestId ([string]$Context['request_id']) -Request $Context['request'] -Result $Result
-          $Result.position_command_receipt_path = 'data/runtime/lens-overlay/orb-position-commands/{0}.json' -f ([string]$Context['request_id'])
+          if ($ContextRequestKind -eq 'francis.orb_operator.virtual_pointer_state') {
+            $LastAction = if ($null -ne $ContextRequest -and $null -ne $ContextRequest.PSObject.Properties['last_action']) { $ContextRequest.last_action } else { $null }
+            $ContactState = if ($null -ne $LastAction -and $null -ne $LastAction.PSObject.Properties['contact_state']) { $LastAction.contact_state } else { $null }
+            $ContactPhase = Get-StringProperty -Payload $ContactState -Name 'pending_contact_phase' -Default ''
+            $NativeContact = if (-not [string]::IsNullOrWhiteSpace($ContactPhase)) {
+              Set-NativeOrbRendererContactPulse -Root ([string]$Context['root']) -ContactPhase $ContactPhase
+            } else {
+              [ordered]@{
+                attempted = $false
+                applied = $false
+                status = 'native_renderer_contact_not_requested'
+                contact_phase = ''
+                grants_execution_authority = $false
+                grants_mutation_authority = $false
+              }
+            }
+            $VirtualResult = [ordered]@{}
+            foreach ($Key in $Result.Keys) {
+              $VirtualResult[$Key] = $Result[$Key]
+            }
+            $VirtualResult.status = 'orb_virtual_pointer_applied'
+            $VirtualResult.command = 'orb.virtual_pointer'
+            $VirtualResult.command_id = 'orb.virtual_pointer'
+            $VirtualResult.contact_visual_applied = [bool]$NativeContact['applied']
+            $VirtualResult.native_renderer_contact_attempted = [bool]$NativeContact['attempted']
+            $VirtualResult.native_renderer_contact_applied = [bool]$NativeContact['applied']
+            $VirtualResult.native_renderer_contact_status = [string]$NativeContact['status']
+            Write-OverlayOrbVirtualPointerReceipt -Root ([string]$Context['root']) -RequestId ([string]$Context['request_id']) -Pointer $ContextRequest -Result $VirtualResult
+            $Result.virtual_pointer_receipt_path = 'data/runtime/lens-overlay/orb-position-commands/{0}.json' -f ([string]$Context['request_id'])
+          } else {
+            Write-OverlayOrbPositionCommandReceipt -Root ([string]$Context['root']) -RequestId ([string]$Context['request_id']) -Request $ContextRequest -Result $Result
+            $Result.position_command_receipt_path = 'data/runtime/lens-overlay/orb-position-commands/{0}.json' -f ([string]$Context['request_id'])
+          }
         }
         $script:LensOverlayOrbMovePlaceModeResult = $Result
         $Context['clock'].Stop()
@@ -4932,6 +5513,18 @@ function Invoke-OverlayOrbVirtualPointerState {
     $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
     return $null
   }
+  try {
+    $PointerUpdatedAtTime = [DateTimeOffset]::Parse($PointerUpdatedAt, [Globalization.CultureInfo]::InvariantCulture)
+    $PointerAgeSeconds = ([DateTimeOffset]::UtcNow - $PointerUpdatedAtTime.ToUniversalTime()).TotalSeconds
+    if ($PointerAgeSeconds -gt 30.0) {
+      $script:LensOverlayLastOrbVirtualPointerUpdatedAt = $PointerUpdatedAt
+      $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
+      return $null
+    }
+  } catch {
+    $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
+    return $null
+  }
   $LastPointerVariable = Get-Variable -Name LensOverlayLastOrbVirtualPointerUpdatedAt -Scope Script -ErrorAction SilentlyContinue
   $LastPointerUpdatedAt = if ($null -ne $LastPointerVariable) { [string]$LastPointerVariable.Value } else { '' }
   if ($PointerUpdatedAt -eq $LastPointerUpdatedAt) {
@@ -4952,37 +5545,46 @@ function Invoke-OverlayOrbVirtualPointerState {
     }
   }
 
-  $Position = Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y -MotionState $MotionState -TargetAnchor 'orb_pointer' -Root $Root
+  $RequestId = 'orb-virtual-pointer-{0}' -f (Get-OverlayTextDigest -Text $PointerUpdatedAt).Substring(0, 12)
+  $Travel = Start-OrbWindowCoordinateTravel -Window $Window -WorkArea $WorkArea -X $X -Y $Y -MotionState $MotionState -TargetAnchor 'orb_pointer' -Root $Root -RequestId $RequestId -Request $Pointer
   $Payload = [ordered]@{
-    status = if ([bool]$Position['applied']) { 'orb_virtual_pointer_applied' } else { 'orb_virtual_pointer_unavailable' }
-    ok = [bool]$Position['applied']
-    runtime_overlay_position_changed = [bool]$Position['applied']
+    status = Get-StringProperty -Payload $Travel -Name 'status' -Default 'orb_virtual_pointer_travel_unknown'
+    ok = Get-BoolProperty -Payload $Travel -Name 'ok' -Default $false
     virtual_pointer_x = $X
     virtual_pointer_y = $Y
-    overlay_left = if ([bool]$Position['applied']) { [double]$Position['left'] } else { 0.0 }
-    overlay_top = if ([bool]$Position['applied']) { [double]$Position['top'] } else { 0.0 }
-    orb_center_x = if ([bool]$Position['applied']) { [double]$Position['orb_center_x'] } else { 0.0 }
-    orb_center_y = if ([bool]$Position['applied']) { [double]$Position['orb_center_y'] } else { 0.0 }
-    orb_in_window_offset_x = if ([bool]$Position['applied']) { [double]$Position['orb_in_window_offset_x'] } else { 0.0 }
-    orb_in_window_offset_y = if ([bool]$Position['applied']) { [double]$Position['orb_in_window_offset_y'] } else { 0.0 }
-    full_screen_overlay_plane = Get-BoolProperty -Payload $Position -Name 'full_screen_overlay_plane' -Default $false
-    overlay_window_stationary = Get-BoolProperty -Payload $Position -Name 'overlay_window_stationary' -Default $false
-    click_hit_box_size = Get-StringProperty -Payload $Position -Name 'click_hit_box_size' -Default ''
-    click_hit_box_scope = Get-StringProperty -Payload $Position -Name 'click_hit_box_scope' -Default ''
-    reach_mode = Get-StringProperty -Payload $Position -Name 'reach_mode' -Default ''
-    position_receipt_written = Get-BoolProperty -Payload $Position -Name 'position_receipt_written' -Default $false
-    native_renderer_move_attempted = Get-BoolProperty -Payload $Position -Name 'native_renderer_move_attempted' -Default $false
-    native_renderer_move_applied = Get-BoolProperty -Payload $Position -Name 'native_renderer_move_applied' -Default $false
-    native_renderer_move_status = Get-StringProperty -Payload $Position -Name 'native_renderer_move_status' -Default ''
+    runtime_overlay_position_changed = $false
+    overlay_left = 0.0
+    overlay_top = 0.0
+    orb_center_x = Get-StringProperty -Payload $Travel -Name 'orb_center_x' -Default ''
+    orb_center_y = Get-StringProperty -Payload $Travel -Name 'orb_center_y' -Default ''
+    orb_in_window_offset_x = Get-StringProperty -Payload $Travel -Name 'orb_in_window_offset_x' -Default ''
+    orb_in_window_offset_y = Get-StringProperty -Payload $Travel -Name 'orb_in_window_offset_y' -Default ''
+    full_screen_overlay_plane = $false
+    overlay_window_stationary = $false
+    click_hit_box_size = ''
+    click_hit_box_scope = ''
+    reach_mode = Get-StringProperty -Payload $Travel -Name 'reach_mode' -Default ''
+    position_receipt_written = $false
+    travel_started = Get-BoolProperty -Payload $Travel -Name 'ok' -Default $false
+    travelled_to_target = $false
+    travel_duration_ms = Get-IntegerProperty -Payload $Travel -Name 'travel_duration_ms' -Default 0
+    travel_timing_source = Get-StringProperty -Payload $Travel -Name 'travel_timing_source' -Default 'composition_rendering'
+    travel_easing = Get-StringProperty -Payload $Travel -Name 'travel_easing' -Default 'smootherstep'
+    native_renderer_move_attempted = $false
+    native_renderer_move_applied = $false
+    native_renderer_move_status = ''
+    contact_visual_applied = $false
+    native_renderer_contact_attempted = $false
+    native_renderer_contact_applied = $false
+    native_renderer_contact_status = ''
     controls_user_os_cursor = $false
     user_mouse_taken = $false
     physical_input_performed = $false
     desktop_effect_performed = $false
     grants_execution_authority = $false
     grants_mutation_authority = $false
-    error = Get-StringProperty -Payload $Position -Name 'error' -Default ''
+    error = Get-StringProperty -Payload $Travel -Name 'error' -Default ''
   }
-  $RequestId = 'orb-virtual-pointer-{0}' -f (Get-OverlayTextDigest -Text $PointerUpdatedAt).Substring(0, 12)
   Write-OverlayOrbVirtualPointerReceipt -Root $Root -RequestId $RequestId -Pointer $Pointer -Result $Payload
   $script:LensOverlayLastOrbVirtualPointerUpdatedAt = $PointerUpdatedAt
   $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
@@ -5835,7 +6437,7 @@ function Update-OverlayRuntimeVoiceFeatureFlags {
     $script:LensOverlayRuntimeVoice = New-OverlayRuntimeVoiceProjection -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -WakeListening ($null -ne (Get-OverlayScriptValue -Name LensOverlayWakeRecognizer)) -WakePhraseText $script:LensOverlayRequestedWakePhrase -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold
   }
   $script:LensOverlayRuntimeVoice.voice_llm_enabled = Get-OverlayVoiceUseLlm
-  $script:LensOverlayRuntimeVoice.voice_llm_request_source = if (Get-OverlayVoiceUseLlm) { 'orb_right_click_panel_or_EnableVoiceLlm' } else { 'disabled' }
+  $script:LensOverlayRuntimeVoice.voice_llm_request_source = if (Get-OverlayVoiceUseLlm) { 'orb_backend_surface_or_EnableVoiceLlm' } else { 'disabled' }
   $ContinuousVoiceChat = Get-OverlayScriptBool -Name LensOverlayRequestedContinuousVoiceChat
   Set-OverlayContinuousVoiceChatGateReadback -Payload $script:LensOverlayRuntimeVoice -ContinuousVoiceChat $ContinuousVoiceChat -PushToTalkActive (Test-OverlayContinuousVoiceChatPushToTalkActive)
   $script:LensOverlayRuntimeVoice.microphone_gate_while_speaking = 'francis_stop_only'
@@ -5851,7 +6453,7 @@ function Publish-OverlayOrbControlRuntimeState {
   }
   $Config = Get-OverlayScriptValue -Name LensOverlayConfig -Default (Get-OverlayConfig)
   $BodyState = New-DeferredMcpBodyStateForOverlay -Config $Config
-  Write-OverlayState -Root $script:LensOverlayDataRoot -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop ([bool]$script:LensOverlayWindow.TopMost) -Message 'Francis Lens overlay window is running with Orb right-click controls available.' -McpBodyState $BodyState -OrbVisual $script:LensOverlayOrbVisual -OverlayVoice $script:LensOverlayRuntimeVoice
+  Write-OverlayState -Root $script:LensOverlayDataRoot -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop ([bool]$script:LensOverlayWindow.TopMost) -Message 'Francis Lens overlay window is running with Orb right-click backend surface available.' -McpBodyState $BodyState -OrbVisual $script:LensOverlayOrbVisual -OverlayVoice $script:LensOverlayRuntimeVoice
 }
 
 function Set-OverlayOrbControlStatusText {
@@ -6153,13 +6755,34 @@ function New-OverlayOrbRightClickPanel {
   $Stack = New-Object System.Windows.Controls.StackPanel
   $Stack.Orientation = [System.Windows.Controls.Orientation]::Vertical
 
+  $HeaderRow = New-Object System.Windows.Controls.DockPanel
+  $HeaderRow.LastChildFill = $true
+  $HeaderRow.Margin = New-Object System.Windows.Thickness(0, 0, 0, 6)
+
+  $MinimizeButton = New-Object System.Windows.Controls.Button
+  $MinimizeButton.Content = '_'
+  $MinimizeButton.Width = 24
+  $MinimizeButton.Height = 22
+  $MinimizeButton.Padding = New-Object System.Windows.Thickness(0)
+  $MinimizeButton.ToolTip = 'Minimize local Orb UI'
+  $MinimizeButton.FontSize = 12
+  $MinimizeButton.Add_Click({
+      param($Sender, $EventArgs)
+
+      $EventArgs.Handled = $true
+      [void](Minimize-OverlayOrbRightClickPanel -Trigger 'panel_minimize_button')
+    })
+  [System.Windows.Controls.DockPanel]::SetDock($MinimizeButton, [System.Windows.Controls.Dock]::Right)
+  [void]$HeaderRow.Children.Add($MinimizeButton)
+
   $Header = New-Object System.Windows.Controls.TextBlock
-  $Header.Text = 'Francis Orb'
+  $Header.Text = 'Francis Local UI'
   $Header.FontSize = 13
   $Header.FontWeight = [System.Windows.FontWeights]::SemiBold
   $Header.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(255, 248, 250, 252))
-  $Header.Margin = New-Object System.Windows.Thickness(0, 0, 0, 6)
-  [void]$Stack.Children.Add($Header)
+  $Header.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+  [void]$HeaderRow.Children.Add($Header)
+  [void]$Stack.Children.Add($HeaderRow)
 
   $FeatureWrap = New-Object System.Windows.Controls.WrapPanel
   $FeatureWrap.Margin = New-Object System.Windows.Thickness(0, 0, 0, 8)
@@ -6173,40 +6796,8 @@ function New-OverlayOrbRightClickPanel {
   [void]$FeatureWrap.Children.Add($MotionCheck)
   [void]$Stack.Children.Add($FeatureWrap)
 
-  $ChatRow = New-Object System.Windows.Controls.DockPanel
-  $ChatRow.LastChildFill = $true
-  $ChatRow.Margin = New-Object System.Windows.Thickness(0, 0, 0, 6)
-  $SendButton = New-Object System.Windows.Controls.Button
-  $SendButton.Content = 'Send'
-  $SendButton.MinWidth = 54
-  $SendButton.Height = 26
-  $SendButton.Margin = New-Object System.Windows.Thickness(8, 0, 0, 0)
-  [System.Windows.Controls.DockPanel]::SetDock($SendButton, [System.Windows.Controls.Dock]::Right)
-  $Input = New-Object System.Windows.Controls.TextBox
-  $Input.Height = 26
-  $Input.MaxLength = 600
-  $Input.ToolTip = 'Message Francis through the Orb'
-  $Input.FontSize = 12
-  $Input.Add_KeyDown({
-      param($Sender, $EventArgs)
-
-      if ($EventArgs.Key -eq [System.Windows.Input.Key]::Enter) {
-        $EventArgs.Handled = $true
-        [void](Invoke-OverlayOrbPanelChatSubmit -Text ([string]$Sender.Text))
-      }
-    })
-  $SendButton.Add_Click({
-      param($Sender, $EventArgs)
-
-      $EventArgs.Handled = $true
-      [void](Invoke-OverlayOrbPanelChatSubmit -Text ([string]$script:LensOverlayOrbPanelInput.Text))
-    })
-  [void]$ChatRow.Children.Add($SendButton)
-  [void]$ChatRow.Children.Add($Input)
-  [void]$Stack.Children.Add($ChatRow)
-
   $StatusText = New-Object System.Windows.Controls.TextBlock
-  $StatusText.Text = 'Receipted Orb chat. Hold Ctrl+V for push-to-talk.'
+  $StatusText.Text = 'Local Orb UI open. No browser or desktop input authority was granted.'
   $StatusText.FontSize = 11
   $StatusText.TextWrapping = [System.Windows.TextWrapping]::Wrap
   $StatusText.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(220, 203, 213, 225))
@@ -6217,16 +6808,56 @@ function New-OverlayOrbRightClickPanel {
   $Popup.Add_Closed({
       $State = Get-OverlayOrbControlState
       $State['panel_visible'] = $false
-      $State['latest_status'] = 'panel_closed'
+      if (-not [bool](Get-OverlayScriptBool -Name LensOverlayOrbPanelClosingForMinimize)) {
+        $State['panel_minimized'] = $false
+        $State['latest_status'] = 'panel_closed'
+        Publish-OverlayOrbControlRuntimeState
+      }
     })
 
   $script:LensOverlayOrbPanelWakeCheck = $WakeCheck
   $script:LensOverlayOrbPanelContinuousCheck = $ContinuousCheck
   $script:LensOverlayOrbPanelLlmCheck = $LlmCheck
   $script:LensOverlayOrbPanelMotionCheck = $MotionCheck
-  $script:LensOverlayOrbPanelInput = $Input
+  $script:LensOverlayOrbPanelMinimizeButton = $MinimizeButton
+  $script:LensOverlayOrbPanelInput = $null
   $script:LensOverlayOrbPanelStatusText = $StatusText
   return $Popup
+}
+
+function Minimize-OverlayOrbRightClickPanel {
+  param(
+    [string]$Trigger = 'panel_minimize_button',
+    [string]$RequestId = ''
+  )
+
+  $State = Get-OverlayOrbControlState
+  if ([string]::IsNullOrWhiteSpace($RequestId)) {
+    $RequestId = [string]$State['latest_request_id']
+  }
+  $State['panel_visible'] = $false
+  $State['panel_minimized'] = $true
+  $State['latest_status'] = 'local_ui_panel_minimized'
+  $State['latest_trigger'] = $Trigger
+  $State['latest_request_id'] = $RequestId
+  $Receipt = Write-OverlayOrbControlReceipt -Root $script:LensOverlayDataRoot -Action 'local_ui_panel_minimize' -Details ([ordered]@{
+      status = 'local_ui_panel_minimized'
+      trigger = $Trigger
+      request_id = $RequestId
+      panel_minimized = $true
+      opened_external_process = $false
+    })
+  $Popup = Get-OverlayScriptValue -Name LensOverlayOrbPanelPopup
+  if ($null -ne $Popup) {
+    try {
+      $script:LensOverlayOrbPanelClosingForMinimize = $true
+      $Popup.IsOpen = $false
+    } finally {
+      $script:LensOverlayOrbPanelClosingForMinimize = $false
+    }
+  }
+  Publish-OverlayOrbControlRuntimeState
+  return $Receipt
 }
 
 function Show-OverlayOrbRightClickPanel {
@@ -6236,39 +6867,32 @@ function Show-OverlayOrbRightClickPanel {
     [string]$RequestId = ''
   )
 
-  if ($null -eq (Get-OverlayScriptValue -Name LensOverlayOrbPanelPopup)) {
-    $script:LensOverlayOrbPanelPopup = New-OverlayOrbRightClickPanel -PlacementTarget $PlacementTarget
-  }
-  $script:LensOverlayOrbPanelPopup.PlacementTarget = $PlacementTarget
-  if ($Trigger -eq 'right_click') {
-    $script:LensOverlayOrbPanelPopup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::MousePoint
-    $script:LensOverlayOrbPanelPopup.HorizontalOffset = 0
-    $script:LensOverlayOrbPanelPopup.VerticalOffset = 0
-  } else {
-    $script:LensOverlayOrbPanelPopup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Right
-    $script:LensOverlayOrbPanelPopup.HorizontalOffset = 12
-    $script:LensOverlayOrbPanelPopup.VerticalOffset = -24
-  }
-  Update-OverlayOrbPanelFeatureChecks
+  $NativeShow = Show-NativeOrbRendererLocalUiPanel -Root $script:LensOverlayDataRoot -Trigger $Trigger -RequestId $RequestId
+  $NativeApplied = Get-BoolProperty -Payload $NativeShow -Name 'applied' -Default $false
   $State = Get-OverlayOrbControlState
-  $State['panel_visible'] = $true
-  $State['latest_status'] = 'panel_open'
+  $State['panel_visible'] = $NativeApplied
+  $State['panel_minimized'] = $false
+  $State['latest_status'] = if ($NativeApplied) { 'native_local_ui_panel_opened' } else { 'native_local_ui_panel_unavailable' }
   $State['latest_request_id'] = $RequestId
   $State['latest_trigger'] = $Trigger
-  $Receipt = Write-OverlayOrbControlReceipt -Root $script:LensOverlayDataRoot -Action 'panel_open' -Details ([ordered]@{
-        status = 'panel_open'
+  $State['local_ui_surface'] = 'native.cpp.orb.local_ui_panel'
+  $State['local_ui_open_mode'] = 'native_cpp_panel'
+  $State['panel_width'] = 320
+  $State['panel_max_height'] = 146
+  $Action = if ($NativeApplied) { 'native_local_ui_panel_open' } else { 'native_local_ui_panel_refused' }
+  $Receipt = Write-OverlayOrbControlReceipt -Root $script:LensOverlayDataRoot -Action $Action -Details ([ordered]@{
+        status = $State['latest_status']
         trigger = $Trigger
         request_id = $RequestId
-        panel_width = 292
-        panel_max_height = 268
+        native_show = $NativeShow
+        native_local_ui_panel = $true
+        native_local_ui_panel_supported = $true
+        panel_width = 320
+        panel_max_height = 146
+        panel_minimized = $false
         features = Get-OverlayOrbControlFeatures
+        opened_external_process = $false
       })
-  $script:LensOverlayOrbPanelPopup.IsOpen = $true
-  Set-OverlayOrbControlStatusText -Text 'Receipted Orb chat. Replies speak through voice.'
-  try {
-    [void]$script:LensOverlayOrbPanelInput.Focus()
-  } catch {
-  }
   Publish-OverlayOrbControlRuntimeState
   return $Receipt
 }
@@ -6296,29 +6920,104 @@ function Invoke-OverlayQueuedSummonRequest {
   $Action = Get-StringProperty -Payload $Request -Name 'action' -Default ''
   $AuthorityScope = Get-StringProperty -Payload $Request -Name 'authority_scope' -Default ''
   $Trigger = Get-StringProperty -Payload $Request -Name 'trigger' -Default ''
-  $PlacementTarget = Get-OverlayScriptValue -Name LensOverlayOrbHitBox
-  if ($null -eq $PlacementTarget) {
-    $PlacementTarget = Get-OverlayScriptValue -Name LensOverlayEnergyRoot
-  }
-
   try {
     if (
       [string]::IsNullOrWhiteSpace($RequestId) -or
       $RequestKind -ne 'lens.overlay.summon_request' -or
-      $Action -ne 'open_orb_panel' -or
+      @('open_orb_panel', 'open_local_ui_panel') -notcontains $Action -or
       $AuthorityScope -ne 'runtime_overlay_panel_only' -or
-      @('global_hotkey', 'local_open') -notcontains $Trigger -or
-      $null -eq $PlacementTarget
+      @('global_hotkey', 'local_open') -notcontains $Trigger
     ) {
-      return Write-OverlayOrbControlReceipt -Root $Root -Action 'summon_refused' -Details ([ordered]@{
+      $Receipt = Write-OverlayOrbControlReceipt -Root $Root -Action 'summon_refused' -Details ([ordered]@{
           status = 'summon_refused'
           request_id = $RequestId
           trigger = $Trigger
           error = 'invalid_or_unavailable_summon_request'
           authority_scope = $AuthorityScope
         })
+      Publish-OverlayOrbControlRuntimeState
+      return $Receipt
     }
-    return Show-OverlayOrbRightClickPanel -PlacementTarget $PlacementTarget -Trigger $Trigger -RequestId $RequestId
+    try {
+      return Show-OverlayOrbRightClickPanel -PlacementTarget $script:LensOverlayOrbHitBox -Trigger $Trigger -RequestId $RequestId
+    } catch {
+      $ErrorMessage = [string]$_.Exception.Message
+      if ($ErrorMessage.Length -gt 240) {
+        $ErrorMessage = $ErrorMessage.Substring(0, 240)
+      }
+      $Receipt = Write-OverlayOrbControlReceipt -Root $Root -Action 'local_ui_panel_open_failed' -Details ([ordered]@{
+          status = 'local_ui_panel_open_failed'
+          request_id = $RequestId
+          trigger = $Trigger
+          error = $ErrorMessage
+          opened_external_process = $false
+        })
+      Publish-OverlayOrbControlRuntimeState
+      return $Receipt
+    }
+  } finally {
+    Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Invoke-OverlayNativeOrbRightClickRequest {
+  param([string]$Root)
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return $null
+  }
+  $RequestPath = Get-NativeOrbRendererRightClickRequestPath -Root $Root
+  $Request = Read-JsonFile -Path $RequestPath
+  if ($null -eq $Request) {
+    return $null
+  }
+
+  $RequestId = Get-StringProperty -Payload $Request -Name 'request_id' -Default ''
+  $RequestKind = Get-StringProperty -Payload $Request -Name 'kind' -Default ''
+  $Action = Get-StringProperty -Payload $Request -Name 'action' -Default ''
+  $AuthorityScope = Get-StringProperty -Payload $Request -Name 'authority_scope' -Default ''
+  $Trigger = Get-StringProperty -Payload $Request -Name 'trigger' -Default ''
+  try {
+    if (
+      [string]::IsNullOrWhiteSpace($RequestId) -or
+      $RequestKind -ne 'francis.native_orb_renderer.right_click_request' -or
+      @('open_local_ui_panel', 'open_native_local_ui_panel', 'minimize_native_local_ui_panel') -notcontains $Action -or
+      $AuthorityScope -ne 'runtime_overlay_panel_only' -or
+      @('native_orb_right_click', 'native_cpp_local_ui_minimize') -notcontains $Trigger
+    ) {
+      $Receipt = Write-OverlayOrbControlReceipt -Root $Root -Action 'native_right_click_refused' -Details ([ordered]@{
+          status = 'native_right_click_refused'
+          request_id = $RequestId
+          trigger = $Trigger
+          error = 'invalid_or_unavailable_native_right_click_request'
+          authority_scope = $AuthorityScope
+          opened_external_process = $false
+        })
+      Publish-OverlayOrbControlRuntimeState
+      return $Receipt
+    }
+    if ($Action -eq 'minimize_native_local_ui_panel') {
+      $State = Get-OverlayOrbControlState
+      $State['panel_visible'] = $false
+      $State['panel_minimized'] = $true
+      $State['latest_status'] = 'native_local_ui_panel_minimized'
+      $State['latest_request_id'] = $RequestId
+      $State['latest_trigger'] = $Trigger
+      $State['local_ui_surface'] = 'native.cpp.orb.local_ui_panel'
+      $State['local_ui_open_mode'] = 'native_cpp_panel'
+      $Receipt = Write-OverlayOrbControlReceipt -Root $Root -Action 'native_local_ui_panel_minimize' -Details ([ordered]@{
+          status = 'native_local_ui_panel_minimized'
+          request_id = $RequestId
+          trigger = $Trigger
+          native_local_ui_panel = $true
+          native_request_observed = $true
+          panel_minimized = $true
+          opened_external_process = $false
+        })
+      Publish-OverlayOrbControlRuntimeState
+      return $Receipt
+    }
+    return Show-OverlayOrbRightClickPanel -PlacementTarget $script:LensOverlayOrbHitBox -Trigger $Trigger -RequestId $RequestId
   } finally {
     Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
   }
@@ -6832,6 +7531,7 @@ function Write-OverlayState {
   $MotionStateVariable = Get-Variable -Name LensOverlayMotionState -Scope Script -ErrorAction SilentlyContinue
   $OverlayWindowForPosition = if ($null -ne $OverlayWindowVariable) { $OverlayWindowVariable.Value } else { $null }
   $MotionStateForPosition = if ($null -ne $MotionStateVariable) { $MotionStateVariable.Value } else { $null }
+  $OrbExploration = Set-OrbLiveExplorationRuntimeState -BodyState $McpBodyState -MotionState $MotionStateForPosition
   $Payload = [ordered]@{
     kind = 'lens.overlay.runtime_state'
     status = $Status
@@ -6843,6 +7543,8 @@ function Write-OverlayState {
     orb_mcp_status_route = $Config.orb_mcp_status_route
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    orb_live_exploration = $OrbExploration
+    orb_exploration = $OrbExploration
     native_renderer = Get-NativeOrbRendererReadback -Root $Root
     voice = Get-OverlayVoiceReadback -Root $Root
     voice_turn = Get-OverlayVoiceTurnReadback -Root $Root
@@ -6940,6 +7642,9 @@ function Get-OverlayRuntimeReadback {
   $OverlayPosition = if ($null -ne $StatusOverlayPosition) { $StatusOverlayPosition } else { New-OverlayWindowPositionProjection -Window $null -MotionState $null -OverlayWindowVisible $false }
   $StatusOrbControls = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['orb_controls']) { $Status.PSObject.Properties['orb_controls'].Value } else { $null }
   $OrbControls = if ($null -ne $StatusOrbControls) { $StatusOrbControls } else { Get-OverlayOrbControlReadback }
+  $StatusOrbLiveExploration = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['orb_live_exploration']) { $Status.PSObject.Properties['orb_live_exploration'].Value } else { $null }
+  $StatusOrbExploration = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['orb_exploration']) { $Status.PSObject.Properties['orb_exploration'].Value } else { $null }
+  $OrbExploration = if ($null -ne $StatusOrbLiveExploration) { $StatusOrbLiveExploration } elseif ($null -ne $StatusOrbExploration) { $StatusOrbExploration } else { New-OrbLiveExplorationState -Enabled $false -BodyState $McpBodyState -MotionState $null }
   $NativeRenderer = Get-NativeOrbRendererReadback -Root $Root
   $NativeRendererReady = (Get-BoolProperty -Payload $NativeRenderer -Name 'active_renderer' -Default $false) -and (Get-BoolProperty -Payload $NativeRenderer -Name 'process_alive' -Default $false)
   $StatusClaimsRunningOverlay = (
@@ -7000,6 +7705,8 @@ function Get-OverlayRuntimeReadback {
     mcp_body_state_route = $McpStatusRoute
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    orb_live_exploration = $OrbExploration
+    orb_exploration = $OrbExploration
     native_renderer = $NativeRenderer
     voice = $Voice
     voice_turn = $VoiceTurn
@@ -7053,6 +7760,8 @@ function New-StatusPayload {
     mcp_body_state_route = $Config.mcp_status_route
     mcp_body_state = $Readback.mcp_body_state
     orb_visual = $Readback.orb_visual
+    orb_live_exploration = $Readback.orb_live_exploration
+    orb_exploration = $Readback.orb_exploration
     native_renderer = $Readback.native_renderer
     voice = $Readback.voice
     voice_turn = $Readback.voice_turn
@@ -7128,6 +7837,7 @@ function Write-OverlayStoppedState {
   $StatusPath = Join-Path $RuntimeRoot 'status.json'
   $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
   $OrbVisual = New-OrbVisualProjection -AutonomousMotion $false
+  $OrbExploration = New-OrbLiveExplorationState -Enabled $false -BodyState $McpBodyState -MotionState $null
   $OverlayVoice = New-OverlayRuntimeVoiceProjection
   $VoiceInputReadiness = New-OverlayStoppedVoiceInputReadiness
   $Payload = [ordered]@{
@@ -7141,6 +7851,8 @@ function Write-OverlayStoppedState {
     orb_mcp_status_route = $Config.orb_mcp_status_route
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    orb_live_exploration = $OrbExploration
+    orb_exploration = $OrbExploration
     voice = $OverlayVoice
     voice_turn = $null
     overlay_voice = $OverlayVoice
@@ -7201,6 +7913,7 @@ function New-StoppedStatusPayload {
   $OrbMcpStatusRoute = Get-StringProperty -Payload $Status -Name 'orb_mcp_status_route' -Default $Config.orb_mcp_status_route
   $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute
   $OrbVisual = New-OrbVisualProjection -AutonomousMotion $false
+  $OrbExploration = New-OrbLiveExplorationState -Enabled $false -BodyState $McpBodyState -MotionState $null
   $OverlayVoice = New-OverlayRuntimeVoiceProjection
   $VoiceInputReadiness = New-OverlayStoppedVoiceInputReadiness
   $VoiceProviderReadiness = New-OverlayStoppedVoiceProviderReadiness
@@ -7229,6 +7942,8 @@ function New-StoppedStatusPayload {
     mcp_body_state_route = $McpStatusRoute
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    orb_live_exploration = $OrbExploration
+    orb_exploration = $OrbExploration
     voice = $OverlayVoice
     voice_turn = $null
     overlay_voice = $OverlayVoice
@@ -7258,6 +7973,8 @@ function New-StoppedStatusPayload {
     mcp_body_state_route = $McpStatusRoute
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    orb_live_exploration = $OrbExploration
+    orb_exploration = $OrbExploration
     voice = $OverlayVoice
     voice_turn = $null
     overlay_voice = $OverlayVoice
@@ -7296,7 +8013,8 @@ $DataRoot = Get-DataRoot -Override $DataDir
 $ModeName = $Mode.ToLowerInvariant()
 $RunningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $script:LensOverlayVoiceUseLlmRequested = [bool]$EnableVoiceLlm
-$AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion
+$OrbLiveExplorationEnabled = ([bool]$EnableOrbLiveExploration -or [bool]$EnableOrbExplorationPreview) -and -not [bool]$DisableAutonomousMotion
+$AutonomousMotionEnabled = ([bool]$EnableAutonomousMotion -or $OrbLiveExplorationEnabled) -and -not [bool]$DisableAutonomousMotion
 $ManualOrbDragEnabled = [bool]$EnableManualOrbDrag
 
 if ($Mode -eq 'Speak') {
@@ -7362,14 +8080,19 @@ if ($Mode -eq 'Run') {
   $MotionSubscription = $null
   $WakeRecognizer = $null
   $Failed = $false
-  $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled
+  $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled -LiveExploration $OrbLiveExplorationEnabled
   $script:LensOverlayEnergyRoot = $null
   $script:LensOverlayMotionState = $null
   $script:LensOverlayMotionSubscription = $null
+  $script:LensOverlayCommandTimer = $null
   $script:LensOverlayRenderFrameClock = $null
+  $script:LensOverlayLastMotionFrameSeconds = -1.0
+  $script:LensOverlayLastCommandPollSeconds = -1.0
   $script:LensOverlayLastPositionReceiptSeconds = -1.0
   $script:LensOverlayLastOrbVirtualPointerUpdatedAt = ''
   $script:LensOverlayLastOrbVirtualPointerWriteTicks = [Int64]0
+  $script:LensOverlayOrbLiveExplorationEnabled = $OrbLiveExplorationEnabled
+  $script:LensOverlayOrbLiveExploration = New-OrbLiveExplorationState -Enabled $OrbLiveExplorationEnabled -BodyState $null -MotionState $null
   $script:LensOverlayApplication = $null
   $script:LensOverlayNativeRenderer = $null
   $script:LensOverlayNativeRendererOwnership = 'not_started'
@@ -7386,7 +8109,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayOrbInWindowOffsetX = 0.0
   $script:LensOverlayOrbInWindowOffsetY = 0.0
   $script:LensOverlayOrbHitBox = $null
-  $script:LensOverlayOrbHitBoxSize = 72.0
+  $script:LensOverlayOrbHitBoxSize = 270.0
   $script:LensOverlayOverlayRoot = $null
   $script:LensOverlayOrbDragActive = $false
   $script:LensOverlayHwndSource = $null
@@ -7403,7 +8126,8 @@ if ($Mode -eq 'Run') {
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
     Set-OverlayHardwareRenderMode
-    $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled
+    $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled -LiveExploration $OrbLiveExplorationEnabled
+    $script:LensOverlayLastCommandPollSeconds = -1.0
     $Config = Get-OverlayConfig
     $OrbSize = Get-NativeOrbRendererSize
     $OrbHitBoxSize = Get-OrbHitBoxSize
@@ -7442,7 +8166,7 @@ if ($Mode -eq 'Run') {
         param($Sender, $EventArgs)
 
         $EventArgs.Handled = $true
-        [void](Show-OverlayOrbRightClickPanel -PlacementTarget $Sender)
+        [void](Show-OverlayOrbRightClickPanel -PlacementTarget $Sender -Trigger 'right_click')
       })
     if ($ManualOrbDragEnabled) {
       $OrbClickTarget.Add_MouseLeftButtonDown({
@@ -7582,11 +8306,25 @@ if ($Mode -eq 'Run') {
     $CommandTimer = New-Object System.Windows.Threading.DispatcherTimer
     $CommandTimer.Interval = [TimeSpan]::FromMilliseconds(500)
     $CommandTimer.Add_Tick({
-        [void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)
-        [void](Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot)
-        [void](Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot)
+        try {
+          [void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)
+        } catch {
+        }
+        try {
+          [void](Invoke-OverlayNativeOrbRightClickRequest -Root $script:LensOverlayDataRoot)
+        } catch {
+        }
+        try {
+          [void](Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot)
+        } catch {
+        }
+        try {
+          [void](Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot)
+        } catch {
+        }
       })
     $CommandTimer.Start()
+    $script:LensOverlayCommandTimer = $CommandTimer
     if ($AutonomousMotionEnabled) {
       $MotionSubscription = Start-OrbFrameSyncedMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState
       $script:LensOverlayMotionSubscription = $MotionSubscription
@@ -7627,6 +8365,7 @@ if ($Mode -eq 'Run') {
     if ($null -ne $CommandTimer) {
       $CommandTimer.Stop()
     }
+    $script:LensOverlayCommandTimer = $null
     if ($null -ne $script:LensOverlayMotionSubscription) {
       Stop-OrbFrameSyncedMotion -Subscription $script:LensOverlayMotionSubscription
       $script:LensOverlayMotionSubscription = $null
@@ -7769,6 +8508,9 @@ if ($DisableAutonomousMotion) {
 }
 if ($EnableAutonomousMotion) {
   $ArgumentList += '-EnableAutonomousMotion'
+}
+if ($OrbLiveExplorationEnabled) {
+  $ArgumentList += '-EnableOrbLiveExploration'
 }
 if ($EnableManualOrbDrag) {
   $ArgumentList += '-EnableManualOrbDrag'

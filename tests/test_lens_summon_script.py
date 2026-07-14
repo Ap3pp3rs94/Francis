@@ -263,7 +263,15 @@ def test_lens_summon_opens_canonical_orb_panel_through_correlated_request(tmp_pa
             time.sleep(0.05)
         if not request_path.is_file():
             return
-        request = json.loads(request_path.read_text(encoding="utf-8-sig"))
+        request: dict[str, object] | None = None
+        while time.monotonic() < deadline:
+            try:
+                request = json.loads(request_path.read_text(encoding="utf-8-sig"))
+                break
+            except PermissionError:
+                time.sleep(0.05)
+        if request is None:
+            return
         observed_request.update(request)
         request_id = str(request["request_id"])
         receipt_relative = f"data/runtime/lens-overlay/orb-controls/orb-control-{request_id}.json"

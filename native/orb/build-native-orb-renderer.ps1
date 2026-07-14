@@ -71,7 +71,7 @@ if ($Run) {
 }
 
 if ($Launch) {
-    $arguments = @("--snapshot", $Snapshot, "--run-seconds", [string]$RunSeconds, "--size", [string]$Size)
+    $arguments = @("--snapshot", $Snapshot, "--run-seconds", [string]$RunSeconds, "--size", [string]$Size, "--runtime-dir", $runtimeDir)
     if ($X -ge 0) {
         $arguments += @("--x", [string]$X)
     }
@@ -107,6 +107,13 @@ if ($Launch) {
         x = $X
         y = $Y
         run_seconds = $RunSeconds
+        runtime_dir = $runtimeDir
+        right_click_request_path = Join-Path $runtimeDir "right-click-request.json"
+        native_right_click_request_supported = $true
+        can_open_backend_surface_directly = $false
+        right_click_opens_local_ui_panel = $true
+        native_local_ui_panel_supported = $true
+        native_local_ui_panel_open_mode = "native_cpp_panel"
         launched_at_utc = $launchedAtUtc.ToString("o")
         expires_at_utc = $expiresAtUtc.ToString("o")
         liveness_truth = "launcher_pid_observation_only"

@@ -13,9 +13,10 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "CreateWindowExW" in source
     assert "WS_EX_LAYERED" in source
     assert "WS_EX_TOPMOST" in source
-    assert "WS_EX_TRANSPARENT" in source
     assert "WS_EX_NOACTIVATE" in source
     assert "HTTRANSPARENT" in source
+    assert "GetAsyncKeyState(VK_RBUTTON)" in source
+    assert "return HTCLIENT;" in source
     assert "UpdateLayeredWindow" in source
     assert "GdiplusStartup" in source
     assert "draw_core_sphere" in source
@@ -35,7 +36,7 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "constexpr int kSingleFlowOrbitRingSamples = 112;" in source
     assert "constexpr int kFlowGapFadeSegments = 112;" in source
     assert "constexpr int kFlowGapElectricShimmerCount = 10;" in source
-    assert "constexpr int kFlowStreamerRingInstanceCount = 15;" in source
+    assert "constexpr int kFlowStreamerRingInstanceCount = 8;" in source
     assert "constexpr int kFineFlowStreamerRingInstanceCount = 5;" in source
     assert "constexpr int kGlowSingleFlowRingCount = 20;" in source
     assert "constexpr int kMainFlowLightStreamerCount = 7;" in source
@@ -104,19 +105,40 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "streamer.rotation_speed" in source
     assert "streamer.rotation_wobble" in source
     assert "streamer.rotation_wobble_speed" in source
+    assert "streamer.spin_x_offset" in source
+    assert "streamer.spin_y_offset" in source
+    assert "streamer.spin_z_offset" in source
+    assert "streamer.spin_x_speed" in source
+    assert "streamer.spin_y_speed" in source
+    assert "streamer.spin_z_speed" in source
+    assert "streamer.flare_offset" in source
+    assert "streamer.flare_speed" in source
+    assert "streamer.flare_depth" in source
+    assert "streamer.flare_sharpness" in source
+    assert "flow_streamer_flare_scale" in source
+    assert "std::pow(wave(phase + streamer.flare_offset, streamer.flare_speed, local_offset)" in source
     assert "float const size_step" in source
     assert "float const rotation_direction" in source
     assert "float const main_inner_radius_scale = 1.0f;" in source
     assert "float const main_radius_gap = 0.12f;" in source
     assert "bool const longer_streamer = stream % 3 == 0;" in source
     assert "deterministic_range(stream, 113, 0.42f, 0.82f)" in source
-    assert "deterministic_range(stream, 139, 1.18f, 1.32f)" in source
+    assert "deterministic_range(stream, 139, 1.08f, 1.20f)" in source
+    assert "deterministic_range(stream, 139, 0.90f, 0.98f)" in source
+    assert "deterministic_range(stream, 159, -0.46f, 0.46f)" in source
+    assert "deterministic_range(stream, 161, -0.52f, 0.52f)" in source
+    assert "deterministic_range(stream, 163, -0.74f, 0.74f)" in source
+    assert "deterministic_range(stream, 165, 0.045f, 0.12f)" in source
+    assert "deterministic_range(stream, 167, 0.050f, 0.14f)" in source
+    assert "deterministic_range(stream, 169, 0.080f, 0.18f)" in source
     assert "deterministic_range(stream, 149, 0.62f, 1.46f)" in source
     assert "randomized_fraction" in source
     assert "spin_bias" in source
+    assert "bool const longer_fine_streamer = stream % 3 == 1;" in source
     assert "deterministic_range(stream, 151, 0.0f, 5.8f)" in source
     assert "deterministic_range(stream, 167, 0.46f, 0.88f)" in source
-    assert "deterministic_range(stream, 173, 1.38f, 1.56f)" in source
+    assert "deterministic_range(stream, 173, 1.08f, 1.22f)" in source
+    assert "deterministic_range(stream, 173, 1.00f, 1.12f)" in source
     assert "deterministic_range(stream, 179, 0.20f, 0.36f)" in source
     assert "float const fine_inner_radius_scale = deterministic_range(stream, 183, 1.070f, 1.095f);" in source
     assert "float const fine_radius_gap = deterministic_range(stream, 191, 0.040f, 0.060f);" in source
@@ -124,6 +146,12 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "deterministic_range(stream, 197, 0.16f, 0.40f)" in source
     assert "deterministic_range(stream, 199, 0.30f, 0.74f)" in source
     assert "deterministic_range(stream, 211, 0.20f, 0.55f)" in source
+    assert "deterministic_range(stream, 221, -0.68f, 0.68f)" in source
+    assert "deterministic_range(stream, 223, -0.58f, 0.58f)" in source
+    assert "deterministic_range(stream, 227, -0.92f, 0.92f)" in source
+    assert "deterministic_range(stream, 229, 0.070f, 0.18f)" in source
+    assert "deterministic_range(stream, 231, 0.075f, 0.20f)" in source
+    assert "deterministic_range(stream, 237, 0.12f, 0.26f)" in source
     assert "deterministic_range(stream, 127, 0.060f, 0.22f)" in source
     assert "deterministic_range(stream, 137, 0.13f, 0.38f)" in source
     assert "deterministic_range(stream, 151, 0.0f, 3.8f)" in source
@@ -136,8 +164,11 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "float const rotation_direction = single_spin_bias < 0.0f ? -1.0f : 1.0f;" in source
     assert "float const glow_radius_scale = deterministic_range(stream, 239, 1.035f, 1.330f);" in source
     assert "float const single_alpha_scale = deterministic_range(stream, 245, 0.16f, 0.42f);" in source
-    assert "float const single_length_scale = deterministic_range(stream, 271, 1.32f, 1.94f);" in source
-    assert "float const single_width_scale = deterministic_range(stream, 277, 0.18f, 0.52f);" in source
+    assert "bool const longer_single_streamer = stream % 3 == 2;" in source
+    assert "bool const flare_single_streamer = stream % 3 == 0;" in source
+    assert "deterministic_range(stream, 271, 1.16f, 1.36f)" in source
+    assert "deterministic_range(stream, 271, 0.98f, 1.18f)" in source
+    assert "float const single_width_scale = deterministic_range(stream, 277, 0.20f, 0.46f);" in source
     assert "deterministic_range(stream, 241, 0.0f, 6.2f)" in source
     assert "deterministic_range(stream, 251, 0.16f, 0.94f)" in source
     assert "deterministic_range(stream, 257, -0.76f, 0.76f)" in source
@@ -150,6 +181,16 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "deterministic_range(stream, 293, 0.20f, 0.62f)" in source
     assert "deterministic_range(stream, 311, 0.12f, 0.80f)" in source
     assert "deterministic_range(stream, 313, 0.10f, 0.82f)" in source
+    assert "deterministic_range(stream, 317, -0.86f, 0.86f)" in source
+    assert "deterministic_range(stream, 319, -0.74f, 0.74f)" in source
+    assert "deterministic_range(stream, 331, -1.08f, 1.08f)" in source
+    assert "deterministic_range(stream, 337, 0.050f, 0.15f)" in source
+    assert "deterministic_range(stream, 347, 0.060f, 0.18f)" in source
+    assert "deterministic_range(stream, 349, 0.11f, 0.24f)" in source
+    assert "deterministic_range(stream, 353, 0.0f, 7.8f)" in source
+    assert "deterministic_range(stream, 359, 0.070f, 0.16f)" in source
+    assert "deterministic_range(stream, 367, 0.18f, 0.34f)" in source
+    assert "deterministic_range(stream, 373, 3.0f, 6.0f)" in source
     assert "std::abs(streamer.rotation_speed) * 0.63f" in source
     assert "streamer_twist" in source
     assert "signed_streamer_twist" in source
@@ -160,18 +201,39 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "static_cast<float>(local_phase * 0.26 * twist_direction)" in source
     assert "static_cast<float>(local_phase * 0.38)" in source
     assert "static_cast<float>(local_phase * 0.42 * twist_direction)" in source
+    assert "float const local_z" in source
+    assert (
+        "streamer.spin_x_offset + static_cast<float>(local_phase * static_cast<double>(streamer.spin_x_speed))"
+        in source
+    )
+    assert (
+        "streamer.spin_y_offset + static_cast<float>(local_phase * static_cast<double>(streamer.spin_y_speed))"
+        in source
+    )
+    assert (
+        "streamer.spin_z_offset + static_cast<float>(local_phase * static_cast<double>(streamer.spin_z_speed))"
+        in source
+    )
+    assert "float const x_spin_y = (rotated_y * spin_x_cos) - (rotated_z * spin_x_sin);" in source
+    assert "float const y_spin_x = (x_spin_x * spin_y_cos) + (x_spin_z * spin_y_sin);" in source
+    assert "float const xyz_spin_x = (y_spin_x * spin_z_cos) - (y_spin_y * spin_z_sin);" in source
+    assert (
+        "float const normalized_z = std::clamp(xyz_spin_z / std::max(1.0f, blob.radius * 0.72f), -1.0f, 1.0f);"
+        in source
+    )
     assert "(streamer.inner_radius_scale + streamer.outer_radius_scale) * 0.5f" in source
     assert "(streamer.outer_radius_scale - streamer.inner_radius_scale) * 0.5f" in source
     assert "(radius_scale - ring_midline) / ring_half_span" in source
+    assert "float const flare_length_scale = flow_streamer_flare_scale(local_phase, streamer, t * 0.11f);" in source
     assert (
         "float const resolved_radius_scale = flow_inverted_radius_scale(radius_scale, t, local_phase, twist_direction, streamer)"
         in source
     )
     assert (
-        "blob.radius * 1.26f * resolved_radius_scale * streamer.size_scale * streamer.length_scale * liquid_edge"
+        "blob.radius * 1.00f * resolved_radius_scale * streamer.size_scale * streamer.length_scale * flare_length_scale * liquid_edge"
         in source
     )
-    assert "blob.radius * 0.52f * resolved_radius_scale * streamer.size_scale * liquid_edge" in source
+    assert "blob.radius * 0.86f * resolved_radius_scale * streamer.size_scale * liquid_edge" in source
     assert (
         "float const radius_span = std::max(0.01f, streamer.outer_radius_scale - streamer.inner_radius_scale);"
         in source
@@ -213,9 +275,15 @@ def test_native_orb_cpp_renderer_is_visible_clickthrough_readonly_window() -> No
     assert "streamer.outer_radius_scale, twist_direction, streamer" in source
     assert "bool const is_front_segment = average_z >= 0.0f" in source
     assert "rolling_fade" in source
+    assert "float const smoothed_fade = 0.42f + (0.58f * rolling_fade);" in source
+    assert "BYTE const edge_alpha" in source
+    assert "BYTE const center_alpha" in source
     assert "Gdiplus::GraphicsPath gap_fade_path" in source
     assert "gap_fade_path.AddPolygon(gap_points, 4)" in source
-    assert "Gdiplus::SolidBrush gap_fade_paint" in source
+    assert "Gdiplus::PathGradientBrush gap_fade_paint(&gap_fade_path)" in source
+    assert "gap_fade_paint.SetCenterColor" in source
+    assert "gap_fade_paint.SetSurroundColors" in source
+    assert "graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality)" in source
     assert "for (int shimmer = 0; shimmer < kFlowGapElectricShimmerCount; ++shimmer)" in source
     assert "streamer.inner_radius_scale + (radius_gap * 0.18f)" in source
     assert "streamer.outer_radius_scale - (radius_gap * 0.18f)" in source
@@ -332,7 +400,6 @@ def test_native_orb_cpp_renderer_has_no_desktop_input_or_process_authority() -> 
         "mouse_event",
         "keybd_event",
         "SetCursorPos",
-        "SetWindowPos",
         "MoveWindow",
         "ShellExecute",
         "CreateProcess",
@@ -354,16 +421,69 @@ def test_native_orb_cpp_renderer_has_no_desktop_input_or_process_authority() -> 
     ]
     for forbidden in forbidden_runtime_authority:
         assert forbidden not in source
+    assert "SetWindowPos(\n            local_ui_panel_hwnd_," in source
+    assert "SetWindowPos(\n            hwnd_," not in source
 
 
-def test_native_orb_cpp_renderer_accepts_bounded_move_center_message_only() -> None:
+def test_native_orb_cpp_renderer_accepts_bounded_move_and_contact_messages_only() -> None:
     source = (_repo_root() / "native" / "orb" / "native_orb_renderer.cpp").read_text(encoding="utf-8")
 
     assert "constexpr UINT kMoveCenterMessage = WM_APP + 0x46;" in source
+    assert "constexpr UINT kContactPulseMessage = WM_APP + 0x47;" in source
+    assert "constexpr UINT kShowLocalUiMessage = WM_APP + 0x48;" in source
+    assert 'constexpr wchar_t kLocalUiWindowClassName[] = L"FrancisNativeOrbLocalUiWindow";' in source
+    assert 'constexpr wchar_t kNativeRightClickRequestFile[] = L"right-click-request.json";' in source
+    assert "constexpr int kLocalUiPanelWidth = 320;" in source
+    assert "constexpr int kLocalUiPanelHeight = 146;" in source
     assert "case kMoveCenterMessage:" in source
+    assert "case kContactPulseMessage:" in source
+    assert "case kShowLocalUiMessage:" in source
+    assert "case WM_RBUTTONDOWN:" in source
+    assert "case WM_NCRBUTTONDOWN:" in source
+    assert "case WM_CONTEXTMENU:" in source
     assert "move_center_to(message_coordinate_to_int(wparam)" in source
-    assert "config_.x = center_x - (config_.size / 2);" in source
-    assert "config_.y = center_y - (config_.size / 2);" in source
+    assert "trigger_contact_pulse();" in source
+    assert "show_local_ui_panel();" in source
+    assert "request_local_ui_panel_from_right_click();" in source
+    assert "void request_local_ui_panel_from_right_click()" in source
+    assert "static LRESULT CALLBACK local_ui_window_proc" in source
+    assert "void ensure_local_ui_panel()" in source
+    assert "void show_local_ui_panel()" in source
+    assert "void minimize_local_ui_panel()" in source
+    assert "void paint_local_ui_panel(HWND hwnd)" in source
+    assert "CreateWindowExW(" in source
+    assert "kLocalUiWindowClassName" in source
+    assert "kLocalUiMinimizeButtonId" in source
+    assert 'DrawTextW(dc, L"Francis Local UI"' in source
+    assert 'DrawTextW(\n            dc,\n            L"Native C++ panel.' in source
+    assert '"francis.native_orb_renderer.right_click_request"' in source
+    assert '"open_native_local_ui_panel"' in source
+    assert '"minimize_native_local_ui_panel"' in source
+    assert '"native_cpp_local_ui_minimize"' in source
+    assert '"runtime_overlay_panel_only"' in source
+    assert '"native_local_ui_panel"' in source
+    assert '"native_local_ui_panel_visible"' in source
+    assert '"native_local_ui_panel_minimized"' in source
+    assert "MoveFileExW(temp_path.c_str(), request_path.c_str()" in source
+    assert "ShellExecute" not in source
+    assert "contact_pulse_started_seconds_" in source
+    assert "draw_contact_press_ring" in source
+    assert "target_center_x_ = static_cast<double>(center_x);" in source
+    assert "target_center_y_ = static_cast<double>(center_y);" in source
+    assert "SetTimer(hwnd_, 1, 8, nullptr);" in source
+    assert "void update_motion(double elapsed)" in source
+    assert "1.0 - std::exp(-9.0 * delta_seconds)" in source
+    assert "delta_seconds * 4.0" in source
+    assert "delta_seconds * 5.0" in source
+    assert "0.060f" in source
+    assert "target_heading_degrees_ = normalize_degrees" in source
+    assert "shortest_angle_delta_degrees(heading_degrees_, target_heading_degrees_)" in source
+    assert "spin_degrees_ = normalize_degrees" in source
+    assert "OrbMotionKinetics{" in source
+    assert "float const travel_phase_degrees" in source
+    assert "kinetics.heading_degrees * travel_strength * 0.18f" in source
+    assert "kinetics.spin_degrees * 0.16f" in source
+    assert "graphics.RotateTransform(travel_spin)" not in source
     assert "HTTRANSPARENT" in source
 
 
@@ -384,8 +504,15 @@ def test_native_orb_cpp_renderer_build_script_is_local_only() -> None:
     assert '[string]$RuntimeDir = ""' in script
     assert '"--x", [string]$X' in script
     assert '"--y", [string]$Y' in script
+    assert '"--runtime-dir", $runtimeDir' in script
     assert "data\\runtime\\native-orb-renderer" in script
     assert "native-orb-renderer.pid" in script
+    assert "right-click-request.json" in script
+    assert "native_right_click_request_supported = $true" in script
+    assert "can_open_backend_surface_directly = $false" in script
+    assert "right_click_opens_local_ui_panel = $true" in script
+    assert "native_local_ui_panel_supported = $true" in script
+    assert 'native_local_ui_panel_open_mode = "native_cpp_panel"' in script
     assert "francis.native_orb_renderer.runtime_status" in script
     assert "native_cpp_orb_renderer" in script
     assert "active_renderer = $true" in script

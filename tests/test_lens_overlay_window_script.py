@@ -91,6 +91,17 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["orb_visual"]["default_anchor"] == "bottom_right"
     assert payload["orb_visual"]["motion_clock"] == "anchored_static"
     assert payload["orb_visual"]["motion_profile"] == "right_corner_locked"
+    assert payload["orb_visual"]["live_exploration_supported"] is True
+    assert payload["orb_visual"]["live_exploration_enabled"] is False
+    assert payload["orb_visual"]["live_exploration_requires_semantic_targets"] is True
+    assert payload["orb_live_exploration"]["kind"] == "lens.overlay.orb_live_exploration"
+    assert payload["orb_exploration"]["kind"] == "lens.overlay.orb_live_exploration"
+    assert payload["orb_exploration"]["status"] == "disabled"
+    assert payload["orb_exploration"]["observation_only"] is True
+    assert payload["orb_exploration"]["non_mutating"] is True
+    assert payload["orb_exploration"]["grants_execution_authority"] is False
+    assert payload["orb_exploration"]["grants_mutation_authority"] is False
+    assert payload["orb_exploration"]["controls_user_os_cursor"] is False
     assert payload["orb_visual"]["manual_drag_supported"] is False
     assert payload["orb_visual"]["desktop_roam_supported"] is False
     assert payload["orb_visual"]["desktop_roam_bounds"] == "virtual_screen"
@@ -103,12 +114,16 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert ring_color_contract["visual_contract"] == "native_cpp_orb.liquid_streamer_identity"
     assert ring_color_contract["renderer"] == "native_cpp_orb_renderer"
     assert ring_color_contract["state_driven_render_object"] is True
-    assert ring_color_contract["ring_family"]["main_streamer_ring_count"] == 15
+    assert ring_color_contract["ring_family"]["main_streamer_ring_count"] == 8
     assert ring_color_contract["ring_family"]["single_identity_ring_count"] == 20
+    assert ring_color_contract["ring_family"]["timed_outer_ring_flares"] is True
     assert ring_color_contract["glow_family"]["outer_glow_primary"] == "#DAEEFF"
     assert payload["overlay_position"]["status"] == "window_unavailable"
     assert payload["overlay_position"]["right_corner_locked"] is True
     assert payload["overlay_position"]["default_anchor"] == "bottom_right"
+    assert payload["overlay_position"]["orb_live_exploration_enabled"] is False
+    assert payload["overlay_position"]["orb_exploration_enabled"] is False
+    assert payload["overlay_position"]["orb_exploration_status"] == "disabled"
     assert payload["overlay_position"]["desktop_roam_supported"] is False
     assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
     assert payload["overlay_position"]["manual_drag_supported"] is False
@@ -350,6 +365,11 @@ def test_lens_overlay_window_status_reports_native_renderer_missing_for_syntheti
     assert payload["overlay_position"]["desktop_roam_supported"] is False
     assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
     assert payload["overlay_position"]["manual_drag_supported"] is False
+    assert payload["orb_live_exploration"]["status"] == "disabled"
+    assert payload["orb_exploration"]["status"] == "disabled"
+    assert payload["orb_exploration"]["requires_lens_semantic_targets"] is True
+    assert payload["orb_exploration"]["grants_execution_authority"] is False
+    assert payload["orb_exploration"]["can_drag"] is False
     assert payload["overlay_runtime"]["overlay_position"]["roam_right"] == 1280.0
     assert payload["overlay_runtime"]["requirement_state"] == "native_renderer_missing"
     assert payload["overlay_runtime"]["blocker"] == "native_cpp_orb_renderer_not_active"
@@ -859,9 +879,11 @@ def test_lens_overlay_orb_move_place_mode_is_one_shot_bounded_and_receipted() ->
     assert "travelled_to_target = $true" in script
     assert "travel_started = Get-BoolProperty -Payload $Travel -Name 'ok' -Default $false" in script
     assert (
-        "Write-OverlayOrbPositionCommandReceipt -Root ([string]$Context['root']) -RequestId ([string]$Context['request_id']) -Request $Context['request'] -Result $Result"
+        "Write-OverlayOrbPositionCommandReceipt -Root ([string]$Context['root']) -RequestId ([string]$Context['request_id']) -Request $ContextRequest -Result $Result"
         in script
     )
+    assert "Write-OverlayOrbVirtualPointerReceipt -Root ([string]$Context['root'])" in script
+    assert "Set-NativeOrbRendererContactPulse -Root ([string]$Context['root']) -ContactPhase $ContactPhase" in script
     assert (
         "receipt_kind = Get-StringProperty -Payload $Request -Name 'receipt_kind' -Default 'overlay_position'" in script
     )
@@ -890,7 +912,7 @@ def test_lens_overlay_orb_move_place_mode_is_one_shot_bounded_and_receipted() ->
     assert "$OrbClickTarget.Add_MouseRightButtonDown({" in script
     assert "$script:LensOverlayWindow.DragMove()" not in script
     assert "full_screen_overlay_orb_offset" in script
-    assert "click_hit_box_scope = 'orb_core_only'" in script
+    assert "click_hit_box_scope = 'orb_visual_bounds'" in script
     assert "hit_test_passthrough_outside_click_box_enabled = $HitTestPassthroughEnabled" in script
 
 
@@ -1052,7 +1074,7 @@ $script:LensOverlayEnergyRoot = $null
 $script:LensOverlayOrbWindowOffsetTransform = $null
 $script:LensOverlayOrbInWindowOffsetX = 0.0
 $script:LensOverlayOrbInWindowOffsetY = 0.0
-$script:LensOverlayOrbHitBoxSize = 72.0
+$script:LensOverlayOrbHitBoxSize = 270.0
 $window = New-Object System.Windows.Window
 $window.Width = 800
 $window.Height = 600
@@ -1102,59 +1124,77 @@ $result = Set-OrbWindowCoordinatePosition -Window $window -WorkArea $workArea -X
     assert payload["window_clamped"] is False
     assert payload["full_screen_overlay_plane"] is True
     assert payload["overlay_window_stationary"] is True
-    assert payload["click_hit_box_size"] == pytest.approx(72.0, abs=0.1)
-    assert payload["click_hit_box_scope"] == "orb_core_only"
+    assert payload["click_hit_box_size"] == pytest.approx(270.0, abs=0.1)
+    assert payload["click_hit_box_scope"] == "orb_visual_bounds"
     assert payload["reach_mode"] == "full_screen_overlay_orb_offset"
 
 
-def test_lens_overlay_orb_right_click_panel_controls_and_chat_are_receipted() -> None:
+def test_lens_overlay_orb_right_click_opens_local_ui_panel_with_receipt() -> None:
     script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
 
-    assert "function New-OverlayOrbRightClickPanel" in script
+    assert "function Invoke-OverlayNativeOrbRightClickRequest" in script
+    assert "function Get-NativeOrbRendererRightClickRequestPath" in script
+    assert "function Get-OverlayOrbBackendSurfaceUrl" in script
+    assert "function Test-OverlayLocalBackendSurfaceUrl" in script
     assert "function Show-OverlayOrbRightClickPanel" in script
-    assert "function Set-OverlayOrbFeatureToggle" in script
-    assert "function Invoke-OverlayOrbPanelChatSubmit" in script
+    assert "function Show-NativeOrbRendererLocalUiPanel" in script
+    assert "ShowLocalUiMessage = 0x8000 + 0x48" in script
     assert "$OrbClickTarget.Add_MouseRightButtonDown({" in script
-    assert "[void](Show-OverlayOrbRightClickPanel -PlacementTarget $Sender)" in script
-    assert "$Popup = New-Object System.Windows.Controls.Primitives.Popup" in script
-    assert "$Popup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::MousePoint" in script
-    assert "$Popup.StaysOpen = $false" in script
-    assert "$Border.Width = 292" in script
-    assert "$Border.MaxHeight = 268" in script
-    assert "$Input.MaxLength = 600" in script
-    assert "Francis Orb" in script
-    assert "Listen" in script
-    assert "PTT" in script
-    assert "LLM" in script
-    assert "Drift" in script
-    assert "Receipted Orb chat. Hold Ctrl+V for push-to-talk." in script
-    assert "conversation_surface = 'lens.overlay.orb.right_click_chat'" in script
-    assert "chat_bridge_route = '/chat/send'" in script
-    assert "chat_bridge_actor = 'lens.overlay.voice'" in script
-    assert "voice_reply_requested = $true" in script
+    assert "[void](Show-OverlayOrbRightClickPanel -PlacementTarget $Sender -Trigger 'right_click')" in script
+    assert "right_click_panel_supported = $true" in script
+    assert "right_click_backend_surface_supported = $false" in script
+    assert "right_click_local_ui_supported = $true" in script
+    assert "panel_minimize_supported = $true" in script
+    assert "panel_minimized = $false" in script
+    assert "conversation_surface = 'francis.native_cpp_orb.local_ui_panel'" in script
+    assert "backend_surface_path = ''" in script
+    assert "backend_surface_url = ''" in script
+    assert "local_ui_surface = 'native.cpp.orb.local_ui_panel'" in script
+    assert "local_ui_open_mode = 'native_cpp_panel'" in script
+    assert "chat_bridge_route = ''" in script
+    assert "chat_bridge_actor = ''" in script
+    assert "voice_reply_requested = $false" in script
+    assert "$TargetHost = $Uri.Host.Trim().ToLowerInvariant()" in script
+    assert "$Host = $Uri.Host.Trim().ToLowerInvariant()" not in script
     assert "orb-controls" in script
     assert "kind = 'lens.overlay.orb_control.receipt'" in script
-    assert "-Action 'panel_open'" in script
+    assert "control_surface = 'native.cpp.orb.local_ui_panel'" in script
+    assert "'francis.native_orb_renderer.right_click_request'" in script
+    assert "'native_orb_right_click'" in script
+    assert "'native_cpp_local_ui_minimize'" in script
+    assert "'native_right_click_refused'" in script
+    assert "invalid_or_unavailable_native_right_click_request" in script
+    assert "Invoke-OverlayNativeOrbRightClickRequest -Root $script:LensOverlayDataRoot" in script
+    assert (
+        "@('open_local_ui_panel', 'open_native_local_ui_panel', 'minimize_native_local_ui_panel') -notcontains $Action"
+        in script
+    )
+    assert (
+        "Show-NativeOrbRendererLocalUiPanel -Root $script:LensOverlayDataRoot -Trigger $Trigger -RequestId $RequestId"
+        in script
+    )
+    assert "Start-Process -FilePath $SurfaceUrl" not in script
+    assert (
+        "$Action = if ($NativeApplied) { 'native_local_ui_panel_open' } else { 'native_local_ui_panel_refused' }"
+        in script
+    )
+    assert "-Action $Action" in script
+    assert "-Action 'native_local_ui_panel_minimize'" in script
+    assert "native_local_ui_panel_refused" in script
+    assert "-Action 'local_ui_panel_open_failed'" in script
+    assert "native_local_ui_panel_opened" in script
+    assert "native_local_ui_panel_minimized" in script
+    assert "native_local_ui_panel = $true" in script
+    assert "$State['panel_minimized'] = $true" in script
+    assert "$State['panel_minimized'] = $false" in script
+    assert "opened_external_process = $false" in script
     assert "[string]$Trigger = 'right_click'" in script
     assert "trigger = $Trigger" in script
-    assert "-Action 'feature_toggle'" in script
     assert "wake_listen" in script
     assert "continuous_voice_chat" in script
     assert "voice_llm" in script
     assert "ambient_motion" in script
-    assert "Start-OverlayWakeListener -Root $script:LensOverlayDataRoot" in script
-    assert "RecognizeAsyncCancel()" in script
-    assert "Start-OrbFrameSyncedMotion -Window $script:LensOverlayWindow" in script
-    assert "Stop-OrbFrameSyncedMotion -Subscription $MotionSubscription" in script
-    assert "SyntheticVoiceTurn" in script
-    assert "New-OverlayVoiceTextFile -Root $script:LensOverlayDataRoot -Text $BoundedText" in script
-    assert "Remove-OverlayVoiceTextFile -Root $DataRoot -TextPath $VoiceTextPath" in script
-    assert "chat_input_hash = Get-OverlayTextDigest -Text $BoundedText" in script
-    assert "chat_text_redacted = $true" in script
     assert "overlay_stores_transcript = $false" in script
-    assert "synthetic_voice_turn = $true" in script
-    assert "speech_output_owner = 'lens.overlay'" in script
-    assert "text_file_retention = 'transient_deleted_by_synthetic_voice_turn'" in script
     assert "orb_controls = Get-OverlayOrbControlReadback" in script
     assert "grants_execution_authority = $false" in script
     assert "grants_mutation_authority = $false" in script
@@ -1166,23 +1206,31 @@ def test_lens_overlay_orb_right_click_panel_controls_and_chat_are_receipted() ->
 
 def test_lens_overlay_consumes_correlated_canonical_summon_requests() -> None:
     script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+    summon_body = script.split("function Invoke-OverlayQueuedSummonRequest", 1)[1].split(
+        "function Invoke-OverlayVoiceSpeech", 1
+    )[0]
 
     assert "function Get-OverlaySummonRequestPath" in script
     assert "function Invoke-OverlayQueuedSummonRequest" in script
     assert "'summon-request.json'" in script
     assert "'lens.overlay.summon_request'" in script
     assert "'open_orb_panel'" in script
+    assert "'open_local_ui_panel'" in script
     assert "'runtime_overlay_panel_only'" in script
     assert "@('global_hotkey', 'local_open') -notcontains $Trigger" in script
-    assert "Show-OverlayOrbRightClickPanel -PlacementTarget $PlacementTarget -Trigger $Trigger" in script
+    assert "@('open_orb_panel', 'open_local_ui_panel') -notcontains $Action" in script
+    assert "Show-OverlayOrbRightClickPanel -PlacementTarget $script:LensOverlayOrbHitBox -Trigger $Trigger" in script
+    assert "$null -eq $PlacementTarget" not in summon_body
+    assert "Publish-OverlayOrbControlRuntimeState" in summon_body
     assert "Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot" in script
+    assert "try {\n          [void](Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot)" in script
+    assert "$script:LensOverlayCommandTimer = $CommandTimer" in script
+    assert "$script:LensOverlayCommandTimer = $null" in script
+    assert "function Invoke-OverlayQueuedRuntimeCommands" in script
+    assert "Invoke-OverlayQueuedRuntimeCommands -FrameSeconds $FrameSeconds" in script
+    assert "$script:LensOverlayLastCommandPollSeconds = -1.0" in script
     assert "latest_request_id" in script
     assert "Publish-OverlayOrbControlRuntimeState" in script
-    assert (
-        "$script:LensOverlayOrbPanelPopup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Right"
-        in script
-    )
-    assert "$script:LensOverlayOrbPanelPopup.HorizontalOffset = 12" in script
 
 
 def test_lens_overlay_voice_chat_falls_back_when_llm_bridge_is_slow() -> None:
@@ -1236,17 +1284,29 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "FindRendererWindow" in script
     assert "PostMessage" in script
     assert "MoveCenterMessage" in script
+    assert "ContactPulseMessage" in script
+    assert "ShowLocalUiMessage" in script
+    assert "function Set-NativeOrbRendererContactPulse" in script
+    assert "function Show-NativeOrbRendererLocalUiPanel" in script
+    assert "contact_message_supported = $true" in script
+    assert "native_local_ui_panel_supported" in script
     assert "function New-OrbEnergySurface" not in script
     assert "function New-OrbTorusMesh" not in script
     assert "function Add-Orb3DEnergyRing" not in script
     assert "function New-OrbAutonomousMotionState" in script
     assert "function Update-OrbAutonomousMotion" in script
+    assert "function New-OrbLiveExplorationState" in script
+    assert "function Set-OrbLiveExplorationRuntimeState" in script
+    assert "function Get-OrbLiveExplorationWaypoint" in script
     assert "function Get-OverlayWpfRenderProfile" in script
     assert "function Set-OverlayHardwareRenderMode" in script
     assert "function New-OrbVisualProjection" in script
     assert "function Start-OrbFrameSyncedMotion" in script
     assert "function Stop-OrbFrameSyncedMotion" in script
+    assert "function Invoke-OrbAutonomousMotionFrame" in script
     assert "[switch]$EnableAutonomousMotion" in script
+    assert "[switch]$EnableOrbLiveExploration" in script
+    assert "[switch]$EnableOrbExplorationPreview" in script
     assert "[int]$McpBodyStateTimeoutSeconds = 1" in script
     assert "function Invoke-OverlayVoiceSpeech" in script
     assert "function Invoke-OverlayElevenLabsVoiceSpeech" in script
@@ -1280,15 +1340,39 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "native_cpp_orb.liquid_streamer_identity" in script
     assert "native_cpp_orb_renderer" in script
     assert "bounded_desktop_roam" in script
-    assert "composition_target_rendering" in script
+    assert "composition_target_rendering_with_dispatcher_timer_fallback" in script
     assert "elapsed_time_delta_clamped" in script
     assert "native_renderer_size = Get-NativeOrbRendererSize" in script
     assert "Set-NativeOrbRendererPosition -Root $Root" in script
     assert "[System.Windows.Media.CompositionTarget]::add_Rendering" in script
     assert "[System.Windows.Media.CompositionTarget]::remove_Rendering" in script
+    assert "$Timer = New-Object System.Windows.Threading.DispatcherTimer" in script
+    assert "$Timer.Interval = [TimeSpan]::FromMilliseconds(8)" in script
+    assert "$Subscription['timer'].Stop()" in script
+    assert "LensOverlayLastMotionFrameSeconds" in script
     assert "Set-OverlayHardwareRenderMode" in script
-    assert "$DeltaSeconds = [Math]::Min(0.05, $DeltaSeconds)" in script
-    assert "$DriftY = ([Math]::Sin($Phase * 0.61)" in script
+    assert "full_360_liquid_roam" in script
+    assert "live_semantic_exploration_or_ambient_body_motion" in script
+    assert "non_mutating_live_semantic_exploration" in script
+    assert "lens_live_semantic_targets_unavailable" in script
+    assert "ambient_body_motion_waiting_for_lens" in script
+    assert "live_semantic_waypoint_following" in script
+    assert "live_blocked" in script
+    assert "live_ready" in script
+    assert "can_click = $false" in script
+    assert "can_drag = $false" in script
+    assert "can_type = $false" in script
+    assert "controls_user_os_cursor = $false" in script
+    assert "autonomous_orb_margin = ([double](Get-NativeOrbRendererSize) / 2.0)" in script
+    assert "$DeltaSeconds = [Math]::Min(0.020, $DeltaSeconds)" in script
+    assert "$Phase = [double]$MotionState['phase'] + ($DeltaSeconds * 0.24)" in script
+    assert "$Ease = [Math]::Min(1.0, [Math]::Max(0.035, $DeltaSeconds * 4.5))" in script
+    assert "$RadiusBreathX = 0.68 + (0.22 * [Math]::Sin($Phase * 0.19))" in script
+    assert "$RadiusBreathY = 0.62 + (0.24 * [Math]::Sin($Phase * 0.23))" in script
+    assert "$TargetMinimumX = [Math]::Min([double]$MotionState['work_right'], $MinimumLeft + $OrbMargin)" in script
+    assert "$TargetMaximumY = [Math]::Max($TargetMinimumY, [double]$MotionState['work_bottom'] - $OrbMargin)" in script
+    assert "$DriftX = ([Math]::Sin($Phase * 0.82)" in script
+    assert "$DriftY = ([Math]::Sin($Phase * 1.06)" in script
     assert "windows_sapi_speech_synthesis" in script
     assert "elevenlabs_text_to_speech" in script
     assert "https://api.elevenlabs.io/v1/text-to-speech/{0}?output_format={1}" in script
@@ -1597,8 +1681,20 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "bounded_desktop_roam" in script
     assert "right_corner_locked" in script
     assert "default_anchor = if ($AutonomousMotion) { 'bounded_work_area' }" in script
-    assert "$AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion" in script
+    assert (
+        "$OrbLiveExplorationEnabled = ([bool]$EnableOrbLiveExploration -or [bool]$EnableOrbExplorationPreview) -and -not [bool]$DisableAutonomousMotion"
+        in script
+    )
+    assert (
+        "$AutonomousMotionEnabled = ([bool]$EnableAutonomousMotion -or $OrbLiveExplorationEnabled) -and -not [bool]$DisableAutonomousMotion"
+        in script
+    )
     assert "desktop_roam_supported = $AutonomousMotion" in script
+    assert "orb_live_exploration = $OrbExploration" in script
+    assert "orb_exploration = $OrbExploration" in script
+    assert "orb_live_exploration_enabled = [bool](Get-BoolProperty -Payload $OrbExploration" in script
+    assert "Set-OrbLiveExplorationRuntimeState -BodyState $McpBodyState" in script
+    assert "$ArgumentList += '-EnableOrbLiveExploration'" in script
     assert "manual_drag_supported = $ManualDrag" in script
     assert "desktop_roam_bounds = 'virtual_screen'" in script
     assert "roam_left = $MinimumLeft" in script
@@ -1607,7 +1703,41 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "overlay_position = $Readback.overlay_position" in script
     assert "function Write-OverlayPositionState" in script
     assert "function Write-OrbAutonomousMotionPositionReceipt" in script
+    assert "function Invoke-OrbAutonomousMotionFrame" in script
     assert "LensOverlayLastPositionReceiptSeconds" in script
+    assert "LensOverlayLastMotionFrameSeconds" in script
+    assert (
+        "$PointerUpdatedAtTime = [DateTimeOffset]::Parse($PointerUpdatedAt, [Globalization.CultureInfo]::InvariantCulture)"
+        in script
+    )
+    assert (
+        "$PointerAgeSeconds = ([DateTimeOffset]::UtcNow - $PointerUpdatedAtTime.ToUniversalTime()).TotalSeconds"
+        in script
+    )
+    assert "if ($PointerAgeSeconds -gt 30.0)" in script
+    assert (
+        "Start-OrbWindowCoordinateTravel -Window $Window -WorkArea $WorkArea -X $X -Y $Y -MotionState $MotionState -TargetAnchor 'orb_pointer'"
+        in script
+    )
+    assert "$Position = Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X" not in script
+    assert (
+        "status = Get-StringProperty -Payload $Travel -Name 'status' -Default 'orb_virtual_pointer_travel_unknown'"
+        in script
+    )
+    assert (
+        "Write-OverlayOrbVirtualPointerReceipt -Root $Root -RequestId $RequestId -Pointer $Pointer -Result $Payload"
+        in script
+    )
+    assert "status = 'orb_virtual_pointer_applied'" in script
+    assert "pending_contact_phase" in script
+    assert "contact_visual_applied" in script
+    assert "native_renderer_contact_attempted" in script
+    assert "native_renderer_contact_applied" in script
+    assert "native_renderer_contact_status" in script
+    assert "$IsVirtualPointerTravel = ($ContextRequestKind -eq 'francis.orb_operator.virtual_pointer_state')" in script
+    assert "$script:LensOverlayOperatorPositionAnchor = ''" in script
+    assert "operator_anchor_released_after_virtual_pointer" in script
+    assert "(($FrameSeconds - $LastFrameSeconds) -lt 0.006)" in script
     assert "(($FrameSeconds - $LastReceiptSeconds) -lt 1.0)" in script
     assert "Write-OrbAutonomousMotionPositionReceipt -Window $script:LensOverlayWindow" in script
     assert "$MotionSubscription = Start-OrbFrameSyncedMotion" in script
