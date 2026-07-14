@@ -24,6 +24,8 @@ from francis.managed_copies import (
     managed_copy_creation_plans_snapshot,
     managed_copy_creation_preflight_snapshot,
     managed_copy_creation_preflights_snapshot,
+    managed_copy_creation_provision_snapshot,
+    managed_copy_creation_provisions_snapshot,
     managed_copy_creation_request_blocked_snapshot,
     managed_copy_creation_requests_snapshot,
     managed_copy_decommission_contract_snapshot,
@@ -307,6 +309,29 @@ def copy_creation_approval_request(payload: dict[str, Any], request: Request) ->
 @router.get("/copy-creation-approval-requests")
 def copy_creation_approval_requests(limit: int = 20) -> dict[str, Any]:
     return managed_copy_creation_approval_requests_snapshot(limit=limit)
+
+
+@router.post("/copy-creation-provision")
+def copy_creation_provision(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_provisioning_managed_copy",
+        )
+    return managed_copy_creation_provision_snapshot(payload, actor=actor)
+
+
+@router.get("/copy-creation-provisions")
+def copy_creation_provisions(limit: int = 20) -> dict[str, Any]:
+    return managed_copy_creation_provisions_snapshot(limit=limit)
 
 
 @router.get("/isolation-rules-contract")

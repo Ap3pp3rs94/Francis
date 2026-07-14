@@ -39,6 +39,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "copy_creation_plans": "/managed-copies/copy-creation-plans",
         "copy_creation_approval_request": "/managed-copies/copy-creation-approval-request",
         "copy_creation_approval_requests": "/managed-copies/copy-creation-approval-requests",
+        "copy_creation_provision": "/managed-copies/copy-creation-provision",
+        "copy_creation_provisions": "/managed-copies/copy-creation-provisions",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "isolation_verification": "/managed-copies/isolation-verification",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
@@ -1044,14 +1046,234 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert approved_status["copy_approval_id"] == approval_id
     assert approved_status["copy_approval_status"] == "approved"
     assert approved_status["copy_creation_enabled"] is False
+    assert approved_status["copy_provisioning_enabled"] is True
+    assert approved_status["copy_provisioned"] is False
     assert approved_status["writes_tenant_state"] is False
-    assert approved_status["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_consumption"
+    assert approved_status["next_smallest_truthful_gap"] == "stage18_copy_creation_provision"
 
     approved_contract = client.get("/managed-copies/copy-creation-contract").json()
     approved_step_by_id = {item["id"]: item for item in approved_contract["process_steps"]}
     assert approved_step_by_id["approve"]["status"] == "approved"
-    assert approved_contract["state_machine"]["current_state"] == "approval_decided"
-    assert approved_contract["state_machine"]["enabled_transitions"] == []
+    assert approved_step_by_id["provision"]["status"] == "enabled"
+    assert approved_contract["state_machine"]["current_state"] == "approved"
+    assert approved_contract["state_machine"]["enabled_transitions"] == ["provision"]
+
+    provision_payload = {
+        **request_payload,
+        "plan_receipt_id": recorded["receipt_id"],
+        "approval_id": approval_id,
+        "dry_run": True,
+    }
+    provision_plan = client.post(
+        "/managed-copies/copy-creation-provision",
+        json=provision_payload,
+    ).json()
+
+    assert provision_plan["ok"] is True
+    assert provision_plan["status"] == "provision_ready"
+    assert provision_plan["provision_contract_ready"] is True
+    assert provision_plan["approval_exact_action_aligned"] is True
+    assert provision_plan["approval_status"] == "approved"
+    assert len(provision_plan["provision_fingerprint"]) == 64
+    assert provision_plan["copy_provisioned"] is False
+    assert provision_plan["writes_tenant_state"] is False
+    assert provision_plan["writes_registry"] is False
+    assert provision_plan["writes_receipts"] is False
+    assert provision_plan["starts_runtime"] is False
+    assert provision_plan["grants_execution_authority"] is False
+    assert provision_plan["grants_mutation_authority"] is False
+    provision_plan_text = json.dumps(provision_plan)
+    assert raw_tenant_id not in provision_plan_text
+    assert raw_tenant_name not in provision_plan_text
+    assert raw_admin not in provision_plan_text
+
+    tenant_key = provision_plan["tenant_key"]
+    tenant_root = data_root / "managed_copies" / "tenants" / tenant_key
+    assert not tenant_root.exists()
+
+    mismatched_provision = client.post(
+        "/managed-copies/copy-creation-provision",
+        json={
+            **provision_payload,
+            "tenant_policy": {
+                "core_surrender_allowed": True,
+                "privacy_weak_pooling_allowed": False,
+            },
+        },
+    ).json()
+    assert mismatched_provision["ok"] is False
+    assert mismatched_provision["error"] == "copy_provision_contract_not_ready"
+    assert "tenant_policy_fingerprint_mismatch" in mismatched_provision["blockers"]
+    assert mismatched_provision["writes_tenant_state"] is False
+    assert not tenant_root.exists()
+
+    wrong_provision_fingerprint = client.post(
+        "/managed-copies/copy-creation-provision",
+        json={
+            **provision_payload,
+            "dry_run": False,
+            "provision_fingerprint": "0" * 64,
+            "confirm_provisioning": True,
+        },
+    ).json()
+    assert wrong_provision_fingerprint["ok"] is False
+    assert wrong_provision_fingerprint["error"] == "copy_provision_fingerprint_mismatch"
+    assert wrong_provision_fingerprint["writes_tenant_state"] is False
+    assert not tenant_root.exists()
+
+    provisioned = client.post(
+        "/managed-copies/copy-creation-provision",
+        json={
+            **provision_payload,
+            "dry_run": False,
+            "provision_fingerprint": provision_plan["provision_fingerprint"],
+            "confirm_provisioning": True,
+        },
+    ).json()
+
+    assert provisioned["ok"] is True
+    assert provisioned["status"] == "provisioned"
+    assert provisioned["copy_provisioned"] is True
+    assert provisioned["copy_created"] is True
+    assert provisioned["operator_approval_consumed"] is True
+    assert provisioned["single_use_enforced"] is True
+    assert provisioned["writes_tenant_state"] is True
+    assert provisioned["writes_registry"] is True
+    assert provisioned["writes_receipts"] is True
+    assert provisioned["consumes_approval"] is True
+    assert provisioned["starts_runtime"] is False
+    assert provisioned["receipt"]["status"] == "provisioned_unverified"
+    assert provisioned["receipt"]["registry_written"] is True
+    assert provisioned["receipt"]["isolation_verified"] is False
+    assert provisioned["next_smallest_truthful_gap"] == "stage18_copy_isolation_verification"
+
+    expected_domains = {
+        "data",
+        "memory",
+        "receipts",
+        "connectors",
+        "capability_packs",
+        "policy",
+        "support",
+    }
+    assert tenant_root.exists()
+    assert expected_domains <= {path.name for path in tenant_root.iterdir() if path.is_dir()}
+    tenant_config_path = tenant_root / "config" / "managed_copy.json"
+    tenant_config_text = tenant_config_path.read_text(encoding="utf-8")
+    assert raw_tenant_id in tenant_config_text
+    assert raw_tenant_name in tenant_config_text
+    assert raw_admin in tenant_config_text
+
+    provisioning_receipt_path = tenant_root / "receipts" / "provisioning.json"
+    consumption_receipt_path = tenant_root / "receipts" / "approval_consumption.json"
+    registry_path = data_root / "managed_copies" / "registry.json"
+    for redacted_path in (provisioning_receipt_path, consumption_receipt_path, registry_path):
+        redacted_text = redacted_path.read_text(encoding="utf-8")
+        assert raw_tenant_id not in redacted_text
+        assert raw_tenant_name not in redacted_text
+        assert raw_admin not in redacted_text
+
+    consumption_receipt = json.loads(consumption_receipt_path.read_text(encoding="utf-8"))
+    assert consumption_receipt["approval_id"] == approval_id
+    assert consumption_receipt["approval_consumed"] is True
+    assert consumption_receipt["single_use_enforced"] is True
+    assert consumption_receipt["runtime_started"] is False
+
+    pending_receipt = json.loads(provisioning_receipt_path.read_text(encoding="utf-8"))
+    pending_receipt["status"] = "tenant_published_pending_registry"
+    pending_receipt["registry_written"] = False
+    pending_receipt["governance"]["registry_entry_written"] = False
+    provisioning_receipt_path.write_text(json.dumps(pending_receipt), encoding="utf-8")
+    pending_manifest_path = tenant_root / "manifest.json"
+    pending_manifest = json.loads(pending_manifest_path.read_text(encoding="utf-8"))
+    pending_manifest["status"] = "tenant_published_pending_registry"
+    pending_manifest["registry_written"] = False
+    pending_manifest_path.write_text(json.dumps(pending_manifest), encoding="utf-8")
+    registry_path.unlink()
+
+    recovery_readback = client.get("/managed-copies/copy-creation-provisions").json()
+    assert recovery_readback["status"] == "recovery_required"
+    assert recovery_readback["valid_count"] == 0
+    assert recovery_readback["pending_recovery_count"] == 1
+    assert recovery_readback["next_smallest_truthful_gap"] == "stage18_copy_provision_recovery"
+    recovery_status = client.get("/managed-copies/status").json()
+    assert recovery_status["copy_provisioned"] is False
+    assert recovery_status["copy_provision_recovery_required"] is True
+    assert recovery_status["copy_provision_approval_aligned"] is True
+    assert recovery_status["next_smallest_truthful_gap"] == "stage18_copy_provision_recovery"
+    recovery_contract = client.get("/managed-copies/copy-creation-contract").json()
+    recovery_step_by_id = {item["id"]: item for item in recovery_contract["process_steps"]}
+    assert recovery_step_by_id["provision"]["status"] == "recovery_required"
+    assert recovery_contract["state_machine"]["current_state"] == "provision_recovery_required"
+    assert recovery_contract["state_machine"]["enabled_transitions"] == ["recover_provision"]
+
+    recovered_provision = client.post(
+        "/managed-copies/copy-creation-provision",
+        json={
+            **provision_payload,
+            "dry_run": False,
+            "provision_fingerprint": provision_plan["provision_fingerprint"],
+            "confirm_provisioning": True,
+        },
+    ).json()
+    assert recovered_provision["ok"] is True
+    assert recovered_provision["status"] == "provision_recovered"
+    assert recovered_provision["writes_tenant_state"] is False
+    assert recovered_provision["writes_registry"] is True
+    assert recovered_provision["writes_receipts"] is True
+    assert recovered_provision["consumes_approval"] is False
+    assert registry_path.exists()
+    recovered_receipt = json.loads(provisioning_receipt_path.read_text(encoding="utf-8"))
+    assert recovered_receipt["status"] == "provisioned_unverified"
+    assert recovered_receipt["registry_written"] is True
+    assert recovered_receipt["governance"]["registry_entry_written"] is True
+
+    provision_readback = client.get("/managed-copies/copy-creation-provisions").json()
+    assert provision_readback["status"] == "ready"
+    assert provision_readback["valid_count"] == 1
+    assert provision_readback["pending_recovery_count"] == 0
+    assert provision_readback["latest_valid_receipt_id"] == provisioned["receipt_id"]
+    assert provision_readback["copy_provisioned"] is True
+    provision_readback_text = json.dumps(provision_readback)
+    assert raw_tenant_id not in provision_readback_text
+    assert raw_tenant_name not in provision_readback_text
+    assert raw_admin not in provision_readback_text
+
+    duplicate_provision = client.post(
+        "/managed-copies/copy-creation-provision",
+        json={
+            **provision_payload,
+            "dry_run": False,
+            "provision_fingerprint": provision_plan["provision_fingerprint"],
+            "confirm_provisioning": True,
+        },
+    ).json()
+    assert duplicate_provision["ok"] is True
+    assert duplicate_provision["status"] == "already_provisioned"
+    assert duplicate_provision["receipt_id"] == provisioned["receipt_id"]
+    assert duplicate_provision["writes_tenant_state"] is False
+    assert duplicate_provision["writes_registry"] is False
+    assert duplicate_provision["writes_receipts"] is False
+    assert duplicate_provision["consumes_approval"] is False
+
+    provisioned_status = client.get("/managed-copies/status").json()
+    creation = next(item for item in provisioned_status["deliverables"] if item["id"] == "copy_creation_process")
+    assert creation["status"] == "provisioned_unverified"
+    assert provisioned_status["copy_provisioning_enabled"] is False
+    assert provisioned_status["copy_provisioned"] is True
+    assert provisioned_status["copy_provision_recovery_required"] is False
+    assert provisioned_status["copy_provision_approval_aligned"] is True
+    assert provisioned_status["copy_provision_receipt_id"] == provisioned["receipt_id"]
+    assert provisioned_status["provisioned_copy_id"] == provisioned["copy_id"]
+    assert provisioned_status["copy_provision_approval_aligned"] is True
+    assert provisioned_status["next_smallest_truthful_gap"] == "stage18_copy_isolation_verification"
+
+    provisioned_contract = client.get("/managed-copies/copy-creation-contract").json()
+    provisioned_step_by_id = {item["id"]: item for item in provisioned_contract["process_steps"]}
+    assert provisioned_step_by_id["provision"]["status"] == "complete"
+    assert provisioned_step_by_id["verify"]["status"] == "required_not_implemented"
+    assert provisioned_contract["state_machine"]["current_state"] == "provisioned_unverified"
+    assert provisioned_contract["state_machine"]["enabled_transitions"] == []
 
     invalid_approval_path = approvals_root / "pending" / "managed-copy-invalid.json"
     invalid_approval_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1075,7 +1297,8 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     final_status = client.get("/managed-copies/status").json()
     assert final_status["copy_approval_id"] == approval_id
     assert final_status["copy_approval_status"] == "approved"
-    assert not (data_root / "managed_copies").exists()
+    assert final_status["copy_provisioned"] is True
+    assert tenant_root.exists()
 
 
 def test_managed_copy_creation_plan_denies_unscoped_actor_without_writing(
@@ -1133,6 +1356,35 @@ def test_managed_copy_creation_approval_request_denies_unscoped_actor_without_wr
     assert body["writes_receipts"] is False
     assert body["writes_tenant_state"] is False
     assert not (data_root / "approvals").exists()
+
+
+def test_managed_copy_creation_provision_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.delenv("FRANCIS_API_ACTOR_SCOPES", raising=False)
+
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/copy-creation-provision",
+            json={
+                "request_actor": "stage18.unscoped-provisioner",
+                "plan_receipt_id": "managed_copy_creation_plan_missing",
+                "approval_id": "approval-missing",
+            },
+        )
+        .json()
+    )
+
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.copy_creation.write"
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert not (data_root / "managed_copies").exists()
 
 
 def test_managed_copy_preflight_denies_unscoped_actor_without_writing(
@@ -3396,6 +3648,8 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
     assert body["routes"]["copy_creation_plans"] == "/managed-copies/copy-creation-plans"
     assert body["routes"]["copy_creation_approval_request"] == ("/managed-copies/copy-creation-approval-request")
     assert body["routes"]["copy_creation_approval_requests"] == ("/managed-copies/copy-creation-approval-requests")
+    assert body["routes"]["copy_creation_provision"] == "/managed-copies/copy-creation-provision"
+    assert body["routes"]["copy_creation_provisions"] == "/managed-copies/copy-creation-provisions"
 
     requirement_ids = {item["id"] for item in body["requirements"]}
     assert {
@@ -3440,6 +3694,8 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
             "approval_emergency",
             "approved",
             "provisioning",
+            "provision_recovery_required",
+            "provisioned_unverified",
             "verifying",
             "active",
             "quarantined",

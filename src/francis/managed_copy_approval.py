@@ -372,7 +372,7 @@ def _approval_action_fingerprint(item: dict[str, Any]) -> str:
 def _next_gap(status: str) -> str:
     return {
         "pending": "stage18_copy_creation_approval_decision",
-        "approved": "stage18_copy_creation_approval_consumption",
+        "approved": "stage18_copy_creation_provision",
         "rejected": "stage18_copy_creation_plan_revision",
         "emergency": "stage18_copy_creation_approval_emergency_review",
     }.get(status, "stage18_copy_creation_approval_request")
