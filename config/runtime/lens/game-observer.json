@@ -1,13 +1,13 @@
 {
   "kind": "lens.game_observer.runtime_config",
-  "version": 1,
+  "version": 2,
   "enabled": true,
   "target": {
-    "id": "sand",
-    "process_names": [
-      "Sand.exe",
-      "Sand_BE.exe",
-      "Sand-Win64-Shipping.exe"
+    "id": "foreground-game",
+    "mode": "foreground_game",
+    "process_names": [],
+    "launchers": [
+      "steam"
     ]
   },
   "model": {
@@ -39,6 +39,8 @@
     "input_execution_authority": false,
     "memory_write": false,
     "learning_authority": false,
-    "reward_authority": false
+    "reward_authority": false,
+    "foreground_game_required": true,
+    "local_process_launch_authority": false
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -14,14 +15,25 @@ from francis.lens.orb_body_state import lens_orb_body_runtime_readback
 from francis.lens.perception_capture import DesktopFrame
 
 LENS_SITUATION_MODEL_KIND = "lens.perception.situation_model"
-LENS_SITUATION_MODEL_VERSION = 1
+LENS_SITUATION_MODEL_VERSION = 2
 LENS_SITUATION_MODEL_ROUTE = "/lens/perception/now"
+_LEGACY_LENS_SITUATION_MODEL_VERSION = 1
+_GAME_OBSERVATION_KIND = "lens.game.observation"
+_GAME_OBSERVATION_VERSION = 2
+_LEGACY_GAME_OBSERVATION_VERSION = 1
 _GAME_TEACHING_SESSION_STATUS_KIND = "francis.apprenticeship.game_teaching_session.status"
 _GAME_TEACHING_EPISODE_REVIEW_STATUS_KIND = "francis.apprenticeship.game_teaching_episode_review.status"
 _GAME_TEACHING_CONTRACT_VERSION = 1
 
 _MAX_HEARTBEAT_AGE_SECONDS = 2.5
 _MAX_HEARTBEAT_FUTURE_SKEW_SECONDS = 0.25
+_TARGET_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
+_PROCESS_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_. -]{1,128}\.exe$", re.IGNORECASE)
+_SCENE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,47}$")
+_FRAME_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
+_TARGET_MODE_PROCESS_ALLOWLIST = "process_allowlist"
+_TARGET_MODE_FOREGROUND_GAME = "foreground_game"
 
 
 def write_lens_situation_model_heartbeat(
@@ -79,7 +91,8 @@ def write_lens_situation_model_heartbeat(
     pointer_activity = _as_dict(input_stream.get("pointer_activity"))
     foreground = _as_dict(input_current.get("foreground"))
     game_state = _as_dict(game_observation)
-    game_contract_valid = _game_observation_contract_valid(game_state, frame_id=frame_id, receipt_id=receipt_id)
+    game_contract_status = _game_observation_contract_status(game_state, frame_id=frame_id, receipt_id=receipt_id)
+    game_contract_valid = game_contract_status == "valid"
     game_target = _as_dict(game_state.get("target"))
     game_model = _as_dict(game_state.get("model"))
     game_scene_ready = bool(
@@ -94,6 +107,8 @@ def write_lens_situation_model_heartbeat(
         source_blockers.extend(_string_items(orb_body.get("blockers")) or ["lens_orb_body_state_not_connected"])
     if not game_state:
         source_blockers.append("lens_game_observer_not_connected")
+    elif game_contract_status == "legacy_v1":
+        source_blockers.append("lens_game_observer_contract_legacy_v1")
     elif not game_contract_valid:
         source_blockers.append("lens_game_observer_contract_invalid")
     else:
@@ -163,6 +178,8 @@ def write_lens_situation_model_heartbeat(
                 "status": (
                     str(game_state.get("status") or "blocked")
                     if game_contract_valid
+                    else "legacy_v1_blocked"
+                    if game_contract_status == "legacy_v1"
                     else "not_connected"
                     if not game_state
                     else "invalid"
@@ -170,9 +187,12 @@ def write_lens_situation_model_heartbeat(
                 "ready": game_scene_ready,
                 "configured": game_target.get("configured") is True if game_contract_valid else False,
                 "target_id": str(game_target.get("id") or "") if game_contract_valid else "",
+                "target_mode": str(game_target.get("mode") or "") if game_contract_valid else "",
                 "model_id": str(game_model.get("id") or "") if game_contract_valid else "",
                 "local_inference_only": game_contract_valid,
                 "remote_inference": False,
+                "foreground_game_required": game_contract_valid,
+                "local_process_launch_authority": False,
             },
             "semantic_watcher": {"status": "not_connected", "ready": False},
         },
@@ -203,12 +223,14 @@ def write_lens_situation_model_heartbeat(
             "keyboard_content_captured": False,
             "user_mouse_captured": False,
             "input_execution_authority": False,
+            "local_process_launch_authority": False,
             "memory_write": False,
             "raw_pixels_in_state": False,
             "local_game_inference": game_contract_valid,
             "remote_frame_transfer": False,
             "learning_authority": False,
             "reward_authority": False,
+            "foreground_game_required": True,
         },
     }
     _atomic_write_json(_situation_model_path(), payload)
@@ -227,11 +249,24 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
     governance = _as_dict(payload.get("governance"))
     sources = _as_dict(payload.get("sources"))
     game_source = _as_dict(sources.get("game_observer"))
+    heartbeat_version = payload.get("version")
+    current_contract = bool(
+        payload.get("kind") == LENS_SITUATION_MODEL_KIND
+        and not isinstance(heartbeat_version, bool)
+        and heartbeat_version == LENS_SITUATION_MODEL_VERSION
+    )
+    legacy_contract = bool(
+        payload.get("kind") == LENS_SITUATION_MODEL_KIND
+        and not isinstance(heartbeat_version, bool)
+        and heartbeat_version == _LEGACY_LENS_SITUATION_MODEL_VERSION
+    )
     blockers: list[str] = []
     if not payload:
         blockers.append("lens_situation_model_heartbeat_missing")
     else:
-        if payload.get("kind") != LENS_SITUATION_MODEL_KIND or payload.get("version") != LENS_SITUATION_MODEL_VERSION:
+        if legacy_contract:
+            blockers.append("lens_situation_model_heartbeat_legacy_v1")
+        elif not current_contract:
             blockers.append("lens_situation_model_heartbeat_contract_invalid")
         if payload.get("status") != "heartbeat_partial" or payload.get("has_current_desktop_state") is not True:
             blockers.append("lens_situation_model_heartbeat_state_invalid")
@@ -241,45 +276,49 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
             runtime_identity.get("execution_approval_id") or ""
         ):
             blockers.append("lens_situation_model_heartbeat_authority_missing")
-        if (
-            governance.get("runtime_state_only") is not True
-            or governance.get("observation_only") is not True
-            or governance.get("desktop_capture_authority") is not True
-            or governance.get("execution_authority") is not True
-        ):
-            blockers.append("lens_situation_model_heartbeat_governance_invalid")
-        if any(
-            governance.get(field) is not False
-            for field in (
-                "camera_capture_authority",
-                "microphone_capture_authority",
-                "keyboard_content_captured",
-                "user_mouse_captured",
-                "input_execution_authority",
-                "memory_write",
-                "raw_pixels_in_state",
-            )
-        ) or any(
-            governance.get(field, False) is not False
-            for field in (
-                "remote_frame_transfer",
-                "learning_authority",
-                "reward_authority",
-            )
-        ):
-            blockers.append("lens_situation_model_heartbeat_overbroad")
-        if payload.get("game_scene_ready") is True and (
-            game_source.get("ready") is not True
-            or game_source.get("local_inference_only") is not True
-            or game_source.get("remote_inference") is not False
-            or governance.get("local_game_inference") is not True
-        ):
-            blockers.append("lens_situation_model_game_observer_contract_invalid")
+        if current_contract:
+            if (
+                governance.get("runtime_state_only") is not True
+                or governance.get("observation_only") is not True
+                or governance.get("desktop_capture_authority") is not True
+                or governance.get("execution_authority") is not True
+                or governance.get("foreground_game_required") is not True
+            ):
+                blockers.append("lens_situation_model_heartbeat_governance_invalid")
+            if any(
+                governance.get(field) is not False
+                for field in (
+                    "camera_capture_authority",
+                    "microphone_capture_authority",
+                    "keyboard_content_captured",
+                    "user_mouse_captured",
+                    "input_execution_authority",
+                    "local_process_launch_authority",
+                    "memory_write",
+                    "raw_pixels_in_state",
+                )
+            ) or any(
+                governance.get(field, False) is not False
+                for field in (
+                    "remote_frame_transfer",
+                    "learning_authority",
+                    "reward_authority",
+                )
+            ):
+                blockers.append("lens_situation_model_heartbeat_overbroad")
+            if payload.get("game_scene_ready") is True and (
+                game_source.get("ready") is not True
+                or game_source.get("local_inference_only") is not True
+                or game_source.get("remote_inference") is not False
+                or governance.get("local_game_inference") is not True
+            ):
+                blockers.append("lens_situation_model_game_observer_contract_invalid")
     heartbeat_ready = not blockers
     return {
         "kind": "lens.perception.situation_model_readback",
         "status": "heartbeat_ready" if heartbeat_ready else "missing" if not payload else "blocked",
         "route": LENS_SITUATION_MODEL_ROUTE,
+        "heartbeat_version": _safe_int(heartbeat_version),
         "heartbeat_ready": heartbeat_ready,
         "semantic_comprehension_ready": payload.get("semantic_comprehension_ready") is True,
         "game_scene_ready": heartbeat_ready and payload.get("game_scene_ready") is True,
@@ -335,18 +374,55 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _game_observation_contract_status(game_state: dict[str, Any], *, frame_id: str, receipt_id: str) -> str:
+    if not game_state or game_state.get("kind") != _GAME_OBSERVATION_KIND:
+        return "invalid"
+    version = game_state.get("version")
+    if isinstance(version, bool):
+        return "invalid"
+    if version == _LEGACY_GAME_OBSERVATION_VERSION:
+        return "legacy_v1"
+    if version != _GAME_OBSERVATION_VERSION:
+        return "invalid"
+    return (
+        "valid"
+        if _game_observation_v2_contract_valid(game_state, frame_id=frame_id, receipt_id=receipt_id)
+        else "invalid"
+    )
+
+
 def _game_observation_contract_valid(game_state: dict[str, Any], *, frame_id: str, receipt_id: str) -> bool:
-    if not game_state:
-        return False
+    return _game_observation_contract_status(game_state, frame_id=frame_id, receipt_id=receipt_id) == "valid"
+
+
+def _game_observation_v2_contract_valid(
+    game_state: dict[str, Any],
+    *,
+    frame_id: str,
+    receipt_id: str,
+) -> bool:
     configuration = _as_dict(game_state.get("configuration"))
     governance = _as_dict(game_state.get("governance"))
     runtime_identity = _as_dict(game_state.get("runtime_identity"))
-    return bool(
-        game_state.get("kind") == "lens.game.observation"
-        and game_state.get("version") == 1
-        and str(game_state.get("source_frame_id") or "") == frame_id
+    target = _as_dict(game_state.get("target"))
+    model = _as_dict(game_state.get("model"))
+    ready = game_state.get("ready") is True
+    semantic_ready = game_state.get("semantic_scene_ready") is True
+    observed_at = _safe_float(game_state.get("observed_at"))
+    blockers = game_state.get("blockers")
+    if observed_at is None:
+        return False
+    base_valid = bool(
+        str(game_state.get("source_frame_id") or "") == frame_id
+        and _FRAME_ID_PATTERN.fullmatch(frame_id)
+        and ready is semantic_ready
         and str(runtime_identity.get("authority_receipt_id") or "") == receipt_id
+        and 1 <= len(receipt_id) <= 256
         and _game_observer_configuration_contract_valid(configuration)
+        and _game_target_contract_valid(target, require_ready=ready)
+        and _game_model_contract_valid(model, require_ready=ready)
+        and isinstance(blockers, list)
+        and all(isinstance(item, str) and 1 <= len(item) <= 160 for item in blockers)
         and governance.get("observation_only") is True
         and governance.get("local_inference_only") is True
         and all(
@@ -358,12 +434,242 @@ def _game_observation_contract_valid(game_state: dict[str, Any], *, frame_id: st
                 "keyboard_content_captured",
                 "user_mouse_captured",
                 "input_execution_authority",
+                "local_process_launch_authority",
                 "memory_write",
                 "learning_authority",
                 "reward_authority",
             )
         )
+        and governance.get("foreground_game_required") is True
+        and _game_teaching_lineage_valid(game_state, target_id=str(target.get("id") or ""))
     )
+    if not base_valid:
+        return False
+    if not ready:
+        status = str(game_state.get("status") or "")
+        return bool(1 <= len(status) <= 80)
+    return _ready_game_observation_lineage_valid(
+        game_state,
+        target=target,
+        model=model,
+        observed_at=observed_at,
+        receipt_id=receipt_id,
+    )
+
+
+def _game_target_contract_valid(target: dict[str, Any], *, require_ready: bool) -> bool:
+    if not target:
+        return False
+    target_id = str(target.get("id") or "")
+    mode = str(target.get("mode") or "")
+    process_names = target.get("process_names")
+    launchers = target.get("launchers")
+    if (
+        not isinstance(target.get("configured"), bool)
+        or not isinstance(target.get("foreground"), bool)
+        or not isinstance(process_names, list)
+        or not isinstance(launchers, list)
+        or any(not isinstance(item, str) or not _PROCESS_NAME_PATTERN.fullmatch(item) for item in process_names)
+        or any(not isinstance(item, str) or item != "steam" for item in launchers)
+        or len({item.casefold() for item in process_names}) != len(process_names)
+        or len(set(launchers)) != len(launchers)
+        or (target_id and not _TARGET_ID_PATTERN.fullmatch(target_id))
+    ):
+        return False
+    if mode == _TARGET_MODE_PROCESS_ALLOWLIST:
+        configured = bool(target_id and process_names and not launchers)
+        expected_basis = "foreground_process_match"
+    elif mode == _TARGET_MODE_FOREGROUND_GAME:
+        configured = bool(target_id and launchers and not process_names)
+        expected_basis = "local_launcher_library_path"
+    else:
+        return False
+    foreground = target.get("foreground") is True
+    visibility_basis = str(target.get("visibility_basis") or "")
+    return bool(
+        target.get("configured") is configured
+        and (visibility_basis == expected_basis if foreground else visibility_basis == "not_observed")
+        and (not require_ready or (configured and foreground))
+    )
+
+
+def _game_model_contract_valid(model: dict[str, Any], *, require_ready: bool) -> bool:
+    if not model:
+        return False
+    model_id = str(model.get("id") or "")
+    if (
+        not isinstance(model.get("configured"), bool)
+        or not isinstance(model.get("local_files_present"), bool)
+        or model.get("remote_inference") is not False
+        or (model_id and not _MODEL_ID_PATTERN.fullmatch(model_id))
+        or ".." in model_id.split("/")
+    ):
+        return False
+    if model.get("configured") is True and not model_id:
+        return False
+    return bool(
+        not require_ready
+        or (model.get("configured") is True and model.get("local_files_present") is True and bool(model_id))
+    )
+
+
+def _ready_game_observation_lineage_valid(
+    game_state: dict[str, Any],
+    *,
+    target: dict[str, Any],
+    model: dict[str, Any],
+    observed_at: float,
+    receipt_id: str,
+) -> bool:
+    foreground = _as_dict(game_state.get("foreground"))
+    scene = _as_dict(game_state.get("scene"))
+    classification = _as_dict(game_state.get("classification"))
+    process_id = _safe_int(foreground.get("process_id"))
+    process_name = str(foreground.get("process_name") or "")
+    target_id = str(target.get("id") or "")
+    mode = str(target.get("mode") or "")
+    expected_basis = (
+        "local_launcher_library_path" if mode == _TARGET_MODE_FOREGROUND_GAME else "foreground_process_match"
+    )
+    process_names = target.get("process_names")
+    if not isinstance(process_names, list):
+        return False
+    if (
+        game_state.get("status") != "scene_classified"
+        or game_state.get("blockers") != []
+        or foreground.get("supported") is not True
+        or foreground.get("available") is not True
+        or foreground.get("target_match") is not True
+        or process_id <= 0
+        or _safe_int(foreground.get("window_id")) <= 0
+        or not _PROCESS_NAME_PATTERN.fullmatch(process_name)
+        or foreground.get("window_title_included") is not False
+        or str(foreground.get("verification_basis") or "") != expected_basis
+        or (
+            mode == _TARGET_MODE_PROCESS_ALLOWLIST
+            and process_name.casefold() not in {item.casefold() for item in process_names}
+        )
+        or (mode == _TARGET_MODE_PROCESS_ALLOWLIST and foreground.get("game_verified") is not False)
+        or (mode == _TARGET_MODE_FOREGROUND_GAME and foreground.get("game_verified") is not True)
+    ):
+        return False
+    return _game_scene_contract_valid(scene) and _game_classification_lineage_valid(
+        classification,
+        scene=scene,
+        observed_at=observed_at,
+        target_id=target_id,
+        process_id=process_id,
+        process_name=process_name,
+        model_id=str(model.get("id") or ""),
+        receipt_id=receipt_id,
+    )
+
+
+def _game_scene_contract_valid(scene: dict[str, Any]) -> bool:
+    confidence = _safe_float(scene.get("confidence"))
+    margin = _safe_float(scene.get("margin"))
+    min_confidence = _safe_float(scene.get("min_confidence"))
+    min_margin = _safe_float(scene.get("min_margin"))
+    scene_id = str(scene.get("id") or "")
+    top_candidate_id = str(scene.get("top_candidate_id") or "")
+    raw_candidates = scene.get("candidates")
+    if (
+        scene.get("ready") is not True
+        or not _SCENE_ID_PATTERN.fullmatch(scene_id)
+        or top_candidate_id != scene_id
+        or confidence is None
+        or margin is None
+        or min_confidence is None
+        or min_margin is None
+        or not all(0.0 <= value <= 1.0 for value in (confidence, margin, min_confidence, min_margin))
+        or confidence < min_confidence
+        or margin < min_margin
+        or not isinstance(raw_candidates, list)
+        or not 1 <= len(raw_candidates) <= 3
+    ):
+        return False
+    candidates: list[tuple[str, float]] = []
+    for raw_candidate in raw_candidates:
+        candidate = _as_dict(raw_candidate)
+        candidate_id = str(candidate.get("scene_id") or "")
+        score = _safe_float(candidate.get("score"))
+        if not _SCENE_ID_PATTERN.fullmatch(candidate_id) or score is None or not 0.0 <= score <= 1.0:
+            return False
+        candidates.append((candidate_id, score))
+    if len({candidate_id for candidate_id, _score in candidates}) != len(candidates):
+        return False
+    expected_margin = max(0.0, candidates[0][1] - (candidates[1][1] if len(candidates) > 1 else 0.0))
+    return bool(
+        candidates == sorted(candidates, key=lambda item: item[1], reverse=True)
+        and candidates[0][0] == scene_id
+        and abs(candidates[0][1] - confidence) <= 1e-6
+        and abs(expected_margin - margin) <= 1e-6
+    )
+
+
+def _game_classification_lineage_valid(
+    classification: dict[str, Any],
+    *,
+    scene: dict[str, Any],
+    observed_at: float,
+    target_id: str,
+    process_id: int,
+    process_name: str,
+    model_id: str,
+    receipt_id: str,
+) -> bool:
+    source_frame_id = str(classification.get("source_frame_id") or "")
+    classified_at = _safe_float(classification.get("classified_at"))
+    age_ms = _safe_float(classification.get("age_ms"))
+    max_age_ms = _safe_float(classification.get("max_age_ms"))
+    inference_ms = _safe_float(classification.get("inference_ms"))
+    if (
+        not _FRAME_ID_PATTERN.fullmatch(source_frame_id)
+        or classified_at is None
+        or age_ms is None
+        or max_age_ms is None
+        or inference_ms is None
+        or not 0.0 <= classified_at <= observed_at
+        or age_ms < 0.0
+        or not 500.0 <= max_age_ms <= 60000.0
+        or age_ms > max_age_ms
+        or inference_ms < 0.0
+        or abs(((observed_at - classified_at) * 1000.0) - age_ms) > 1.0
+        or not 1 <= len(str(classification.get("device") or "")) <= 80
+        or not 1 <= len(str(classification.get("backend") or "")) <= 120
+        or not 1 <= len(str(classification.get("score_normalization") or "")) <= 120
+    ):
+        return False
+    return bool(
+        str(classification.get("target_id") or "") == target_id
+        and _safe_int(classification.get("process_id")) == process_id
+        and str(classification.get("process_name") or "").casefold() == process_name.casefold()
+        and str(classification.get("model_id") or "") == model_id
+        and str(classification.get("scene_id") or "") == str(scene.get("id") or "")
+        and str(classification.get("authority_receipt_id") or "") == receipt_id
+    )
+
+
+def _game_teaching_lineage_valid(game_state: dict[str, Any], *, target_id: str) -> bool:
+    teaching_session = _as_dict(game_state.get("teaching_session"))
+    teaching_review = _as_dict(game_state.get("teaching_review"))
+    if game_state.get("teaching_session") is not None and not isinstance(game_state.get("teaching_session"), dict):
+        return False
+    if game_state.get("teaching_review") is not None and not isinstance(game_state.get("teaching_review"), dict):
+        return False
+    if teaching_session and not _game_teaching_session_contract_valid(teaching_session, target_id=target_id):
+        return False
+    if teaching_review and not _game_teaching_review_contract_valid(teaching_review, target_id=target_id):
+        return False
+    session_episode_id = str(teaching_session.get("episode_receipt_id") or "")
+    review_episode_id = str(teaching_review.get("episode_receipt_id") or "")
+    if session_episode_id and review_episode_id:
+        return bool(
+            session_episode_id == review_episode_id
+            and str(teaching_session.get("session_id") or "") == str(teaching_review.get("session_id") or "")
+            and str(teaching_session.get("target_id") or "") == str(teaching_review.get("target_id") or "")
+        )
+    return True
 
 
 def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
@@ -392,16 +698,22 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
         "target": {
             "id": str(target.get("id") or ""),
             "configured": target.get("configured") is True,
+            "mode": str(target.get("mode") or ""),
             "process_names": _string_items(target.get("process_names")),
+            "launchers": _string_items(target.get("launchers")),
             "foreground": target.get("foreground") is True,
             "visibility_basis": str(target.get("visibility_basis") or ""),
         },
         "foreground": {
+            "supported": foreground.get("supported") is True,
+            "available": foreground.get("available") is True,
             "target_match": foreground.get("target_match") is True,
             "process_id": _safe_int(foreground.get("process_id")),
             "process_name": str(foreground.get("process_name") or ""),
             "window_id": _safe_int(foreground.get("window_id")),
             "window_title_included": False,
+            "game_verified": foreground.get("game_verified") is True,
+            "verification_basis": str(foreground.get("verification_basis") or ""),
         },
         "scene": (
             {
@@ -422,10 +734,17 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
                 "source_frame_id": str(classification.get("source_frame_id") or ""),
                 "classified_at": _safe_float(classification.get("classified_at")),
                 "age_ms": _safe_float(classification.get("age_ms")),
+                "max_age_ms": _safe_float(classification.get("max_age_ms")),
                 "inference_ms": _safe_float(classification.get("inference_ms")),
                 "device": str(classification.get("device") or ""),
                 "backend": str(classification.get("backend") or ""),
                 "score_normalization": str(classification.get("score_normalization") or ""),
+                "target_id": str(classification.get("target_id") or ""),
+                "process_id": _safe_int(classification.get("process_id")),
+                "process_name": str(classification.get("process_name") or ""),
+                "model_id": str(classification.get("model_id") or ""),
+                "scene_id": str(classification.get("scene_id") or ""),
+                "authority_receipt_id": str(classification.get("authority_receipt_id") or ""),
             }
             if classification
             else {}
@@ -469,7 +788,7 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
 
 def _game_observer_configuration_contract_valid(configuration: dict[str, Any]) -> bool:
     if not configuration:
-        return True
+        return False
     source = str(configuration.get("source") or "")
     path = str(configuration.get("path") or "")
     fingerprint = str(configuration.get("fingerprint") or "")
@@ -513,10 +832,18 @@ def _sha256_fingerprint_valid(value: str) -> bool:
 
 def _game_teaching_session_contract_valid(teaching: dict[str, Any], *, target_id: str) -> bool:
     governance = _as_dict(teaching.get("governance"))
+    status = str(teaching.get("status") or "")
+    teaching_target_id = str(teaching.get("target_id") or "")
+    session_id = str(teaching.get("session_id") or "")
+    target_lineage_valid = (
+        teaching_target_id == target_id
+        if teaching_target_id or session_id
+        else status in {"idle", "unavailable", "recording_error"}
+    )
     return bool(
         teaching.get("kind") == _GAME_TEACHING_SESSION_STATUS_KIND
         and teaching.get("version") == _GAME_TEACHING_CONTRACT_VERSION
-        and str(teaching.get("target_id") or "") == target_id
+        and target_lineage_valid
         and governance.get("explicit_start_stop_required") is True
         and governance.get("semantic_transitions_only") is True
         and all(

@@ -4,10 +4,12 @@ import json
 from concurrent.futures import Executor, Future
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from francis.lens import game_observer as game_observer_module
 from francis.lens.game_observer import (
     GameSceneDefinition,
     LensGameObserver,
@@ -88,6 +90,16 @@ def _config(model_path: Path) -> LensGameObserverConfig:
     )
 
 
+def _foreground_game_config(model_path: Path) -> LensGameObserverConfig:
+    return replace(
+        _config(model_path),
+        target_id="foreground-game",
+        target_processes=(),
+        target_mode="foreground_game",
+        game_launchers=("steam",),
+    )
+
+
 def _foreground(process_name: str = "Sand.exe") -> dict[str, Any]:
     return {
         "supported": True,
@@ -107,11 +119,13 @@ def _clear_game_observer_overrides(monkeypatch) -> None:  # type: ignore[no-unty
 def _runtime_config_payload() -> dict[str, Any]:
     return {
         "kind": "lens.game_observer.runtime_config",
-        "version": 1,
+        "version": 2,
         "enabled": True,
         "target": {
-            "id": "sand",
-            "process_names": ["Sand.exe", "Sand-Win64-Shipping.exe"],
+            "id": "foreground-game",
+            "mode": "foreground_game",
+            "process_names": [],
+            "launchers": ["steam"],
         },
         "model": {
             "id": "google/siglip-base-patch16-224",
@@ -140,6 +154,8 @@ def _runtime_config_payload() -> dict[str, Any]:
             "memory_write": False,
             "learning_authority": False,
             "reward_authority": False,
+            "foreground_game_required": True,
+            "local_process_launch_authority": False,
         },
     }
 
@@ -150,8 +166,10 @@ def _write_runtime_config(path: Path, payload: dict[str, Any] | None = None) -> 
 
 
 def test_config_reads_bounded_target_and_scene_environment(tmp_path: Path, monkeypatch) -> None:
-    model_path = tmp_path / "model"
+    data_root = tmp_path / "data"
+    model_path = data_root / "models" / "bounded-model"
     monkeypatch.delenv("FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH", raising=False)
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_LENS_GAME_TARGET_PROCESSES", "Sand.exe,Sand-Win64-Shipping.exe,Sand.exe")
     monkeypatch.setenv("FRANCIS_LENS_GAME_TARGET_ID", "sand")
     monkeypatch.setenv("FRANCIS_LENS_GAME_OBSERVER_MODEL_PATH", str(model_path))
@@ -185,8 +203,10 @@ def test_config_reads_tracked_runtime_contract_without_process_environment(
     config = LensGameObserverConfig.from_environment()
 
     assert config.enabled is True
-    assert config.target_id == "sand"
-    assert config.target_processes == ("Sand.exe", "Sand_BE.exe", "Sand-Win64-Shipping.exe")
+    assert config.target_id == "foreground-game"
+    assert config.target_mode == "foreground_game"
+    assert config.target_processes == ()
+    assert config.game_launchers == ("steam",)
     assert config.model_path == tmp_path / "data" / "models" / "google--siglip-base-patch16-224"
     assert config.model_id == "google/siglip-base-patch16-224"
     assert config.configuration_source == "runtime_config"
@@ -209,6 +229,8 @@ def test_runtime_contract_records_explicit_environment_overrides(tmp_path: Path,
     config = LensGameObserverConfig.from_environment()
 
     assert config.target_processes == ("Sand.exe",)
+    assert config.target_mode == "process_allowlist"
+    assert config.game_launchers == ()
     assert config.min_confidence == 0.4
     assert config.configuration_source == "runtime_config_with_environment_overrides"
     assert config.environment_override_count == 2
@@ -225,6 +247,42 @@ def test_runtime_contract_rejects_model_path_outside_data(tmp_path: Path, monkey
 
     with pytest.raises(ValueError, match="lens_game_observer_model_path_outside_data"):
         LensGameObserverConfig.from_environment()
+
+
+def test_environment_model_path_override_rejects_absolute_path_outside_data(tmp_path: Path, monkeypatch) -> None:
+    _clear_game_observer_overrides(monkeypatch)
+    data_root = tmp_path / "data"
+    monkeypatch.delenv("FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH", raising=False)
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_LENS_GAME_TARGET_PROCESSES", "Sand.exe")
+    monkeypatch.setenv("FRANCIS_LENS_GAME_OBSERVER_MODEL_PATH", str(tmp_path / "outside" / "model"))
+    monkeypatch.setenv("FRANCIS_LENS_GAME_OBSERVER_MODEL_ID", "test/siglip")
+
+    with pytest.raises(ValueError, match="lens_game_observer_model_path_outside_data"):
+        LensGameObserverConfig.from_environment()
+
+
+def test_runtime_contract_accepts_legacy_allowlisted_game_config(tmp_path: Path, monkeypatch) -> None:
+    _clear_game_observer_overrides(monkeypatch)
+    payload = _runtime_config_payload()
+    payload["version"] = 1
+    payload["target"] = {
+        "id": "sand",
+        "process_names": ["Sand.exe", "Sand-Win64-Shipping.exe"],
+    }
+    payload["governance"].pop("foreground_game_required")
+    payload["governance"].pop("local_process_launch_authority")
+    config_path = tmp_path / "game-observer.json"
+    _write_runtime_config(config_path, payload)
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH", str(config_path))
+
+    config = LensGameObserverConfig.from_environment()
+
+    assert config.target_id == "sand"
+    assert config.target_mode == "process_allowlist"
+    assert config.target_processes == ("Sand.exe", "Sand-Win64-Shipping.exe")
+    assert config.game_launchers == ()
 
 
 def test_runtime_contract_rejects_input_authority(tmp_path: Path, monkeypatch) -> None:
@@ -287,6 +345,188 @@ def test_observer_classifies_allowlisted_foreground_game_without_leaking_window_
     assert classified["governance"]["input_execution_authority"] is False
     assert classified["governance"]["learning_authority"] is False
     assert classifier.calls == 1
+
+
+def test_observer_classifies_verified_existing_foreground_game_without_launch_authority(tmp_path: Path) -> None:
+    model_path = tmp_path / "model"
+    model_path.mkdir()
+    classifier = _Classifier(
+        [
+            {"scene_id": "active_gameplay", "score": 0.78},
+            {"scene_id": "game_menu", "score": 0.12},
+        ]
+    )
+    observer = LensGameObserver(
+        _foreground_game_config(model_path),
+        foreground_process=lambda: _foreground("AnyGame.exe"),
+        game_process_verifier=lambda process_id, launchers: {
+            "supported": True,
+            "available": True,
+            "verified": process_id == 55 and launchers == ("steam",),
+            "basis": "local_launcher_library_path",
+            "launcher_id": "steam",
+        },
+        classifier=classifier,
+        executor=_ImmediateExecutor(),
+        clock=lambda: 100.15,
+    )
+
+    warming = observer.observe(
+        frame=_frame(),
+        source_frame_id="frame-1",
+        authority_receipt_id="capture-receipt",
+        observed_at=100.1,
+    )
+    classified = observer.observe(
+        frame=_frame(captured_at=100.2),
+        source_frame_id="frame-2",
+        authority_receipt_id="capture-receipt",
+        observed_at=100.2,
+    )
+
+    assert warming["status"] == "semantic_warming"
+    assert classified["status"] == "scene_classified"
+    assert classified["version"] == 2
+    assert classified["target"] == {
+        "id": "foreground-game",
+        "configured": True,
+        "mode": "foreground_game",
+        "process_names": [],
+        "launchers": ["steam"],
+        "foreground": True,
+        "visibility_basis": "local_launcher_library_path",
+    }
+    assert classified["foreground"]["process_name"] == "AnyGame.exe"
+    assert classified["foreground"]["game_verified"] is True
+    assert classified["classification"]["target_id"] == "foreground-game"
+    assert classified["classification"]["process_id"] == 55
+    assert classified["classification"]["process_name"] == "AnyGame.exe"
+    assert classified["classification"]["model_id"] == "test/siglip"
+    assert classified["classification"]["scene_id"] == "active_gameplay"
+    assert classified["classification"]["authority_receipt_id"] == "capture-receipt"
+    assert classified["governance"]["foreground_game_required"] is True
+    assert classified["governance"]["local_process_launch_authority"] is False
+
+
+def test_observer_does_not_classify_unverified_foreground_application(tmp_path: Path) -> None:
+    model_path = tmp_path / "model"
+    model_path.mkdir()
+    classifier = _Classifier([])
+    observer = LensGameObserver(
+        _foreground_game_config(model_path),
+        foreground_process=lambda: _foreground("Code.exe"),
+        game_process_verifier=lambda _process_id, _launchers: {
+            "supported": True,
+            "available": True,
+            "verified": False,
+            "reason": "foreground_process_outside_game_library",
+        },
+        classifier=classifier,
+        executor=_ImmediateExecutor(),
+    )
+
+    result = observer.observe(
+        frame=_frame(),
+        source_frame_id="frame-1",
+        authority_receipt_id="capture-receipt",
+        observed_at=100.1,
+    )
+
+    assert result["status"] == "target_not_foreground"
+    assert result["foreground"]["target_match"] is False
+    assert result["foreground"]["process_name"] == ""
+    assert result["foreground"]["process_id"] == 0
+    assert "Code.exe" not in json.dumps(result)
+    assert classifier.calls == 0
+
+
+def test_observer_resets_classification_when_foreground_game_identity_changes(tmp_path: Path) -> None:
+    model_path = tmp_path / "model"
+    model_path.mkdir()
+    classifier = _Classifier(
+        [
+            {"scene_id": "active_gameplay", "score": 0.78},
+            {"scene_id": "game_menu", "score": 0.12},
+        ]
+    )
+    foreground = _foreground("FirstGame.exe")
+    observer = LensGameObserver(
+        _foreground_game_config(model_path),
+        foreground_process=lambda: dict(foreground),
+        game_process_verifier=lambda _process_id, _launchers: {
+            "supported": True,
+            "available": True,
+            "verified": True,
+            "basis": "local_launcher_library_path",
+        },
+        classifier=classifier,
+        executor=_ImmediateExecutor(),
+        clock=lambda: 100.3,
+    )
+    first = observer.observe(
+        frame=_frame(),
+        source_frame_id="frame-1",
+        authority_receipt_id="capture-receipt",
+        observed_at=100.1,
+    )
+    foreground.update({"process_name": "SecondGame.exe"})
+    switched = observer.observe(
+        frame=_frame(captured_at=100.2),
+        source_frame_id="frame-2",
+        authority_receipt_id="capture-receipt",
+        observed_at=100.2,
+    )
+    classified = observer.observe(
+        frame=_frame(captured_at=100.3),
+        source_frame_id="frame-3",
+        authority_receipt_id="capture-receipt",
+        observed_at=100.3,
+    )
+
+    assert first["status"] == "semantic_warming"
+    assert switched["status"] == "semantic_warming"
+    assert classified["status"] == "scene_classified"
+    assert classified["classification"]["source_frame_id"] == "frame-2"
+    assert classifier.calls == 2
+
+
+def test_windows_game_verification_does_not_return_process_or_library_paths(tmp_path: Path, monkeypatch) -> None:
+    if game_observer_module.os.name != "nt":
+        pytest.skip("Windows process verification only")
+    game_root = tmp_path / "steamapps" / "common"
+    game_path = game_root / "Any Game" / "AnyGame.exe"
+    monkeypatch.setattr(game_observer_module, "_windows_process_image_path", lambda _process_id: game_path)
+    monkeypatch.setattr(game_observer_module, "_windows_game_library_roots", lambda _launcher: (game_root,))
+
+    result = game_observer_module.windows_foreground_game_process_verification(55, ("steam",))
+
+    assert result == {
+        "supported": True,
+        "available": True,
+        "verified": True,
+        "basis": "local_launcher_library_path",
+        "launcher_id": "steam",
+    }
+    assert str(tmp_path) not in json.dumps(result)
+
+
+def test_windows_readbacks_are_explicitly_unsupported_on_non_windows(monkeypatch) -> None:
+    monkeypatch.setattr(game_observer_module, "os", SimpleNamespace(name="posix"))
+
+    foreground = game_observer_module.windows_foreground_process_readback()
+    game = game_observer_module.windows_foreground_game_process_verification(55, ("steam",))
+
+    assert foreground == {
+        "supported": False,
+        "available": False,
+        "reason": "foreground_process_platform_unsupported",
+    }
+    assert game == {
+        "supported": False,
+        "available": False,
+        "verified": False,
+        "reason": "foreground_game_platform_unsupported",
+    }
 
 
 def test_observer_readback_exposes_safe_configuration_lineage(tmp_path: Path) -> None:

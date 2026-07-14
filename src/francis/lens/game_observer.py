@@ -1,4 +1,4 @@
-"""Bounded local-only semantic observation for an allowlisted foreground game."""
+"""Bounded local-only semantic observation for an existing foreground game."""
 
 from __future__ import annotations
 
@@ -18,9 +18,15 @@ from francis.kernel.paths import data_dir, repo_root
 from francis.lens.perception_capture import DesktopFrame
 
 LENS_GAME_OBSERVATION_KIND = "lens.game.observation"
-LENS_GAME_OBSERVATION_VERSION = 1
+LENS_GAME_OBSERVATION_VERSION = 2
 LENS_GAME_OBSERVER_CONFIG_KIND = "lens.game_observer.runtime_config"
-LENS_GAME_OBSERVER_CONFIG_VERSION = 1
+LENS_GAME_OBSERVER_CONFIG_VERSION = 2
+
+_LEGACY_GAME_OBSERVER_CONFIG_VERSION = 1
+_TARGET_MODE_PROCESS_ALLOWLIST = "process_allowlist"
+_TARGET_MODE_FOREGROUND_GAME = "foreground_game"
+_TARGET_MODES = frozenset({_TARGET_MODE_PROCESS_ALLOWLIST, _TARGET_MODE_FOREGROUND_GAME})
+_SUPPORTED_GAME_LAUNCHERS = frozenset({"steam"})
 
 _CONFIG_PATH_ENV = "FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH"
 _TARGET_PROCESSES_ENV = "FRANCIS_LENS_GAME_TARGET_PROCESSES"
@@ -54,7 +60,7 @@ _ENVIRONMENT_OVERRIDE_NAMES = (
     _INFERENCE_INTERVAL_ENV,
     _MAX_CLASSIFICATION_AGE_ENV,
 )
-_EXPECTED_RUNTIME_GOVERNANCE = {
+_LEGACY_RUNTIME_GOVERNANCE = {
     "observation_only": True,
     "local_inference_only": True,
     "remote_frame_transfer": False,
@@ -67,10 +73,17 @@ _EXPECTED_RUNTIME_GOVERNANCE = {
     "learning_authority": False,
     "reward_authority": False,
 }
+_EXPECTED_RUNTIME_GOVERNANCE = {
+    **_LEGACY_RUNTIME_GOVERNANCE,
+    "foreground_game_required": True,
+    "local_process_launch_authority": False,
+}
 
 _PROCESS_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_. -]{1,128}\.exe$", re.IGNORECASE)
 _TARGET_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 _SCENE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,47}$")
+_STEAM_LIBRARY_PATH_PATTERN = re.compile(r'^\s*"path"\s+"((?:\\\\.|[^"\\])*)"\s*$', re.MULTILINE)
+_STEAM_LIBRARY_CONFIG_MAX_BYTES = 512 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +112,8 @@ class LensGameObserverConfig:
     enabled: bool = True
     target_id: str = ""
     target_processes: tuple[str, ...] = ()
+    target_mode: str = _TARGET_MODE_PROCESS_ALLOWLIST
+    game_launchers: tuple[str, ...] = ()
     model_path: Path | None = None
     model_id: str = ""
     scenes: tuple[GameSceneDefinition, ...] = _DEFAULT_SCENES
@@ -118,8 +133,20 @@ class LensGameObserverConfig:
             raise ValueError("lens_game_observer_target_id_invalid")
         if any(not _PROCESS_NAME_PATTERN.fullmatch(process_name) for process_name in self.target_processes):
             raise ValueError("lens_game_observer_target_process_invalid")
-        if self.target_processes and not self.target_id:
+        if self.target_mode not in _TARGET_MODES:
+            raise ValueError("lens_game_observer_target_mode_invalid")
+        if any(launcher not in _SUPPORTED_GAME_LAUNCHERS for launcher in self.game_launchers) or len(
+            set(self.game_launchers)
+        ) != len(self.game_launchers):
+            raise ValueError("lens_game_observer_game_launcher_invalid")
+        if (self.target_processes or self.game_launchers) and not self.target_id:
             raise ValueError("lens_game_observer_target_id_required")
+        if self.target_mode == _TARGET_MODE_PROCESS_ALLOWLIST and self.game_launchers:
+            raise ValueError("lens_game_observer_target_mode_invalid")
+        if self.target_mode == _TARGET_MODE_FOREGROUND_GAME and self.target_processes:
+            raise ValueError("lens_game_observer_target_mode_invalid")
+        if self.target_mode == _TARGET_MODE_FOREGROUND_GAME and self.target_id and not self.game_launchers:
+            raise ValueError("lens_game_observer_game_launcher_required")
         if self.model_path is not None and not self.model_path.is_absolute():
             raise ValueError("lens_game_observer_model_path_must_be_absolute")
         if not 2 <= len(self.scenes) <= 8 or len({scene.scene_id for scene in self.scenes}) != len(self.scenes):
@@ -144,7 +171,11 @@ class LensGameObserverConfig:
 
     @property
     def target_configured(self) -> bool:
-        return bool(self.enabled and self.target_id and self.target_processes)
+        if not self.enabled or not self.target_id:
+            return False
+        if self.target_mode == _TARGET_MODE_FOREGROUND_GAME:
+            return bool(self.game_launchers)
+        return bool(self.target_processes)
 
     @property
     def model_configured(self) -> bool:
@@ -155,9 +186,13 @@ class LensGameObserverConfig:
         runtime_config = _runtime_config_from_environment()
         override_count = sum(1 for name in _ENVIRONMENT_OVERRIDE_NAMES if os.environ.get(name, "").strip())
         target_processes = tuple(runtime_config.get("target_processes") or ())
+        target_mode = str(runtime_config.get("target_mode") or _TARGET_MODE_PROCESS_ALLOWLIST)
+        game_launchers = tuple(runtime_config.get("game_launchers") or ())
         raw_target_processes = os.environ.get(_TARGET_PROCESSES_ENV, "").strip()
         if raw_target_processes:
             target_processes = _process_names_from_csv(raw_target_processes)
+            target_mode = _TARGET_MODE_PROCESS_ALLOWLIST
+            game_launchers = ()
         target_id = str(runtime_config.get("target_id") or "")
         raw_target_id = os.environ.get(_TARGET_ID_ENV, "").strip().casefold()
         if raw_target_id:
@@ -167,7 +202,7 @@ class LensGameObserverConfig:
         model_path = runtime_config.get("model_path")
         raw_model_path = os.environ.get(_MODEL_PATH_ENV, "").strip()
         if raw_model_path:
-            model_path = Path(raw_model_path).expanduser()
+            model_path = _governed_model_path(raw_model_path)
         model_id = str(runtime_config.get("model_id") or "")
         raw_model_id = os.environ.get(_MODEL_ID_ENV, "").strip()
         if raw_model_id:
@@ -185,6 +220,8 @@ class LensGameObserverConfig:
             enabled=bool(runtime_config.get("enabled", True)),
             target_id=target_id,
             target_processes=target_processes,
+            target_mode=target_mode,
+            game_launchers=game_launchers,
             model_path=model_path,
             model_id=model_id,
             scenes=scenes,
@@ -308,19 +345,21 @@ class LocalTransformersZeroShotClassifier:
 
 
 class LensGameObserver:
-    """Observe one configured foreground game without input or durable memory authority."""
+    """Observe a verified foreground game without launch, input, or memory authority."""
 
     def __init__(
         self,
         config: LensGameObserverConfig,
         *,
         foreground_process: Any = None,
+        game_process_verifier: Any = None,
         classifier: GameSceneClassifier | None = None,
         executor: Executor | None = None,
         clock: Any = time.time,
     ) -> None:
         self.config = config
         self._foreground_process = foreground_process or windows_foreground_process_readback
+        self._game_process_verifier = game_process_verifier or windows_foreground_game_process_verification
         self._classifier = classifier
         if self._classifier is None and config.model_path is not None:
             self._classifier = LocalTransformersZeroShotClassifier(
@@ -336,8 +375,13 @@ class LensGameObserver:
         self._pending: Future[dict[str, Any]] | None = None
         self._pending_source_frame_id = ""
         self._pending_submitted_at = 0.0
+        self._pending_process_id = 0
+        self._pending_process_name = ""
+        self._pending_authority_receipt_id = ""
         self._last_submission_at: float | None = None
         self._last_classification: dict[str, Any] = {}
+        self._active_foreground_process_id = 0
+        self._active_foreground_process_name = ""
 
     @classmethod
     def from_environment(cls) -> LensGameObserver:
@@ -365,20 +409,29 @@ class LensGameObserver:
             raise ValueError("lens_game_observer_observation_invalid")
         self._harvest_pending()
         foreground = self._read_foreground_process()
-        process_name = str(foreground.get("process_name") or "")
-        target_match = bool(
-            foreground.get("available") is True
-            and process_name
-            and process_name.casefold() in {target.casefold() for target in self.config.target_processes}
-        )
+        target_match, game_verification = self._target_match(foreground)
+        foreground_process_id = _safe_int(foreground.get("process_id"))
+        foreground_process_name = str(foreground.get("process_name") or "")
+        configuration_invalid = self._last_classification.get("error") == "lens_game_observer_configuration_invalid"
+        if not configuration_invalid:
+            if not target_match:
+                self._reset_observation_session()
+            elif (
+                foreground_process_id != self._active_foreground_process_id
+                or foreground_process_name.casefold() != self._active_foreground_process_name.casefold()
+            ):
+                self._reset_observation_session()
+                self._active_foreground_process_id = foreground_process_id
+                self._active_foreground_process_name = foreground_process_name
         base = self._base_payload(
             source_frame_id=frame_id,
             authority_receipt_id=receipt_id,
             observed_at=now,
             target_match=target_match,
             foreground=foreground,
+            game_verification=game_verification,
         )
-        if self._last_classification.get("error") == "lens_game_observer_configuration_invalid":
+        if configuration_invalid:
             return _blocked_payload(base, "configuration_invalid", "lens_game_observer_configuration_invalid")
         if not receipt_id:
             return _blocked_payload(base, "authority_missing", "lens_game_observer_authority_receipt_missing")
@@ -386,6 +439,12 @@ class LensGameObserver:
             return _blocked_payload(base, "not_configured", "lens_game_observer_target_not_configured")
         if foreground.get("available") is not True:
             return _blocked_payload(base, "foreground_unavailable", "lens_game_observer_foreground_process_unavailable")
+        if self.config.target_mode == _TARGET_MODE_FOREGROUND_GAME and game_verification.get("available") is not True:
+            return _blocked_payload(
+                base,
+                "foreground_game_verification_unavailable",
+                "lens_game_observer_foreground_game_verification_unavailable",
+            )
         if not target_match:
             return _blocked_payload(base, "target_not_foreground", "lens_game_target_not_foreground")
         if not self.config.model_configured or self._classifier is None or self._executor is None:
@@ -397,6 +456,9 @@ class LensGameObserver:
             self._pending = self._executor.submit(self._classifier.classify, frame, self.config.scenes)
             self._pending_source_frame_id = frame_id
             self._pending_submitted_at = now
+            self._pending_process_id = foreground_process_id
+            self._pending_process_name = foreground_process_name
+            self._pending_authority_receipt_id = receipt_id
             self._last_submission_at = now
 
         classification = self._last_classification
@@ -429,10 +491,17 @@ class LensGameObserver:
                     "source_frame_id": str(classification.get("source_frame_id") or ""),
                     "classified_at": classified_at,
                     "age_ms": round(max(0.0, age_seconds or 0.0) * 1000.0, 3),
+                    "max_age_ms": round(self.config.max_classification_age_seconds * 1000.0, 3),
                     "inference_ms": _safe_float(classification.get("inference_ms")),
                     "device": str(classification.get("device") or ""),
                     "backend": str(classification.get("backend") or ""),
                     "score_normalization": str(classification.get("score_normalization") or ""),
+                    "target_id": str(classification.get("target_id") or ""),
+                    "process_id": _safe_int(classification.get("process_id")),
+                    "process_name": str(classification.get("process_name") or ""),
+                    "model_id": str(classification.get("model_id") or ""),
+                    "scene_id": str(scene.get("id") or ""),
+                    "authority_receipt_id": str(classification.get("authority_receipt_id") or ""),
                 },
                 "blockers": [] if semantic_ready else ["lens_game_scene_confidence_below_threshold"],
             }
@@ -458,10 +527,18 @@ class LensGameObserver:
                 "source_frame_id": self._pending_source_frame_id,
                 "submitted_at": self._pending_submitted_at,
                 "classified_at": self._clock(),
+                "target_id": self.config.target_id,
+                "process_id": self._pending_process_id,
+                "process_name": self._pending_process_name,
+                "model_id": self.config.model_id,
+                "authority_receipt_id": self._pending_authority_receipt_id,
             }
         self._pending = None
         self._pending_source_frame_id = ""
         self._pending_submitted_at = 0.0
+        self._pending_process_id = 0
+        self._pending_process_name = ""
+        self._pending_authority_receipt_id = ""
 
     def _read_foreground_process(self) -> dict[str, Any]:
         try:
@@ -469,6 +546,49 @@ class LensGameObserver:
         except Exception:
             return {"supported": os.name == "nt", "available": False, "reason": "foreground_process_read_failed"}
         return readback if isinstance(readback, dict) else {"supported": False, "available": False}
+
+    def _target_match(self, foreground: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+        if foreground.get("available") is not True or not self.config.target_configured:
+            return False, {"supported": os.name == "nt", "available": False, "verified": False}
+        process_name = str(foreground.get("process_name") or "")
+        if self.config.target_mode == _TARGET_MODE_PROCESS_ALLOWLIST:
+            matched = bool(
+                process_name
+                and process_name.casefold() in {target.casefold() for target in self.config.target_processes}
+            )
+            return matched, {
+                "supported": True,
+                "available": True,
+                "verified": matched,
+                "basis": "foreground_process_match",
+            }
+        process_id = _safe_int(foreground.get("process_id"))
+        try:
+            readback = self._game_process_verifier(process_id, self.config.game_launchers)
+        except Exception:
+            readback = {
+                "supported": os.name == "nt",
+                "available": False,
+                "verified": False,
+                "reason": "foreground_game_verification_failed",
+            }
+        if not isinstance(readback, dict):
+            readback = {"supported": False, "available": False, "verified": False}
+        return readback.get("verified") is True, readback
+
+    def _reset_observation_session(self) -> None:
+        if self._pending is not None:
+            self._pending.cancel()
+        self._pending = None
+        self._pending_source_frame_id = ""
+        self._pending_submitted_at = 0.0
+        self._pending_process_id = 0
+        self._pending_process_name = ""
+        self._pending_authority_receipt_id = ""
+        self._last_submission_at = None
+        self._last_classification = {}
+        self._active_foreground_process_id = 0
+        self._active_foreground_process_name = ""
 
     def _should_submit(self, now: float) -> bool:
         return bool(
@@ -487,7 +607,9 @@ class LensGameObserver:
         observed_at: float,
         target_match: bool,
         foreground: dict[str, Any],
+        game_verification: dict[str, Any],
     ) -> dict[str, Any]:
+        visibility_basis = str(game_verification.get("basis") or "") if target_match else "not_observed"
         return {
             "kind": LENS_GAME_OBSERVATION_KIND,
             "version": LENS_GAME_OBSERVATION_VERSION,
@@ -499,9 +621,11 @@ class LensGameObserver:
             "target": {
                 "id": self.config.target_id,
                 "configured": self.config.target_configured,
+                "mode": self.config.target_mode,
                 "process_names": list(self.config.target_processes),
+                "launchers": list(self.config.game_launchers),
                 "foreground": target_match,
-                "visibility_basis": "foreground_process_match" if target_match else "not_observed",
+                "visibility_basis": visibility_basis,
             },
             "foreground": {
                 "supported": foreground.get("supported") is True,
@@ -511,6 +635,12 @@ class LensGameObserver:
                 "process_name": str(foreground.get("process_name") or "") if target_match else "",
                 "window_id": _safe_int(foreground.get("window_id")) if target_match else 0,
                 "window_title_included": False,
+                "game_verified": (
+                    game_verification.get("verified") is True
+                    if self.config.target_mode == _TARGET_MODE_FOREGROUND_GAME
+                    else False
+                ),
+                "verification_basis": visibility_basis if target_match else "",
             },
             "scene": {},
             "classification": {},
@@ -542,6 +672,8 @@ class LensGameObserver:
                 "memory_write": False,
                 "learning_authority": False,
                 "reward_authority": False,
+                "foreground_game_required": True,
+                "local_process_launch_authority": False,
             },
         }
 
@@ -556,21 +688,9 @@ def windows_foreground_process_readback() -> dict[str, Any]:
         if win_dll is None:
             return {"supported": False, "available": False, "reason": "foreground_process_platform_unsupported"}
         user32 = win_dll("user32", use_last_error=True)
-        kernel32 = win_dll("kernel32", use_last_error=True)
         user32.GetForegroundWindow.restype = wintypes.HWND
         user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
         user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        kernel32.QueryFullProcessImageNameW.argtypes = [
-            wintypes.HANDLE,
-            wintypes.DWORD,
-            wintypes.LPWSTR,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
-        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel32.CloseHandle.restype = wintypes.BOOL
 
         window = user32.GetForegroundWindow()
         if not window:
@@ -579,17 +699,10 @@ def windows_foreground_process_readback() -> dict[str, Any]:
         user32.GetWindowThreadProcessId(window, ctypes.byref(process_id))
         if not process_id.value:
             return {"supported": True, "available": False, "reason": "foreground_process_missing"}
-        process = kernel32.OpenProcess(0x1000, False, process_id.value)
-        if not process:
-            return {"supported": True, "available": False, "reason": "foreground_process_open_failed"}
-        try:
-            capacity = wintypes.DWORD(32_768)
-            buffer = ctypes.create_unicode_buffer(capacity.value)
-            if not kernel32.QueryFullProcessImageNameW(process, 0, buffer, ctypes.byref(capacity)):
-                return {"supported": True, "available": False, "reason": "foreground_process_query_failed"}
-        finally:
-            kernel32.CloseHandle(process)
-        process_name = Path(buffer.value).name
+        process_path = _windows_process_image_path(int(process_id.value))
+        if process_path is None:
+            return {"supported": True, "available": False, "reason": "foreground_process_query_failed"}
+        process_name = process_path.name
         if not process_name:
             return {"supported": True, "available": False, "reason": "foreground_process_name_missing"}
         return {
@@ -602,6 +715,150 @@ def windows_foreground_process_readback() -> dict[str, Any]:
         }
     except Exception:
         return {"supported": False, "available": False, "reason": "foreground_process_read_failed"}
+
+
+def windows_foreground_game_process_verification(
+    process_id: int,
+    game_launchers: tuple[str, ...],
+) -> dict[str, Any]:
+    """Verify an existing process locally without returning its executable path."""
+
+    if os.name != "nt":
+        return {
+            "supported": False,
+            "available": False,
+            "verified": False,
+            "reason": "foreground_game_platform_unsupported",
+        }
+    process_path = _windows_process_image_path(process_id)
+    if process_path is None:
+        return {
+            "supported": True,
+            "available": False,
+            "verified": False,
+            "reason": "foreground_game_process_path_unavailable",
+        }
+    roots_available = False
+    for launcher in game_launchers:
+        roots = _windows_game_library_roots(launcher)
+        roots_available = roots_available or bool(roots)
+        if any(_path_is_within(process_path, root) for root in roots):
+            return {
+                "supported": True,
+                "available": True,
+                "verified": True,
+                "basis": "local_launcher_library_path",
+                "launcher_id": launcher,
+            }
+    if not roots_available:
+        return {
+            "supported": True,
+            "available": False,
+            "verified": False,
+            "reason": "foreground_game_library_roots_unavailable",
+        }
+    return {
+        "supported": True,
+        "available": True,
+        "verified": False,
+        "reason": "foreground_process_outside_game_library",
+    }
+
+
+def _windows_process_image_path(process_id: int) -> Path | None:
+    if os.name != "nt" or process_id <= 0:
+        return None
+    try:
+        from ctypes import wintypes
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return None
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        process = kernel32.OpenProcess(0x1000, False, process_id)
+        if not process:
+            return None
+        try:
+            capacity = wintypes.DWORD(32_768)
+            buffer = ctypes.create_unicode_buffer(capacity.value)
+            if not kernel32.QueryFullProcessImageNameW(process, 0, buffer, ctypes.byref(capacity)):
+                return None
+            return Path(buffer.value) if buffer.value else None
+        finally:
+            kernel32.CloseHandle(process)
+    except Exception:
+        return None
+
+
+def _windows_game_library_roots(launcher: str) -> tuple[Path, ...]:
+    if os.name != "nt" or launcher != "steam":
+        return ()
+    try:
+        import winreg
+    except ImportError:
+        return ()
+    steam_roots: list[Path] = []
+    registry_values = (
+        (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
+    )
+    for hive, key_path, value_name in registry_values:
+        try:
+            with winreg.OpenKey(hive, key_path) as key:
+                value, _value_type = winreg.QueryValueEx(key, value_name)
+        except OSError:
+            continue
+        if isinstance(value, str) and value.strip():
+            steam_roots.append(Path(value.strip()))
+
+    library_roots = list(steam_roots)
+    for steam_root in tuple(steam_roots):
+        library_config = steam_root / "steamapps" / "libraryfolders.vdf"
+        try:
+            raw = library_config.read_bytes()
+        except OSError:
+            continue
+        if len(raw) > _STEAM_LIBRARY_CONFIG_MAX_BYTES:
+            continue
+        text = raw.decode("utf-8-sig", errors="replace")
+        for match in _STEAM_LIBRARY_PATH_PATTERN.finditer(text):
+            library_path = match.group(1).replace(r"\\", "\\").replace(r"\"", '"').strip()
+            if library_path:
+                library_roots.append(Path(library_path))
+
+    game_roots: list[Path] = []
+    seen: set[str] = set()
+    for library_root in library_roots:
+        game_root = library_root / "steamapps" / "common"
+        try:
+            normalized = str(game_root.resolve(strict=False)).casefold()
+        except OSError:
+            continue
+        if normalized in seen or not game_root.is_dir():
+            continue
+        seen.add(normalized)
+        game_roots.append(game_root)
+    return tuple(game_roots)
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(root.resolve(strict=False))
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def _blocked_payload(payload: dict[str, Any], status: str, blocker: str) -> dict[str, Any]:
@@ -676,21 +933,43 @@ def _runtime_config_from_environment() -> dict[str, Any]:
     if payload.get("kind") != LENS_GAME_OBSERVER_CONFIG_KIND:
         raise ValueError("lens_game_observer_runtime_config_kind_invalid")
     version = payload.get("version")
-    if isinstance(version, bool) or version != LENS_GAME_OBSERVER_CONFIG_VERSION:
+    if isinstance(version, bool) or version not in {
+        _LEGACY_GAME_OBSERVER_CONFIG_VERSION,
+        LENS_GAME_OBSERVER_CONFIG_VERSION,
+    }:
         raise ValueError("lens_game_observer_runtime_config_version_invalid")
     enabled = payload.get("enabled")
     if not isinstance(enabled, bool):
         raise ValueError("lens_game_observer_enabled_invalid")
 
     target = _required_json_object(payload.get("target"), "lens_game_observer_target_invalid")
-    _require_exact_keys(target, {"id", "process_names"}, "lens_game_observer_target_invalid")
+    if version == _LEGACY_GAME_OBSERVER_CONFIG_VERSION:
+        _require_exact_keys(target, {"id", "process_names"}, "lens_game_observer_target_invalid")
+        target_mode = _TARGET_MODE_PROCESS_ALLOWLIST
+        game_launchers: tuple[str, ...] = ()
+    else:
+        _require_exact_keys(
+            target,
+            {"id", "mode", "process_names", "launchers"},
+            "lens_game_observer_target_invalid",
+        )
+        target_mode = _required_config_string(
+            target.get("mode"),
+            "lens_game_observer_target_mode_invalid",
+        ).casefold()
+        raw_launchers = target.get("launchers")
+        if not isinstance(raw_launchers, list) or any(
+            not isinstance(item, str) or not item.strip() for item in raw_launchers
+        ):
+            raise ValueError("lens_game_observer_game_launcher_invalid")
+        game_launchers = tuple(dict.fromkeys(item.strip().casefold() for item in raw_launchers))
     target_id = _required_config_string(target.get("id"), "lens_game_observer_target_id_invalid").casefold()
     raw_processes = target.get("process_names")
-    if (
-        not isinstance(raw_processes, list)
-        or not raw_processes
-        or any(not isinstance(item, str) or not item.strip() for item in raw_processes)
+    if not isinstance(raw_processes, list) or any(
+        not isinstance(item, str) or not item.strip() for item in raw_processes
     ):
+        raise ValueError("lens_game_observer_target_process_invalid")
+    if target_mode == _TARGET_MODE_PROCESS_ALLOWLIST and not raw_processes:
         raise ValueError("lens_game_observer_target_process_invalid")
     target_processes = tuple(dict.fromkeys(item.strip() for item in raw_processes))
 
@@ -723,13 +1002,18 @@ def _runtime_config_from_environment() -> dict[str, Any]:
     )
 
     governance = _required_json_object(payload.get("governance"), "lens_game_observer_governance_invalid")
-    if governance != _EXPECTED_RUNTIME_GOVERNANCE:
+    expected_governance = (
+        _LEGACY_RUNTIME_GOVERNANCE if version == _LEGACY_GAME_OBSERVER_CONFIG_VERSION else _EXPECTED_RUNTIME_GOVERNANCE
+    )
+    if governance != expected_governance:
         raise ValueError("lens_game_observer_governance_invalid")
 
     return {
         "enabled": enabled,
         "target_id": target_id,
         "target_processes": target_processes,
+        "target_mode": target_mode,
+        "game_launchers": game_launchers,
         "model_path": model_path,
         "model_id": model_id,
         "scenes": scenes,
@@ -776,12 +1060,20 @@ def _data_relative_model_path(value: Any) -> Path:
     relative_path = Path(raw_path)
     if relative_path.is_absolute() or relative_path.drive or ".." in relative_path.parts:
         raise ValueError("lens_game_observer_model_path_outside_data")
+    return _governed_model_path(raw_path)
+
+
+def _governed_model_path(value: Any) -> Path:
+    raw_path = _required_config_string(value, "lens_game_observer_model_path_invalid")
     data_root = data_dir().resolve()
-    resolved_path = (data_root / relative_path).resolve()
+    candidate = Path(raw_path).expanduser()
+    resolved_path = (candidate if candidate.is_absolute() else data_root / candidate).resolve()
     try:
         resolved_path.relative_to(data_root)
     except ValueError as exc:
         raise ValueError("lens_game_observer_model_path_outside_data") from exc
+    if resolved_path == data_root:
+        raise ValueError("lens_game_observer_model_path_outside_data")
     return resolved_path
 
 

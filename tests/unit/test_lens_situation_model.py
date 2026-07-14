@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from francis.lens import situation_model as situation_model_module
 from francis.lens.perception_capture import DesktopFrame
@@ -38,30 +41,64 @@ def _ring(*, frame_id: str, changed: bool) -> dict[str, object]:
     }
 
 
-def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dict[str, object]:
+def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dict[str, Any]:
     return {
         "kind": "lens.game.observation",
-        "version": 1,
+        "version": 2,
         "status": "scene_classified",
         "ready": True,
         "semantic_scene_ready": True,
         "source_frame_id": frame_id,
+        "observed_at": 100.1,
         "target": {
             "id": "sand",
             "configured": True,
+            "mode": "process_allowlist",
             "process_names": ["Sand.exe"],
+            "launchers": [],
             "foreground": True,
             "visibility_basis": "foreground_process_match",
         },
         "foreground": {
+            "supported": True,
+            "available": True,
             "target_match": True,
             "process_id": 55,
             "process_name": "Sand.exe",
             "window_id": 44,
             "window_title_included": False,
+            "game_verified": False,
+            "verification_basis": "foreground_process_match",
         },
-        "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.78, "margin": 0.44},
-        "classification": {"source_frame_id": frame_id, "device": "cpu"},
+        "scene": {
+            "ready": True,
+            "id": "active_gameplay",
+            "top_candidate_id": "active_gameplay",
+            "confidence": 0.78,
+            "margin": 0.44,
+            "min_confidence": 0.35,
+            "min_margin": 0.05,
+            "candidates": [
+                {"scene_id": "active_gameplay", "score": 0.78},
+                {"scene_id": "game_menu", "score": 0.34},
+            ],
+        },
+        "classification": {
+            "source_frame_id": f"{frame_id}-source",
+            "classified_at": 100.0,
+            "age_ms": 100.0,
+            "max_age_ms": 6000.0,
+            "inference_ms": 12.5,
+            "device": "cpu",
+            "backend": "test_zero_shot_classifier",
+            "score_normalization": "softmax_over_mutually_exclusive_scenes",
+            "target_id": "sand",
+            "process_id": 55,
+            "process_name": "Sand.exe",
+            "model_id": "google/siglip-base-patch16-224",
+            "scene_id": "active_gameplay",
+            "authority_receipt_id": "capture-receipt",
+        },
         "configuration": {
             "source": "runtime_config",
             "loaded": True,
@@ -90,11 +127,73 @@ def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dic
             "memory_write": False,
             "learning_authority": learning_authority,
             "reward_authority": False,
+            "foreground_game_required": True,
+            "local_process_launch_authority": False,
         },
     }
 
 
-def _game_teaching_review() -> dict[str, object]:
+def _legacy_game_observation(*, frame_id: str) -> dict[str, Any]:
+    observation = _game_observation(frame_id=frame_id)
+    observation["version"] = 1
+    observation["target"].pop("mode")
+    observation["target"].pop("launchers")
+    observation["foreground"].pop("game_verified")
+    observation["foreground"].pop("verification_basis")
+    observation["governance"].pop("foreground_game_required")
+    observation["governance"].pop("local_process_launch_authority")
+    for field in ("target_id", "process_id", "process_name", "model_id", "scene_id", "authority_receipt_id"):
+        observation["classification"].pop(field)
+    return observation
+
+
+def _game_teaching_session() -> dict[str, Any]:
+    return {
+        "kind": "francis.apprenticeship.game_teaching_session.status",
+        "version": 1,
+        "status": "stopped",
+        "session_id": "game_teaching_0123456789abcdef",
+        "target_id": "sand",
+        "intent_label": "reach active gameplay",
+        "declared_scope": "semantic Sand scene transitions only",
+        "success_condition": "active gameplay observed",
+        "started_at": 90.0,
+        "deadline_at": 120.0,
+        "remaining_seconds": 0.0,
+        "recording_active": False,
+        "event_count": 3,
+        "max_events": 20,
+        "latest_scene_id": "active_gameplay",
+        "latest_event_at": 99.0,
+        "review_required": True,
+        "start_receipt_id": "game_teaching_start_0123456789abcdef",
+        "episode_receipt_id": "game_teaching_episode_0123456789abcdef",
+        "capture_mode": "explicit_semantic_scene_transition_session",
+        "blockers": [],
+        "governance": {
+            "explicit_start_stop_required": True,
+            "semantic_transitions_only": True,
+            "raw_pixels_persisted": False,
+            "window_titles_persisted": False,
+            "keyboard_content_captured": False,
+            "user_mouse_captured": False,
+            "remote_frame_transfer": False,
+            "passive_learning": False,
+            "hidden_retention": False,
+            "memory_write": False,
+            "learning_authority": False,
+            "reward_authority": False,
+            "input_execution_authority": False,
+            "automatic_replay": False,
+            "automatic_generalization": False,
+            "automatic_skillization": False,
+            "automatic_capability_promotion": False,
+            "operator_review_required": True,
+        },
+    }
+
+
+def _game_teaching_review() -> dict[str, Any]:
     return {
         "kind": "francis.apprenticeship.game_teaching_episode_review.status",
         "version": 1,
@@ -146,6 +245,13 @@ def _game_teaching_review() -> dict[str, object]:
             "automatic_capability_promotion": False,
         },
     }
+
+
+def _set_nested(payload: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
+    current = payload
+    for part in path[:-1]:
+        current = current[part]
+    current[path[-1]] = value
 
 
 def test_situation_model_readback_is_missing_without_runtime_write(tmp_path: Path, monkeypatch) -> None:
@@ -212,6 +318,7 @@ def test_situation_model_heartbeat_rewrites_one_current_state_without_pixels(tmp
     assert second["governance"]["raw_pixels_in_readback"] is False
     assert list(path.parent.glob("situation-model*.json")) == [path]
     stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["version"] == 2
     assert stored["revision"] == "frame-2"
     assert stored["governance"]["keyboard_content_captured"] is False
     assert "bgra" not in json.dumps(stored).lower()
@@ -242,6 +349,8 @@ def test_situation_model_accepts_authority_correlated_local_game_scene(tmp_path:
     assert readback["game_scene_ready"] is True
     assert readback["sources"]["game_observer"]["ready"] is True
     assert readback["sources"]["game_observer"]["target_id"] == "sand"
+    assert readback["sources"]["game_observer"]["target_mode"] == "process_allowlist"
+    assert readback["sources"]["game_observer"]["local_process_launch_authority"] is False
     assert readback["present"]["game"]["scene"]["id"] == "active_gameplay"
     assert readback["present"]["game"]["configuration"] == {
         "source": "runtime_config",
@@ -255,6 +364,91 @@ def test_situation_model_accepts_authority_correlated_local_game_scene(tmp_path:
     assert "lens_game_observer_contract_invalid" not in readback["source_blockers"]
     assert readback["governance"]["learning_authority"] is False
     assert readback["governance"]["reward_authority"] is False
+
+
+def test_situation_model_blocks_legacy_v1_game_observation_explicitly(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-legacy-game", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=_legacy_game_observation(frame_id="frame-legacy-game"),
+        observed_at=100.1,
+    )
+
+    assert readback["heartbeat_ready"] is True
+    assert readback["game_scene_ready"] is False
+    assert readback["sources"]["game_observer"]["status"] == "legacy_v1_blocked"
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_legacy_v1" in readback["source_blockers"]
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("target", "id"), "other-target"),
+        (("foreground", "process_name"), "Other.exe"),
+        (("model", "id"), "other/model"),
+        (("scene", "id"), "game_menu"),
+        (("classification", "source_frame_id"), ""),
+        (("classification", "authority_receipt_id"), "other-receipt"),
+    ],
+    ids=("target", "process", "model", "scene", "classification-frame", "classification-receipt"),
+)
+def test_situation_model_rejects_broken_game_observer_identity_lineage(
+    tmp_path: Path,
+    monkeypatch,
+    path: tuple[str, ...],
+    value: Any,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-lineage")
+    _set_nested(observation, path, value)
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-lineage", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["game_scene_ready"] is False
+    assert readback["sources"]["game_observer"]["status"] == "invalid"
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
+
+
+def test_situation_model_rejects_stale_game_classification_lineage(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-stale-classification")
+    observation["classification"]["classified_at"] = 90.0
+    observation["classification"]["age_ms"] = 10100.0
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-stale-classification", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["game_scene_ready"] is False
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
 
 
 def test_situation_model_projects_only_bounded_game_observation_fields(tmp_path: Path, monkeypatch) -> None:
@@ -344,6 +538,44 @@ def test_situation_model_projects_bounded_game_teaching_review_without_operator_
     assert "access_token" not in projected
 
 
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("teaching_review", "session_id"), "game_teaching_ffffffffffffffff"),
+        (("teaching_review", "episode_receipt_id"), "game_teaching_episode_ffffffffffffffff"),
+        (("teaching_session", "target_id"), "other-target"),
+    ],
+    ids=("session", "episode", "target"),
+)
+def test_situation_model_rejects_broken_game_teaching_lineage(
+    tmp_path: Path,
+    monkeypatch,
+    path: tuple[str, ...],
+    value: Any,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-game-teaching-lineage")
+    observation["teaching_session"] = _game_teaching_session()
+    observation["teaching_review"] = _game_teaching_review()
+    _set_nested(observation, path, value)
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-game-teaching-lineage", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["game_scene_ready"] is False
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
+
+
 def test_situation_model_rejects_self_labeled_game_learning_authority(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
 
@@ -356,6 +588,32 @@ def test_situation_model_rejects_self_labeled_game_learning_authority(tmp_path: 
         host_pid=900,
         supervisor_pid=700,
         game_observation=_game_observation(frame_id="frame-overbroad-game", learning_authority=True),
+        observed_at=100.1,
+    )
+
+    assert readback["heartbeat_ready"] is True
+    assert readback["game_scene_ready"] is False
+    assert readback["sources"]["game_observer"]["status"] == "invalid"
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
+
+
+def test_situation_model_rejects_game_observer_process_launch_authority(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-game-launch-authority")
+    governance = observation["governance"]
+    assert isinstance(governance, dict)
+    governance["local_process_launch_authority"] = True
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-game-launch-authority", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
         observed_at=100.1,
     )
 
@@ -384,6 +642,34 @@ def test_situation_model_heartbeat_readback_rejects_stale_state(tmp_path: Path, 
     assert readback["heartbeat_ready"] is False
     assert readback["fresh"] is False
     assert "lens_situation_model_heartbeat_stale" in readback["blockers"]
+
+
+def test_situation_model_readback_blocks_persisted_legacy_v1_heartbeat(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-legacy-heartbeat", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        observed_at=100.1,
+    )
+    path = tmp_path / "runtime" / "lens-perception" / "situation-model.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["version"] = 1
+    payload["governance"].pop("foreground_game_required")
+    payload["governance"].pop("local_process_launch_authority")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    readback = lens_situation_model_readback(now=100.1)
+
+    assert readback["status"] == "blocked"
+    assert readback["heartbeat_ready"] is False
+    assert readback["heartbeat_version"] == 1
+    assert readback["game_scene_ready"] is False
+    assert "lens_situation_model_heartbeat_legacy_v1" in readback["blockers"]
 
 
 def test_situation_model_heartbeat_tolerates_bounded_concurrent_skew(tmp_path: Path, monkeypatch) -> None:
