@@ -16,6 +16,8 @@ from francis.lens.perception_capture import DesktopFrame
 LENS_SITUATION_MODEL_KIND = "lens.perception.situation_model"
 LENS_SITUATION_MODEL_VERSION = 1
 LENS_SITUATION_MODEL_ROUTE = "/lens/perception/now"
+_GAME_TEACHING_SESSION_STATUS_KIND = "francis.apprenticeship.game_teaching_session.status"
+_GAME_TEACHING_CONTRACT_VERSION = 1
 
 _MAX_HEARTBEAT_AGE_SECONDS = 2.5
 _MAX_HEARTBEAT_FUTURE_SKEW_SECONDS = 0.25
@@ -367,6 +369,7 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
     scene = _as_dict(game_state.get("scene"))
     classification = _as_dict(game_state.get("classification"))
     model = _as_dict(game_state.get("model"))
+    teaching_session = _as_dict(game_state.get("teaching_session"))
     candidates: list[dict[str, Any]] = []
     raw_candidates = scene.get("candidates")
     if isinstance(raw_candidates, list):
@@ -427,6 +430,85 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
             "configured": model.get("configured") is True,
             "local_files_present": model.get("local_files_present") is True,
             "remote_inference": False,
+        },
+        "teaching_session": (
+            _game_teaching_session_present(teaching_session)
+            if _game_teaching_session_contract_valid(
+                teaching_session,
+                target_id=str(target.get("id") or ""),
+            )
+            else {}
+        ),
+    }
+
+
+def _game_teaching_session_contract_valid(teaching: dict[str, Any], *, target_id: str) -> bool:
+    governance = _as_dict(teaching.get("governance"))
+    return bool(
+        teaching.get("kind") == _GAME_TEACHING_SESSION_STATUS_KIND
+        and teaching.get("version") == _GAME_TEACHING_CONTRACT_VERSION
+        and str(teaching.get("target_id") or "") == target_id
+        and governance.get("explicit_start_stop_required") is True
+        and governance.get("semantic_transitions_only") is True
+        and all(
+            governance.get(field) is False
+            for field in (
+                "raw_pixels_persisted",
+                "window_titles_persisted",
+                "keyboard_content_captured",
+                "user_mouse_captured",
+                "remote_frame_transfer",
+                "passive_learning",
+                "hidden_retention",
+                "memory_write",
+                "learning_authority",
+                "reward_authority",
+                "input_execution_authority",
+                "automatic_replay",
+                "automatic_generalization",
+                "automatic_skillization",
+                "automatic_capability_promotion",
+            )
+        )
+        and governance.get("operator_review_required") is True
+    )
+
+
+def _game_teaching_session_present(teaching: dict[str, Any]) -> dict[str, Any]:
+    governance = _as_dict(teaching.get("governance"))
+    return {
+        "status": str(teaching.get("status") or ""),
+        "session_id": str(teaching.get("session_id") or ""),
+        "target_id": str(teaching.get("target_id") or ""),
+        "intent_label": str(teaching.get("intent_label") or ""),
+        "declared_scope": str(teaching.get("declared_scope") or ""),
+        "success_condition": str(teaching.get("success_condition") or ""),
+        "started_at": _safe_float(teaching.get("started_at")),
+        "deadline_at": _safe_float(teaching.get("deadline_at")),
+        "remaining_seconds": _safe_float(teaching.get("remaining_seconds")),
+        "recording_active": teaching.get("recording_active") is True,
+        "event_count": _safe_int(teaching.get("event_count")),
+        "max_events": _safe_int(teaching.get("max_events")),
+        "latest_scene_id": str(teaching.get("latest_scene_id") or ""),
+        "latest_event_at": _safe_float(teaching.get("latest_event_at")),
+        "review_required": teaching.get("review_required") is True,
+        "start_receipt_id": str(teaching.get("start_receipt_id") or ""),
+        "episode_receipt_id": str(teaching.get("episode_receipt_id") or ""),
+        "capture_mode": str(teaching.get("capture_mode") or ""),
+        "blockers": _string_items(teaching.get("blockers")),
+        "governance": {
+            "explicit_start_stop_required": governance.get("explicit_start_stop_required") is True,
+            "semantic_transitions_only": governance.get("semantic_transitions_only") is True,
+            "raw_pixels_persisted": False,
+            "window_titles_persisted": False,
+            "keyboard_content_captured": False,
+            "user_mouse_captured": False,
+            "memory_write": False,
+            "learning_authority": False,
+            "reward_authority": False,
+            "input_execution_authority": False,
+            "automatic_capability_promotion": False,
+            "operator_review_required": True,
         },
     }
 

@@ -18,6 +18,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from francis.apprenticeship_game_teaching import (
+    GameTeachingObservationRecorder,
+    GameTeachingRecorder,
+    game_teaching_recording_error_status,
+)
 from francis.kernel.paths import data_dir
 from francis.lens.atomic_io import atomic_write_json as _atomic_write_json
 from francis.lens.atomic_io import read_json_object as _read_json
@@ -91,6 +96,7 @@ class LensPerceptionWorker:
         execution_status: ExecutionStatusProvider | None = None,
         supervision_status: SupervisionStatusProvider | None = None,
         game_observer: GameObserver | None = None,
+        game_teaching_recorder: GameTeachingRecorder | None = None,
         clock: Callable[[], float] = time.time,
         monotonic_clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
@@ -103,6 +109,7 @@ class LensPerceptionWorker:
         self._execution_status = execution_status or lens_perception_execution_approval_status
         self._supervision_status = supervision_status or lens_perception_worker_supervision_readback
         self._game_observer = game_observer or LensGameObserver.from_environment()
+        self._game_teaching_recorder = game_teaching_recorder or GameTeachingObservationRecorder()
         self._clock = clock
         self._monotonic = monotonic_clock
         self._sleep = sleeper
@@ -184,6 +191,14 @@ class LensPerceptionWorker:
                 authority_receipt_id=self.config.authority_receipt_id,
                 observed_at=situation_observed_at,
             )
+            try:
+                teaching_session = self._game_teaching_recorder.record(
+                    game_observation,
+                    observed_at=situation_observed_at,
+                )
+            except (OSError, ValueError):
+                teaching_session = game_teaching_recording_error_status()
+            game_observation = {**game_observation, "teaching_session": teaching_session}
             situation_model = write_lens_situation_model_heartbeat(
                 frame=frame,
                 ring_buffer=ring_buffer,

@@ -75,7 +75,7 @@ class _GameObserver:
                 "window_id": 44,
                 "window_title_included": False,
             },
-            "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.8},
+            "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.8, "margin": 0.5},
             "classification": {"source_frame_id": source_frame_id, "device": "cpu"},
             "model": {"id": "test/siglip", "remote_inference": False},
             "runtime_identity": {"authority_receipt_id": authority_receipt_id},
@@ -207,6 +207,53 @@ def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situ
     assert stopped["state"] == "stopped"
     assert stopped["capture"]["desktop"]["active"] is False
     assert stopped["governance"]["user_mouse_capture_authority"] is False
+
+
+def test_worker_records_explicit_game_teaching_transition_and_exposes_lens_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from francis.apprenticeship_game_teaching import start_game_teaching_session
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    started = start_game_teaching_session(
+        actor="test.game.teacher",
+        reason="teach the current game flow",
+        target_id="sand",
+        intent_label="recognize active gameplay",
+        declared_scope="semantic Sand scene transitions only",
+        success_condition="active gameplay is observed",
+        max_duration_seconds=300,
+        max_events=10,
+        now=99.0,
+    )
+    worker = LensPerceptionWorker(
+        _config(),
+        frame_source=_FrameSource(),
+        authority_status=_active_authority,
+        execution_status=_active_execution,
+        supervision_status=_active_supervision,
+        game_observer=_GameObserver(),
+        clock=iter((100.0, 100.1)).__next__,
+        process_id=800,
+        parent_process_id=900,
+    )
+
+    state = worker.capture_once()
+
+    teaching = state["situation_model"]["present"]["game"]["teaching_session"]
+    assert started["status"] == "active"
+    assert state["state"] == "running"
+    assert teaching["status"] == "active"
+    assert teaching["session_id"] == started["session_id"]
+    assert teaching["target_id"] == "sand"
+    assert teaching["recording_active"] is True
+    assert teaching["event_count"] == 1
+    assert teaching["latest_scene_id"] == "active_gameplay"
+    assert teaching["governance"]["raw_pixels_persisted"] is False
+    assert teaching["governance"]["learning_authority"] is False
+    assert teaching["governance"]["input_execution_authority"] is False
 
 
 @pytest.mark.parametrize(
