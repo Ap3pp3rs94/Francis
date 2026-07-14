@@ -70,7 +70,7 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "PostMessage" in script
     assert "MoveCenterMessage" in script
     assert "[double]$Size = 270" in script
-    assert "[double]$HitBoxSize = 72" in script
+    assert "[double]$HitBoxSize = 270" in script
     assert "$OrbSize = Get-NativeOrbRendererSize" in script
     assert "$OrbHitBoxSize = Get-OrbHitBoxSize" in script
     assert "New-NativeOrbControlSurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
@@ -106,7 +106,7 @@ def test_overlay_orb_virtual_pointer_uses_locked_desktop_orb_not_browser_marker(
     assert "Get-OverlayOrbVirtualPointerStatePath" in script
     assert "francis.orb_operator.virtual_pointer_state" in script
     assert "lens.overlay.orb_virtual_pointer.receipt" in script
-    assert "Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y" in script
+    assert "Start-OrbWindowCoordinateTravel -Window $Window -WorkArea $WorkArea -X $X -Y $Y" in script
     assert "Set-NativeOrbRendererPosition -Root $Root" in script
     assert "[void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)" in script
     assert "native_renderer_move_status" in script
