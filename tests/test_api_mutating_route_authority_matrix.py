@@ -193,6 +193,18 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in apprenticeship_teaching["denial_behavior"]
     assert "does not write memory" in apprenticeship_teaching["notes"]
 
+    game_teaching_start = entries["/apprenticeship/game-teaching-session/start"]
+    game_teaching_stop = entries["/apprenticeship/game-teaching-session/stop"]
+    for game_teaching in (game_teaching_start, game_teaching_stop):
+        assert game_teaching["family"] == "apprenticeship_game_teaching"
+        assert game_teaching["required_actor"] == "payload.actor"
+        assert game_teaching["required_scope"] == "apprenticeship.game_teaching_session.write"
+        assert game_teaching["governance_maturity"] == "permission_gated_bounded_semantic_observation"
+        assert "semantic episode receipt" in game_teaching["receipt_behavior"]
+        assert "permission_gate" in game_teaching["denial_behavior"]
+        assert "does not persist raw pixels" in game_teaching["notes"]
+        assert "learn a policy" in game_teaching["notes"]
+
     apprenticeship_replay = entries["/apprenticeship/replay-receipt"]
     assert apprenticeship_replay["family"] == "apprenticeship"
     assert apprenticeship_replay["required_actor"] == "payload.actor"

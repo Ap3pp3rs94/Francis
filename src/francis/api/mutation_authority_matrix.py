@@ -147,6 +147,26 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship_game_teaching",
+        prefixes=(
+            "/apprenticeship/game-teaching-session/start",
+            "/apprenticeship/game-teaching-session/stop",
+        ),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.game_teaching_session.write",
+        approval_requirement=(
+            "not_required_scope_gate_only; explicit target, intent, scope, success condition, and start or stop "
+            "request required"
+        ),
+        receipt_behavior="game-teaching start receipt or review-required semantic episode receipt",
+        denial_behavior="api_permission_denied via permission_gate before session state or receipt write",
+        governance_maturity="permission_gated_bounded_semantic_observation",
+        notes=(
+            "The session records only allowlisted semantic scene transitions from Lens game observations; it does "
+            "not persist raw pixels, capture input, execute replay, write memory, learn a policy, or promote a skill."
+        ),
+    ),
+    AuthorityRule(
         family="apprenticeship",
         prefixes=("/apprenticeship/replay-receipt",),
         required_actor="payload.actor",
