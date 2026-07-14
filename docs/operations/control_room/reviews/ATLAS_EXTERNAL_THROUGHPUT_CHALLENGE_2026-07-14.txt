@@ -1,0 +1,517 @@
+FRANCIS CONTROL ROOM EXTERNAL CHALLENGE RESPONSE
+=================================================
+
+Responder: ATLAS
+Evidence snapshot: 2026-07-14T10:43:32-05:00
+Local main: d5516a54e9b939b2ae076f3be7b338b6cd2ed762
+Origin main: 8c84dc4e972b7921e9204e62f7cd655bd3ede037
+Disposition: No front is promotion-ready. No push is requested.
+
+This response reports observed repository, process, test, and agent-control
+evidence. It does not treat Control Room documentation as product progress.
+
+
+1. CORRECTIONS TO THE REVIEWER'S BELIEVED CONTEXT
+==================================================
+
+1. The three mutating fronts are correctly identified:
+   - FORGE, CR-FORGE-001, commit 90c4dbe0287c1f169cefad47debab85067dd4fd8
+   - ARGUS, CR-ARGUS-001, commit 2e454ba5bc4a9e5f629da463be5696350703fcb2
+   - LUMEN, CR-LUMEN-001, commit a1b2c60bced10506cfd53bdfb97aa8b491656cea
+
+2. Each worker commit is a direct child of local Control Room head d5516a54,
+   not merely an unspecified commit ahead of origin. Local main itself is one
+   commit ahead of origin. No worker branch has been pushed.
+
+3. FORGE has not completed multiple remediation cycles. Its first candidate was
+   committed at 09:57:11 and was still in exact-head validation and first review
+   at this snapshot. The elapsed period is real, but the cycle count is zero
+   post-review remediation commits, not repeated failed repair commits.
+
+4. SENTINEL and MERIDIAN reviewed FORGE after its first commit. HARBOR reviewed
+   LUMEN after its first commit. VERA's existing report was a preflight before
+   the worker commits and is not final acceptance evidence.
+
+5. Push remains operator-gated and not ready. Stage 18 production request,
+   tenant, customer, approval, export, import, and learning facts remain empty.
+
+6. The reviewer's main thesis is supported by current evidence. The campaign
+   produced three substantial worker commits, but the longest active interval is
+   now fail-closed review plus exact-head validation. No branch has promoted.
+
+
+2. ANSWERS TO CONCERNS 1-10
+===========================
+
+1. HARDENING GRAVITY WELL
+-------------------------
+
+Explicit current stop rule:
+There is no numeric hardening stop rule in PROTOCOL.md. The protocol requires
+bounded scope, evidence, and escalation for expansion, but does not cap
+remediation cycles. That is a real control-system gap.
+
+Current remediation-cycle allowance:
+Unbounded by repository rule. For this campaign I will use a two-cycle ceiling:
+cycle one fixes findings mapped directly to the existing card; cycle two may fix
+only regressions introduced by cycle one. A third issue set must be split into a
+new card, parked, or escalated. This ceiling is an ATLAS operating correction and
+is not durable until committed in a later Control Room sync.
+
+Scope test for another edge-case test:
+Every new test must identify the original acceptance criterion, a reachable
+failure path, and the exact contract claim it protects. If it cannot do all
+three, it is not part of the current card. "Fail closed" by itself is not enough
+to expand a card indefinitely.
+
+CR-FORGE-001 acceptance mapping at 90c4dbe0:
+
+A. Exact candidate schema; hashes/booleans/bounded counts/enums only; unknown
+   fields fail closed without echo or persistence.
+   Existing intended coverage: the large end-to-end test
+   test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt and
+   test_managed_copy_safe_delta_readback_redacts_invalid_latest_candidate.
+   Missing: exact persisted top-level/governance key validation, strict type
+   validation, unknown-field projection, and invalid-enum redaction tests.
+   Verdict: NOT PROVEN; SENTINEL-001/002 demonstrate defects.
+
+B. Matching confirmed dry run records one tenant-local idempotent receipt.
+   Existing intended coverage: the large end-to-end test at
+   tests/test_api_managed_copies.py:1560-1706.
+   Exact completed command evidence: missing; VAL-20260714-002 is still running.
+   Verdict: IMPLEMENTED IN CANDIDATE, NOT PROVEN.
+
+C. Long Windows path; malformed existing content and filename-prefix collision
+   fail closed.
+   Intended tests: test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed,
+   test_managed_copy_safe_delta_full_fingerprint_prefix_collision_fails_closed,
+   and test_managed_copy_safe_delta_short_receipt_path_supports_long_windows_data_root.
+   Exact completed command evidence: missing; full pytest is still running.
+   Verdict: TESTS EXIST, NOT YET PROVEN.
+
+D. Idempotence binds the complete fingerprint/contract and cannot overwrite an
+   unknown or colliding file.
+   Intended tests: prefix-collision and
+   test_managed_copy_safe_delta_receipt_creation_is_exclusive.
+   Missing: exact receipt ID, filename, timestamp/envelope, and tenant-directory
+   binding. Verdict: PARTIAL AND DEFECTIVE.
+
+E. Approval/export/import/learning/execution/mutation/registry/memory/tenant
+   writes remain disabled.
+   Evidence: static SENTINEL review found no authority expansion; candidate tests
+   assert disabled flags in the end-to-end/model-contract/unscoped tests.
+   Exact completed test exit: missing. Verdict: STATICALLY SUPPORTED, NOT FINAL.
+
+F. GET validates every receipt, redacts invalid content, reports live drift, and
+   selects truthful latest state.
+   Intended tests: readback_redacts_invalid_latest_candidate and
+   readback_reports_post_write_source_drift.
+   Missing: safe projection of augmented receipts, deterministic envelope-bound
+   latest selection, lineage-scoped selection, and per-tenant invalidity.
+   MERIDIAN-001 found cross-tenant coupling. Verdict: DEFECTIVE.
+
+G. Stage 17 prerequisite and unscoped-actor denial remain true.
+   Intended tests: review_denies_unscoped_actor_without_writing and
+   review_blocks_scoped_actor_until_stage17_closes.
+   Exact completed test exit: missing. Verdict: TESTS EXIST, NOT YET PROVEN.
+
+H. Production source-loaded readback remains empty; no fixture escapes test data.
+   Existing broad read-only/status tests may exercise this, but a direct new
+   safe-delta production-empty acceptance mapping is not recorded.
+   Verdict: MISSING/UNVERIFIED.
+
+I. Tests change in step with code.
+   Evidence: commit 90c4dbe0 changes three source files and two test files, with
+   465 added test lines. This proves co-change only, not correctness.
+   Verdict: PROVEN AS DIFF SHAPE ONLY.
+
+Current commands/evidence:
+   - git diff --check d5516a54..90c4dbe0: exit 0.
+   - Full pytest VAL-20260714-002: running, no exit/counts.
+   - Complete task-card suite, check.ps1, and post-rebase suite: missing.
+
+
+2. PROCESS TAX VS PRODUCT MOVEMENT
+----------------------------------
+
+Observed wall-clock campaign window at snapshot: about 85 minutes, from the
+09:18 Control Room activation commit to 10:43. Work was concurrent, so category
+estimates are not additive wall time.
+
+Estimated effort from observable commits/processes:
+   - Control Room docs/sync: about 30-40 ATLAS wall minutes; two local-main ops
+     commits exist and CR-003 is open. d5516a54 alone changed 39 operational
+     files with 2,564 insertions and 242 deletions relative to 8c84dc4e.
+   - Isolation/worktrees: about 10-15 ATLAS minutes for transfer, worktrees,
+     leases, and dirty-work preservation.
+   - Feature implementation: about 65-80 aggregate worker minutes, concurrent.
+     The three commits contain 3,626 insertions and 242 deletions across 17 files.
+   - Hardening/remediation analysis: about 45-60 aggregate minutes; no
+     post-review remediation commit exists yet.
+   - Specialist review: about 45-75 aggregate concurrent reviewer minutes across
+     VERA, SENTINEL, MERIDIAN, and HARBOR.
+   - Full-gate validation: four local full pytest runs have accumulated more than
+     145 compute-minutes and remain active. GitHub adds four matrix jobs; two
+     Ubuntu jobs passed and two Windows jobs remain in pytest.
+   - Token use by category: UNVERIFIED. No per-seat token accounting surface is
+     available to ATLAS, so a numeric token split would be fabricated.
+
+Operator product behavior changed so far:
+None on main. Local main contains Control Room documentation only. The worker
+branches contain candidate behavior, but no branch is promoted and no live Orb,
+service, production managed copy, approval, export, import, or learning path was
+activated.
+
+What a 24-hour Control Room freeze would truly lose:
+Load-bearing state is the exact branch/worktree mapping, task-card acceptance
+contract, dirty-file quarantine, runtime leases, review findings, exact hashes,
+and replacement/handoff data. Once those facts are captured, repeated board
+rewrites are not load-bearing. Workers could continue code/tests for 24 hours if
+ATLAS froze local-main docs and retained one bounded pending sync.
+
+
+3. DUAL SOURCES OF TRUTH
+------------------------
+
+There is no honest single surface for both code truth and operating-state truth.
+Git refs/worktrees and live process/exit evidence override stale documents.
+The task card is authoritative for acceptance scope. BOARD.md is the intended
+aggregate front-state readback only after reconciliation; it cannot override Git.
+
+Board lag detection is a sync comparison of git worktree list, exact branch
+heads, git status, native agent controls, process command lines, validation
+receipts, and reviewer reports. Lag is resolved by routing action first and then
+updating the board. Current example: BOARD.md says specialists are unstaffed,
+while MERIDIAN and HARBOR were staffed and returned reviews. The board is stale.
+
+The dependency graph exists at:
+docs/operations/control_room/DEPENDENCY_GRAPH.md
+
+It is currently untracked in open CR-20260714-003. Under the Control Room's own
+rule, it is not yet durable. Any claim that it is durable now would be false.
+
+
+4. VALIDATION ECONOMICS
+-----------------------
+
+Active local full pytest runs: four, all on distinct commits:
+   - ATLAS d5516a54
+   - FORGE 90c4dbe0
+   - ARGUS 2e454ba5
+   - LUMEN a1b2c60b
+
+Active remote full jobs: two Windows pytest jobs for 8c84dc4e. Both Ubuntu jobs
+for Python 3.12 and 3.13 passed. Run:
+https://github.com/Ap3pp3rs94/Francis/actions/runs/29340258995
+
+Conditionally planned, not yet launched: worker acceptance/check after each new
+remediation commit, exact rebased acceptance/check for each promotion candidate,
+and one authoritative combined gate after local-main integration.
+
+Lease protection:
+Each front has a unique FRANCIS_DATA_DIR, test-retention root, worktree, and port
+set; persistent services and the live Orb are denied. This prevents runtime-state
+collision. It does not isolate the Python environment or physical disk: all four
+runs use a junction to D:\Francis\.venv. The Typer corruption incident proves
+that venv isolation is incomplete. No package write is permitted while these
+runs execute, but the current lease does not eliminate disk/venv thrash.
+
+Material validation runs:
+
+VAL-20260714-001
+   Commit: d5516a54e9b939b2ae076f3be7b338b6cd2ed762
+   Command: D:\fv\.venv\Scripts\python.exe -m pytest -q
+   Disposition: INCOMPLETE_RUNNING; at least 36 percent observed.
+   Proves: only exact d5516a54 pytest process execution against D:\fv\src.
+   Does not prove: pass, worker heads, Linux, or remote CI.
+
+VAL-20260714-002
+   Commit: 90c4dbe0287c1f169cefad47debab85067dd4fd8
+   Command: .venv\Scripts\python.exe -m pytest -q
+   Disposition: INCOMPLETE_RUNNING.
+   Proves: only distinct FORGE exact-head execution.
+   Does not prove: acceptance, remediation, rebase, promotion, or CI.
+
+VAL-20260714-003
+   Commit: 2e454ba5bc4a9e5f629da463be5696350703fcb2
+   Command: .venv\Scripts\python.exe -m pytest -q
+   Disposition: INCOMPLETE_RUNNING.
+   Proves: only distinct ARGUS exact-head execution.
+   Does not prove: acceptance, remediation, rebase, promotion, or CI.
+
+VAL-20260714-004
+   Commit: a1b2c60bced10506cfd53bdfb97aa8b491656cea
+   Command: .venv\Scripts\python.exe -m pytest -q
+   Disposition: INCOMPLETE_RUNNING.
+   Proves: only distinct LUMEN exact-head execution.
+   Does not prove: native compile, acceptance, live visual behavior, rebase,
+   promotion, or CI.
+
+VAL-20260714-005
+   Commit: d5516a54e9b939b2ae076f3be7b338b6cd2ed762
+   Command recorded: repaired-environment Ruff, format, and 665-file mypy.
+   Disposition: PASS for observed exits 0/0/0.
+   Receipt defect: exact commands and timestamps are not fully recorded, so this
+   validation entry is not compliant with the throughput receipt contract.
+   Does not prove: pytest, worker candidates, remote CI, or cli.py dirty work.
+
+Identical-evidence reruns that should not have happened:
+None identified. Earlier runs differed by commit, dependency extras, repaired
+environment, source-root harness, or failure hypothesis. Some harness attempts
+were invalid/incomplete, but they were not represented as passing duplicate
+evidence. Starting full pytest on three candidates already known to require
+remediation was economically weak, even though the heads were distinct.
+
+
+5. REVIEW LADDER INFLATION
+--------------------------
+
+Mandatory by current task cards:
+   - FORGE: MERIDIAN, SENTINEL, HARBOR, VERA, ARCHIVIST.
+   - ARGUS: MERIDIAN, SENTINEL, HARBOR, VERA; ARCHIVIST only if receipt evidence
+     changes.
+   - LUMEN: SENTINEL, HARBOR, VERA, ARCHIVIST; MERIDIAN only if schema/ownership
+     expands.
+
+Opportunistic or event-driven reviews:
+   - VERA preflight was early and cannot substitute for final acceptance.
+   - HARBOR's local Typer/environment review was event-driven after a real gate
+     failure, not a task-card branch review.
+   - The current ARCHIVIST Control Room consistency audit is opportunistic and
+     does not certify any worker branch.
+
+MERIDIAN's concrete FORGE conflict:
+Safe-delta duplicates tenant path/policy ownership already held by structural
+isolation, globally couples latest receipt state across tenants, and advertises
+an old JSONL receipt path while writing tenant-local receipts/sd JSON files.
+MERIDIAN review REVIEW-MERIDIAN-20260714-001 says no ADR is needed if remediation
+reuses the existing isolation trust boundary and tightens the unpromoted v1
+contract. If the solution introduces OS ACL/handle authority or a new filesystem
+trust assumption, an ADR and operator gate become necessary.
+
+Ceremonial-review control:
+Every review must have one concrete card question and return a finding or explicit
+no-finding result at an exact commit. A reviewer is not repeated when its
+question is already answered and the remediation does not touch that contract.
+No further pre-remediation specialist review should run on these three commits.
+
+
+6. MAIN DRIFT / PROMOTION COST
+------------------------------
+
+Current docs-only main-movement budget:
+None is written numerically. This is another protocol gap. Actual movement is two
+Control Room commits, with one open uncommitted cycle. The practical correction
+is to commit CR-003 once before the first promotion rebase, then freeze local
+main until that candidate is either promoted or rejected.
+
+Exact first-promotion checklist:
+   1. Record worker review-ready hash and complete focused acceptance exits.
+   2. Reconcile and commit one bounded CR-003 docs-only sync.
+   3. Rebase the worker branch onto that exact, then-known local-main hash.
+   4. Record the new post-rebase worker hash.
+   5. Run every task-card acceptance command on that exact hash.
+   6. Run scripts/check.ps1 on that exact hash.
+   7. Confirm diff scope and only materially required specialist reviews.
+   8. VERA maps acceptance to evidence on that exact hash.
+   9. Freeze local main and fast-forward only if ATLAS is certain.
+  10. Verify reachability and run meaningful post-promotion validation.
+  11. Record the result in the next Control Room sync. Do not push without the
+      operator's separate authorization.
+
+The rebase head cannot be named yet because CR-003 has not been committed. The
+hard policy is that the final post-rebase hash, not 90c4dbe0/2e454ba5/a1b2c60b,
+must be the hash that passed the final suite.
+
+I would promote before Control Room polish when the card's behavior is complete,
+the exact rebased head has exit-0 acceptance/check evidence, required concrete
+reviews have no blockers, no authority/live-path uncertainty remains, and only
+non-material wording/index polish is open.
+
+
+7. SESSION CONTROL REALISM
+--------------------------
+
+Live controllable at snapshot:
+   - FORGE agent 019f6100-96ab-7631-98b0-5b92909186e0
+   - ARGUS agent 019f6100-97e3-7e23-a5c7-255ec738fd9b
+   - LUMEN agent 019f6100-9898-7353-9359-ed4727e2a4cb
+   - ARCHIVIST agent 019f6144-d5f2-7923-80c9-ae0b3f2bfce4
+   - ATLAS local manager; terminal session 41434 is a pytest handle, not an
+     ATLAS or Francis runtime session ID.
+
+Completed and closed after reports:
+   - MERIDIAN 019f613f-ae1a-7643-ba3d-b3793cc79233
+   - HARBOR 019f6119-b5ef-7721-91c1-5c628ce3ec61
+
+Durable/resumable seat without a current live session:
+   - VERA and SENTINEL.
+
+Seat files only or no verified active handle:
+   - ECHO and currently unstaffed specialists not listed above.
+   - CLAUDE remains UNVERIFIED; no external collaboration bridge is proven.
+
+Degraded mode:
+Preserve exact branch/worktree heads, inspect without reset/clean, stop relying on
+unverified session progress, quarantine uncommitted state, preserve leases, and
+replace the same durable seat after the liveness threshold. If native controls
+are unavailable entirely, ATLAS can use Git/process evidence but must not claim
+messages were delivered or sessions were interrupted.
+
+Messages to uncontrollable sessions:
+None knowingly. Successful send_input calls returned submission IDs for the three
+live workers, which proves control-plane acceptance but not worker receipt until
+they acknowledge. MERIDIAN and HARBOR returned completed reports, proving those
+sessions were controllable. No message was sent to CLAUDE. Older session-message
+delivery beyond recorded reports is UNVERIFIED.
+
+
+8. SCOPE HONESTY ON LUMEN
+-------------------------
+
+The current task-card title and objective are narrow: right-click delivery and
+visual-lock alignment. The branch name remains broadly "orb-choreography" and
+must not be interpreted as choreography completion.
+
+The card is still somewhat over-broad because it bundles transport correctness
+with ring-count alignment and a wide shell-regression matrix. HARBOR found three
+real transport defects: replacing publication, unbounded drain behavior, and
+multiple publications for one physical right-click gesture. Eight-ring alignment
+is statically consistent, but live visual fidelity is unproven.
+
+Residual choreography work on this branch:
+None is authorized or queued by this card. The card explicitly forbids a
+canonical state-to-choreography or live visual acceptance claim. Any travel,
+arrival, press, effect, HUD, color, or broader behavior remains outside this
+front unless separately carded.
+
+
+9. TERMINAL CONDITION
+----------------------
+
+CR-FORGE-001:
+REMEDIATION_REQUIRED with remediation assigned and active session. Evidence:
+90c4dbe0, VAL-20260714-002 running, SENTINEL and MERIDIAN blocker reports.
+
+CR-ARGUS-001:
+REMEDIATION_REQUIRED with remediation assigned and active session. Evidence:
+2e454ba5, VAL-20260714-003 running, malformed blocked/teaching projection findings.
+
+CR-LUMEN-001:
+REMEDIATION_REQUIRED with remediation assigned and active session. Evidence:
+a1b2c60b, VAL-20260714-004 running, ATLAS/HARBOR publication, cardinality, and
+bounded-drain findings.
+
+These are permitted throughput terminal states for the present reporting turn,
+not completed fronts.
+
+Roadmap critical-path action:
+Capture the current FORGE suite exit, then let FORGE perform exactly one bounded
+remediation cycle against strict receipt projection, lineage-scoped selection,
+and isolation-owned path confinement. No further review should precede that
+commit.
+
+Highest-probability first promotion:
+ARGUS is cheaper than FORGE. Its fail-closed projection correction has the
+smallest current write surface and no production/authority action.
+
+What ATLAS refuses to do next:
+Another review of the same pre-remediation hashes; another identical full gate;
+another docs-only main commit before a promotion candidate exists; a new edge
+test without card mapping; any live Orb action; or any Stage 18 production fact.
+
+
+10. DIRECT YES/NO RISK CALLS
+----------------------------
+
+1. Is the Control Room currently increasing ship rate, or mostly increasing
+   certainty-about-not-shipping?
+   PARTIAL, leaning certainty: it isolated three real commits and prevented bad
+   merges, but zero candidate behavior has promoted to main.
+
+2. Is FORGE blocked on a real product defect, or on hardening completeness?
+   REAL PRODUCT DEFECTS: unsafe stored-ready trust, raw-field exposure,
+   cross-tenant latest coupling, and unproven nested path confinement affect the
+   actual candidate contract, not merely test completeness.
+
+3. Would a human maintainer have merged any of the three branches already under
+   direct-on-main norms?
+   NO: each has a known behavioral blocker and lacks an exact completed full
+   acceptance/check result.
+
+4. Is there an unbounded-loop risk in the current FORGE remediation path?
+   YES: no numeric cycle cap exists and the card currently mandates a broad
+   reviewer ladder; the two-cycle/split rule is not yet durable.
+
+5. Has any front violated live-Orb, production Stage 18, or authority gates?
+   NO EVIDENCE OF VIOLATION: active processes are pytest only, leases deny live
+   services/Orb, production facts remain empty, and static authority review found
+   no approval/export/import/learning/execution grant. Runtime absence beyond the
+   inspected processes remains bounded to the evidence snapshot.
+
+
+3. HARDEST CURRENT BLOCKER
+==========================
+
+FORGE's safe-delta receipt is the hardest blocker because the first candidate
+mixes evidence, readback, tenant lineage, and filesystem trust. At 90c4dbe0,
+stored readiness is treated as authority, unknown receipt fields can survive into
+GET output, global latest selection couples tenants, and receipts/sd confinement
+duplicates the structural-isolation boundary without proving nested junction
+safety. Evidence: docs/operations/control_room/reviews/SENTINEL/
+CR-20260714-forge-preflight.md and REVIEW-MERIDIAN-20260714-001. The narrow path
+does not require a new ADR if it reuses the existing isolation boundary and
+strictly projects the unpromoted v1 receipt. It does require a real remediation
+commit and direct tests before any promotion claim.
+
+
+4. CHEAPEST PATH TO ONE PROMOTION
+=================================
+
+1. Let VAL-20260714-003 finish and record its exact exit/counts for ARGUS commit
+   2e454ba5. Do not rerun it.
+2. ARGUS makes one bounded commit that validates blocked observations and
+   teaching session/review fields before strict projection, with crafted malformed
+   regressions. No observer service or live runtime.
+3. Run only the ARGUS card's focused pytest, Ruff, format, mypy, and diff-check.
+4. If green, route simultaneous concrete HARBOR portability and VERA acceptance
+   review. Route MERIDIAN/SENTINEL only for the exact contract/authority questions
+   still materially affected; no generic review.
+5. Commit one reconciled CR-003 docs-only sync, then freeze local main.
+6. Rebase ARGUS onto that exact CR-003 hash and record the new candidate hash.
+7. Rerun complete ARGUS acceptance and scripts/check.ps1 on that exact hash.
+8. If all exits are 0 and no reviewer blocker remains, fast-forward local main,
+   verify reachability, and run one meaningful post-promotion check.
+9. Record the result. Do not push without the operator's separate authorization.
+
+
+5. WHAT ATLAS WILL STOP DOING IF HARDENING CONSUMES THE CAMPAIGN
+================================================================
+
+1. Stop running full suites on commits already known to require remediation.
+2. Stop adding a reviewer unless the task card names one concrete unresolved
+   question that reviewer can answer.
+3. Stop repeating a specialist review when remediation does not touch its
+   contract.
+4. Stop committing Control Room polish while a candidate is approaching rebase;
+   hold one bounded open sync and freeze main for promotion.
+5. Stop accepting "fail closed" as sufficient scope justification. Require a
+   direct acceptance-criterion and reachable-failure mapping.
+6. Stop a card after two remediation cycles. Split, park, or escalate the next
+   independent issue instead of growing the same card.
+7. Stop treating uncommitted dependency/board state as durable.
+8. Stop implying worker-branch behavior changed the operator product before
+   local-main promotion and post-promotion validation.
+
+
+COMPLETION PERCENTAGES
+======================
+
+Overall Francis: UNSCORED and unchanged. Baseline source is the completion
+ledger; this audit and unpromoted branches close no ledger gate.
+
+Current Phase 2 / Stage 18: UNSCORED and unchanged. The first production gate
+still requires a real operator-supplied managed-copy request.
+
+Current audit task: 100 percent. This report answers the requested challenge
+against the evidence snapshot; it does not score or advance implementation.

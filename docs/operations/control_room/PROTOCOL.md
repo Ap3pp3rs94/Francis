@@ -14,7 +14,8 @@ ATLAS is the authoritative writer for:
 - `docs/operations/SESSION_BRIEF.md`
 - `ROSTER.md`, `BOARD.md`, `MESSAGE_LOG.md`, `DECISIONS.md`
 - `INTEGRATION_QUEUE.md`, `RUNTIME_LEASES.md`, `OPERATOR_QUEUE.md`
-- `EVIDENCE_INDEX.md`
+- `SESSION_TOPOLOGY.md`, `DEPENDENCY_GRAPH.md`, `VALIDATION_RUNS.md`
+- `EVIDENCE_INDEX.md` and dated validation receipts
 - aggregate seat state, task cards, material messages, handoffs, and reviews
 
 Workers submit structured reports. They do not edit aggregate files from their
@@ -47,6 +48,17 @@ once against that closing cycle.
 - ATLAS is manager/integrator, not a fourth feature worker.
 - Read-only seats do not consume mutating slots. A specialist may mutate only
   after receiving one of those slots plus a card, branch, and worktree.
+
+ATLAS remains an active build director. At the start of each management turn it
+reconciles native session topology, then spends available capacity on executable
+work, evidence review, validation, integration preparation, or a concrete
+operator escalation. Control Room writing follows operating state and does not
+replace implementation or review work.
+
+`SESSION_TOPOLOGY.md` distinguishes durable seats from live, controllable,
+running, idle, completed, stale, and unreachable sessions. A UUID alone is not
+proof of reachability. ATLAS does not duplicate a live seat and uses native agent
+controls to steer, wait, release, resume, or replace sessions when available.
 
 ## Runtime Isolation
 
@@ -146,6 +158,70 @@ Review is not ceremonial. Each requested seat receives a concrete question. A
 reviewer reports findings; it does not edit the worker branch or redefine the
 card. Remediation returns to the owning worker.
 
+A front receives at most two remediation cycles after its first reviewable
+candidate. Cycle one addresses findings mapped directly to the existing card;
+cycle two may address only regressions introduced by cycle one. A third
+independent issue set must be split into a new card, parked, or escalated. Every
+new regression test must name the original acceptance criterion, a reachable
+failure path, and the exact contract claim it protects. General fail-closed value
+alone does not expand a card.
+
+A completed specialist question is not repeated unless the new diff materially
+touches that contract. No additional pre-remediation review runs against an
+exact candidate already classified `REMEDIATION_REQUIRED`.
+
+## Dependency And Throughput Scheduling
+
+`DEPENDENCY_GRAPH.md` records for every front its exact objective, roadmap
+priority, current commit, dependencies, consumers, unresolved contracts,
+validation, reviewers, integration order, operator gates, critical-path state,
+and next executable action.
+
+ATLAS prioritizes work that unblocks multiple fronts, then the current critical
+path, contract clarification, validation, review, integration preparation, and
+lower-risk work already inside a card. It does not create speculative fronts to
+occupy compute. Unused native-agent capacity may perform concrete read-only
+acceptance, architecture, security, portability, receipt, integration, failure,
+or Control Room consistency reviews.
+
+While a distinct exact-head validation runs, ATLAS continues non-conflicting
+diff review, contract searches, reviewer preparation, dependency analysis, and
+integration planning. It does not write to a branch while that run is intended
+to prove the branch's current exact head.
+
+## Validation Tiers And Receipts
+
+Validation tiers are:
+
+1. edit loop: syntax, changed-file Ruff/format, changed-module mypy, focused
+   tests, and diff checks;
+2. stable worker head: card acceptance, subsystem regression, required full
+   gate, and independent exact-commit review;
+3. rebased promotion head: complete acceptance, full gate, final diff, and any
+   materially affected specialist review;
+4. integrated local main: meaningful post-promotion checks and one authoritative
+   combined full gate; remote CI/CodeQL only after an operator-authorized push.
+
+Every material run receives a `VAL-YYYYMMDD-NNN` entry indexed by
+`VALIDATION_RUNS.md`. It records seat/front, exact commit, branch/worktree,
+command, working directory, runtime lease, reproducibility-relevant environment,
+start/finish, exit and counts, artifact, disposition, what it proves, and what it
+does not prove. PID, silence, and elapsed time are never pass evidence.
+
+An otherwise identical rerun requires a changed commit/base/environment/platform/
+selection/lease/hypothesis, an incomplete prior run, a flake measurement, an
+independent reviewer reproduction, or suspected contamination.
+
+Do not start a full suite on a candidate already known to require remediation
+unless that run was active before the finding and its exact-head result is being
+preserved. Remediation uses edit-loop and card-focused validation first; the full
+gate begins only after the focused acceptance target is green.
+
+New evidence is immediately classified as accepted, incomplete, failed, scope
+violation, contract collision, remediation required, review-ready,
+promotion-ready, or operator-gated. ATLAS routes the corresponding next action
+before batching documentation.
+
 ## Exact-Head Promotion
 
 Control Room commits can advance local `main`, so pre-rebase evidence is not
@@ -165,6 +241,12 @@ sufficient. Before promotion ATLAS must:
 
 The exact promoted head must be the head that passed final validation. Publishing
 or pushing remains operator-gated. Remote branch deletion is operator-gated.
+
+During an active promotion campaign, ATLAS holds at most one open material
+Control Room sync between local-main promotions. Once a worker becomes
+review-ready, ATLAS commits that bounded sync, freezes further local-main docs
+movement, and keeps the freeze until the candidate is promoted or rejected.
+Non-material wording or index polish does not delay a green exact-head promotion.
 
 ## Operator Escalation Gates
 
@@ -217,3 +299,11 @@ ask the operator. Other isolated work may continue.
 A handoff names the seat, front, card, branch, worktree, runtime lease, latest
 verified commit, contracts, validation, messages, findings, dependencies,
 blocker, and next smallest truthful action. No handoff may rely on chat memory.
+
+## Continuous Operating Condition
+
+ATLAS continues until each active front is promoted with exact evidence, ready
+for promotion behind an operator gate, blocked by a concrete external fact,
+waiting on a named operator decision, actively assigned remediation, or
+operator-cancelled. A report, running or failed test, initial commit, task-card
+creation, or temporary missing session is not a terminal condition.

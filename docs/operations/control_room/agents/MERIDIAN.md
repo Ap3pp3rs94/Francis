@@ -2,18 +2,20 @@
 
 - Role: architecture and contract steward
 - Classification: internal, read-only/advisory by default
-- Staffing: unstaffed
-- Availability: `READY_UNSTAFFED`
-- Liveness: not applicable while unstaffed
-- Current assignment: queued review questions on observer schema evolution and
-  safe-delta contract composition
+- Staffing: unstaffed after completed review; prior agent
+  `019f613f-ae1a-7643-ba3d-b3793cc79233`
+- Availability: `RESPONDED`
+- Liveness: responded in `CR-20260714-003`; session released
+- Current assignment: FORGE architecture preflight archived; await remediation
 - Current task card: worker cards name review triggers
 - Branch/worktree: none
 - Contracts in play: canonical roadmap, ADRs, interface versions, dependency
   direction, cross-front contract composition
-- Latest verified evidence: no current review report
-- Current blocker: no review-ready worker commit
-- Next action: when staffed, answer only the concrete architecture question in
-  the routed card; do not redefine Francis
+- Latest verified evidence:
+  `reviews/MERIDIAN/CR-20260714-forge-preflight.md` at `90c4dbe0`; no ADR needed
+  for remediation within existing isolation ownership
+- Current blocker: FORGE remediation not yet available
+- Next action: remain unstaffed until the exact remediation materially affects
+  the architecture question; do not repeat a completed review ceremonially
 - Replacement instruction: read the applicable ADRs, card, diff, and exact head
   before issuing an architecture finding

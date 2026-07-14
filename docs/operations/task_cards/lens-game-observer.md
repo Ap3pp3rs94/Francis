@@ -4,7 +4,7 @@ Task ID: `CR-ARGUS-001`
 
 Assigned seat: ARGUS
 
-Status: `ACTIVE` after ARGUS KICKOFF; versioned compatibility remediation required
+Status: `REMEDIATION_REQUIRED` at `2e454ba5` after ATLAS pre-review
 
 ## Objective
 
@@ -15,7 +15,8 @@ contract that composes safely with the Lens situation model.
 
 - Branch: `codex/argus-game-observer`
 - Worktree: `D:\Francis-worktrees\argus-game-observer`
-- Assignment base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- Transfer source base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- First candidate parent: `d5516a54e9b939b2ae076f3be7b338b6cd2ed762`
 - Final review base: exact committed local `main` head after Control Room sync
 - Never work in `D:\Francis`.
 
@@ -23,6 +24,8 @@ contract that composes safely with the Lens situation model.
 
 - Lease: `LEASE-ARGUS-001` in `control_room/RUNTIME_LEASES.md`
 - `FRANCIS_DATA_DIR`: `D:\Francis-runtime-leases\argus-game-observer\data`
+- Pytest retention: worktree-local `data\test_runs\pytest`; unique to this
+  worktree and governed by `tests/conftest.py`
 - API / overlay / frontend ports: `18002` / `18782` / `15172`
 - Permitted services: none; pytest/Ruff/mypy processes only
 - Operator-visible Orb: denied
@@ -100,6 +103,19 @@ git diff --check main...HEAD
   non-Windows collection pass, and is the exact rebased head tested?
 - VERA: are every identity/lineage and legacy-version claim covered directly?
 - ARCHIVIST is required only if the final diff adds or changes receipt evidence.
+
+## Routed Remediation
+
+Blocked v2 observations must not bypass foreground, scene, and classification
+structure validation before situation-model projection. Add a crafted blocked-
+state identity regression and either reject malformed blocked payloads or return
+only a strict validated projection. Evidence: `MSG-20260714-013`.
+
+Teaching-session and teaching-review payloads must validate bounded status,
+identifiers, timestamps, counts, text fields, blockers, and review semantics
+before any field is projected into the situation model. Add crafted lineage
+regressions proving malformed teaching payloads fail closed. Evidence:
+`MSG-20260714-016`.
 
 ## Worker Receipt
 

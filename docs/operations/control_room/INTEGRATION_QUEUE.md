@@ -7,9 +7,9 @@ operator-gated.
 
 | Front | Branch | Worker commit | Worker evidence | Specialist reviews | VERA | ATLAS exact-head validation | Operator gate | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CR-FORGE-001 | `codex/forge-managed-copies-safe-delta` | unverified | unverified | pending concrete card questions | preflight findings routed; acceptance pending | pending | no production action; push gated | NOT ELIGIBLE |
-| CR-ARGUS-001 | `codex/argus-game-observer` | unverified | unverified | pending concrete card questions | preflight findings routed; acceptance pending | pending | push gated | NOT ELIGIBLE |
-| CR-LUMEN-001 | `codex/lumen-orb-choreography` | unverified | unverified | pending concrete card questions | preflight findings routed; acceptance pending | pending | live proof separate; push gated | NOT ELIGIBLE |
+| CR-ARGUS-001 | `codex/argus-game-observer` | `2e454ba5` | `VAL-003` interrupted known remediation; cycle one active | ATLAS blocked/teaching projection findings; affected reviews only after new hash | preflight only | first integration priority after focused-green hash | push gated | `REMEDIATION_REQUIRED` |
+| CR-FORGE-001 | `codex/forge-managed-copies-safe-delta` | `90c4dbe0` | `VAL-002` interrupted known remediation; cycle one active | SENTINEL/MERIDIAN remediation archived; affected reviews only after new hash | preflight only | pending new hash/rebase | no production action; push gated | `REMEDIATION_REQUIRED` |
+| CR-LUMEN-001 | `codex/lumen-orb-choreography` | `a1b2c60b` | `VAL-004` interrupted known remediation; cycle one active | HARBOR publication/cardinality/bounds remediation archived | preflight only | pending new hash/rebase | live proof separate; push gated | `REMEDIATION_REQUIRED` |
 
 Promotion requires an exact worker commit, task-card evidence, required concrete
 specialist reviews, independent VERA acceptance, ARCHIVIST traceability where

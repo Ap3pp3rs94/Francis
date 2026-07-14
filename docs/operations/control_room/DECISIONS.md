@@ -155,3 +155,26 @@
 - Affected contracts: safe-delta readback; observer lineage; queue and visual lock
 - ADR required: unverified until MERIDIAN reviews any final architecture impact
 - Operator involvement: no gated product action is performed
+
+## CR-DEC-0011 - Bound hardening cycles and local-main documentation drift
+
+- Date: 2026-07-14
+- Issue: the protocol had no numeric remediation ceiling or docs-only movement
+  budget, allowing defensible hardening and Control Room commits to indefinitely
+  delay promotion
+- Agents involved: ATLAS; external reviewer challenge; ARCHIVIST evidence audit
+- Evidence considered:
+  `reviews/ATLAS_EXTERNAL_THROUGHPUT_CHALLENGE_2026-07-14.txt`, three first
+  candidate commits, specialist findings, and open CR-003 drift
+- Decision: after a first reviewable candidate, permit at most two remediation
+  cycles; cycle one handles card-mapped findings and cycle two only regressions
+  introduced by cycle one. Split, park, or escalate a third independent issue
+  set. Hold at most one open Control Room sync and freeze local-main docs movement
+  once a candidate becomes review-ready until it is promoted or rejected.
+- Affected fronts: all current and future fronts
+- Affected task cards: all current and future cards
+- Affected contracts: scope containment, review economics, validation scheduling,
+  and exact-head promotion
+- ADR required: no; this is an operating constraint
+- Operator involvement: no gated product/authority action; push and stage closure
+  remain operator-only

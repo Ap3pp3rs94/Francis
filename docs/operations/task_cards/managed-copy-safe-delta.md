@@ -4,7 +4,7 @@ Task ID: `CR-FORGE-001`
 
 Assigned seat: FORGE
 
-Status: `ACTIVE` after FORGE KICKOFF; fail-closed receipt remediation required
+Status: `REMEDIATION_REQUIRED` at `90c4dbe0` after ATLAS and SENTINEL pre-review
 
 ## Objective
 
@@ -15,7 +15,8 @@ without approving, exporting, importing, or learning from tenant data.
 
 - Branch: `codex/forge-managed-copies-safe-delta`
 - Worktree: `D:\Francis-worktrees\forge-managed-copies-safe-delta`
-- Assignment base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- Transfer source base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- First candidate parent: `d5516a54e9b939b2ae076f3be7b338b6cd2ed762`
 - Final review base: exact committed local `main` head after Control Room sync
 - Never work in `D:\Francis`.
 
@@ -23,6 +24,8 @@ without approving, exporting, importing, or learning from tenant data.
 
 - Lease: `LEASE-FORGE-001` in `control_room/RUNTIME_LEASES.md`
 - `FRANCIS_DATA_DIR`: `D:\Francis-runtime-leases\forge-managed-copies-safe-delta\data`
+- Pytest retention: worktree-local `data\test_runs\pytest`; unique to this
+  worktree and governed by `tests/conftest.py`
 - API / overlay / frontend ports: `18001` / `18781` / `15171`
 - Permitted services: none; pytest/Ruff/mypy processes only
 - Operator-visible Orb: denied
@@ -102,6 +105,29 @@ git diff --check main...HEAD
 - VERA: does every acceptance criterion map to a direct test and exact command?
 - ARCHIVIST: can every readback claim be traced to a validated receipt and live
   source-boundary check without raw customer data?
+
+## Routed Remediation
+
+- Recompute candidate checks from persisted values; stored `ready` flags are not
+  independent validation.
+- Enforce an exact receipt/governance schema or return a strict safe projection.
+- Bind receipt ID, timestamp/latest ordering, filename prefix, and containing
+  tenant directory to the validated fingerprint and live provision lineage.
+- Scope latest selection and invalidity to exact tenant/copy/provision/isolation
+  lineage so one tenant cannot obscure another tenant's valid readback.
+- Reuse structural isolation's canonical path guard rather than creating a
+  competing tenant-path boundary. Request a card scope revision before touching
+  `managed_copy_isolation.py` or adding a shared path module.
+- Align the blocked readback's expected receipt path with the actual tenant-local
+  `receipts/sd/*.json` contract.
+- Redact unknown `signal_class` and `direction` values on blocked responses.
+- Prove `receipts/sd` cannot be redirected by a symlink or Windows junction
+  below the structurally verified parent.
+- Add direct tests for every item above before requesting another review.
+
+Evidence: `MSG-20260714-012`, `MSG-20260714-015`,
+`docs/operations/control_room/reviews/SENTINEL/CR-20260714-forge-preflight.md`,
+and `docs/operations/control_room/reviews/MERIDIAN/CR-20260714-forge-preflight.md`.
 
 ## Worker Receipt
 

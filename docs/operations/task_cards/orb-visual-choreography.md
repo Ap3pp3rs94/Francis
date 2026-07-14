@@ -4,7 +4,7 @@ Task ID: `CR-LUMEN-001`
 
 Assigned seat: LUMEN
 
-Status: `ACTIVE` after LUMEN KICKOFF and ATLAS scope correction
+Status: `REMEDIATION_REQUIRED` at `a1b2c60b` after ATLAS pre-review
 
 ## Objective
 
@@ -16,7 +16,8 @@ changing authority, shell behavior, or the live process.
 
 - Branch: `codex/lumen-orb-choreography`
 - Worktree: `D:\Francis-worktrees\lumen-orb-choreography`
-- Assignment base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- Transfer source base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- First candidate parent: `d5516a54e9b939b2ae076f3be7b338b6cd2ed762`
 - Final review base: exact committed local `main` head after Control Room sync
 - Never work in `D:\Francis`.
 
@@ -24,6 +25,8 @@ changing authority, shell behavior, or the live process.
 
 - Lease: `LEASE-LUMEN-001` in `control_room/RUNTIME_LEASES.md`
 - `FRANCIS_DATA_DIR`: `D:\Francis-runtime-leases\lumen-orb-choreography\data`
+- Pytest retention: worktree-local `data\test_runs\pytest`; unique to this
+  worktree and governed by `tests/conftest.py`
 - API / overlay / frontend ports: `18003` / `18783` / `15173`
 - Permitted services: none; pytest/Ruff and one compile-only native build
 - Operator-visible Orb: denied
@@ -108,6 +111,23 @@ this card.
   have direct acceptance evidence?
 - ARCHIVIST: can queued/attempted/applied/failed readback be traced without an
   optimistic completion claim?
+
+## Routed Remediation
+
+- Native request publication must not replace a destination that becomes
+  occupied during the publication race.
+- One overlay drain cycle must process a strict bounded number of requests and
+  report remaining/overflow backlog without deleting unattempted requests.
+- Queue discovery must enforce bounded file count and per-file byte size before
+  generic JSON parsing, and projected request/receipt fields must be explicitly
+  bounded rather than echoing arbitrary marker content.
+- One physical right-click gesture must publish exactly one queue request while
+  separate rapid gestures remain independently queueable.
+- Add direct tests for occupied-destination preservation and a backlog larger
+  than the processing bound, oversized marker rejection, and bounded projected
+  fields and one-publication-per-gesture behavior. Evidence:
+  `MSG-20260714-014`, `MSG-20260714-017`, and
+  `docs/operations/control_room/reviews/HARBOR/CR-20260714-lumen-preflight.md`.
 
 ## Worker Receipt
 

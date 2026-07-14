@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-14, sync cycle `CR-20260714-002` (America/Chicago)
+Updated: 2026-07-14, sync cycle `CR-20260714-003` (America/Chicago)
 
 ## Manager Role
 
@@ -19,21 +19,26 @@ Cold-start order:
 2. Read `docs/operations/COMPLETION_LEDGER.md`.
 3. Read this brief and the active task cards under `docs/operations/task_cards/`.
 4. Read `docs/operations/control_room/BOARD.md`, `PROTOCOL.md`,
-   `RUNTIME_LEASES.md`, `OPERATOR_QUEUE.md`, `EVIDENCE_INDEX.md`,
+   `SESSION_TOPOLOGY.md`, `DEPENDENCY_GRAPH.md`, `RUNTIME_LEASES.md`,
+   `VALIDATION_RUNS.md`, `OPERATOR_QUEUE.md`, `EVIDENCE_INDEX.md`,
    `MESSAGE_LOG.md`, affected shards, and the seat file.
 5. Verify `git status --short --branch`, `git worktree list --porcelain`,
    `git branch -avv`, and current GitHub checks before acting.
 
 ## Canonical Posture
 
-- Canonical branch before this sync: local and remote `main` at `8c84dc4e`; verify
-  the current head and do not assume this brief's commit was pushed.
+- Canonical local `main`: `d5516a54e9b939b2ae076f3be7b338b6cd2ed762`;
+  remote `origin/main`: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`.
+  The local docs-only Control Room commit has not been pushed.
 - Canonical phase: Phase 2.
 - Canonical active workstream: Stage 18 / Managed Copies Platform groundwork.
 - Stage 17 is closed by governed receipt
   `stage17_capability_economy_closure_afd0fa32f7d1`.
 - Stage 18 remains open. Production has no real customer request, tenant, or
   managed-copy runtime. Never invent customer identity, policy, or business facts.
+- The ledger's first production gate is still that real operator-supplied
+  request. FORGE is the highest-priority executable internal Stage 18 slice but
+  cannot close or bypass the production gate with fixtures.
 - Stage 6 is ledger-closed. Current Lens/Orb work is cross-stage hardening and
   must not be used to claim a new Stage 6 or Stage 18 closure.
 - The live Orb process family is out of scope: do not stop, restart, replace,
@@ -51,14 +56,17 @@ hash-only safe-delta candidate-review receipt while approval, export, import,
 learning writes, and cross-tenant flow remain disabled. Readback must detect live
 source-boundary drift and must not echo or persist raw customer data.
 
-Current state: the exact patch is preserved, hash-registered, and isolated in
-FORGE's worktree. The shortened receipt path remains unverified. FORGE and VERA
-found malformed overwrite, filename-prefix collision, unvalidated latest
-readback, drift, and exclusive-create gaps. Treat the entire slice as unverified.
+Current state: clean worker commit `90c4dbe0` is isolated. Full pytest
+`VAL-20260714-002` is `INTERRUPTED_KNOWN_REMEDIATION`; cycle one is active.
+ATLAS, SENTINEL, and MERIDIAN require remediation: strict
+schema/projection, recomputed semantics, bound ID/time/file/tenant lineage,
+lineage-scoped latest/invalidity, invalid-enum redaction, canonical nested path
+confinement, and one truthful receipt-path claim.
 
-Next smallest truthful gap: synchronize the committed card, add failing tests for
-malformed/collision/latest/drift/exclusive-create behavior, then apply the
-smallest fail-closed correction. This is not an approval or export slice.
+Next smallest truthful gap: add failing tests for the routed
+ATLAS/SENTINEL/MERIDIAN findings, then complete remediation cycle one.
+Request a card scope revision before changing the isolation owner. This is not an
+approval or export slice.
 
 ### Lens game observer
 
@@ -69,16 +77,16 @@ Proof target: local, read-only, foreground-bound semantic game observations
 compose with the Lens situation model through strict versioned contracts and do
 not acquire input or execution authority.
 
-Current state: the exact patch is preserved and isolated in ARGUS's worktree.
-ARGUS confirmed portable `WinDLL` loading. ARGUS and VERA found unchanged v1
-observation/heartbeat contracts, incomplete target/process/model/scene/
-classification/teaching lineage validation, and an arbitrary absolute model-path
-override. No watcher or live runtime was used.
+Current state: clean worker commit `2e454ba5` is isolated. Full pytest
+`VAL-20260714-003` is `INTERRUPTED_KNOWN_REMEDIATION`; cycle one is active and
+first in the integration queue. Versioning, model-boundary, and ready-state
+lineage work is present, but blocked v2 observations and teaching payloads can
+project insufficiently validated identity/status/lineage fields. No watcher or
+live runtime was used.
 
-Next smallest truthful gap: add explicit versioned producer/consumer migration
-coverage, preserve conservative v1 compatibility, constrain the model boundary,
-strengthen identity/lineage checks, and cover non-Windows behavior. Do not
-activate a watcher or touch the live Lens runtime.
+Next smallest truthful gap: add the crafted blocked-state and teaching-lineage
+regressions from `MSG-20260714-013`/`016`, then reject or strictly project
+malformed payloads. Do not activate a watcher or touch the live Lens runtime.
 
 ### Orb right-click delivery / visual-lock alignment
 
@@ -89,18 +97,17 @@ Proof target: native Orb right-click requests are queued and drained without
 loss or optimistic completion claims, while the visual-lock ring count remains
 aligned with renderer truth and shell/authority invariants remain unchanged.
 
-Current state: the exact combined patch is preserved and assigned to LUMEN.
-LUMEN verified that it is a right-click request durability slice plus an
-8-streamer-ring documentation correction, not a canonical state-to-choreography
-implementation. No live visual validation is claimed.
+Current state: clean worker commit `a1b2c60b` is isolated. Full pytest
+`VAL-20260714-004` is `INTERRUPTED_KNOWN_REMEDIATION`; cycle one is active. It
+adds numeric queue order, TTL, deduplication, readback,
+and 8-ring alignment. ATLAS/HARBOR found replacing native publication, duplicate
+publication from one gesture, and unbounded discovery/drain/marker projection
+despite a 32-request limit. No live visual validation is claimed.
 
-VERA additionally found no cap, TTL, backlog readback, deduplication, or durable
-numeric ordering, plus a ring-count conflict in the host manifest.
-
-Next smallest truthful gap: add direct tests for bounds/order/dedup/staleness,
-align every ring-count truth surface, and obtain compile-only C++ evidence. Do
-not launch the renderer or touch the live Orb. Canonical state-to-choreography
-mapping remains a separate queued front.
+Next smallest truthful gap: add occupied-destination, gesture-cardinality,
+oversized-marker, and bounded-backlog tests from `MSG-20260714-014`/`017` plus
+the HARBOR review; remediate cycle one and obtain compile-only C++ evidence. Do
+not launch or touch the live Orb.
 
 ## Contracts In Play
 
@@ -150,9 +157,17 @@ mapping remains a separate queued front.
 - Local full-gate environments must include the `bridge` extra. CI installs
   `core`, `web`, `dev`, and `bridge`; the older bootstrap command omits `bridge`
   and leaves `jsonschema` unavailable for Grounded Presence test collection.
+- HARBOR proved the local Typer metadata existed while all 17 module files were
+  missing. ATLAS reinstalled only locked `typer==0.21.2`; importability is
+  repaired. The later Ruff/format/mypy observation lacks a reproducible receipt
+  and is not reusable gate evidence. Exact-head pytest remains pending.
+- `src/francis/cli.py` also has a concurrent uncommitted optional-import candidate
+  that ATLAS/HARBOR did not write. Preserve and exclude it; it needs ownership,
+  tests for Typer-present/absent paths, and a bounded portability card.
 - Runtime isolation: a worktree is not a data/process sandbox. Every active card
   uses its unique lease in `RUNTIME_LEASES.md`; all three leases currently deny
-  persistent services and real Orb access.
+  persistent services and real Orb access. Full pytest writes only to each
+  worktree's unique `data/test_runs/pytest` retention root.
 - Message/readback bounds: `MESSAGE_LOG.md` is an index. Read the active front
   shard, `cross-front.md`, and `verification.md`; shards roll at 128 KiB or 250
   messages.
@@ -183,8 +198,9 @@ mapping remains a separate queued front.
   aggregate Control Room state from implementation worktrees.
 - VERA is independent and read-only by default. Its current preflight is stored
   at `control_room/reviews/VERA/CR-20260714-preflight.md`.
-- CLAUDE is external and `UNVERIFIED`; do not simulate it. MERIDIAN, SENTINEL,
-  HARBOR, ARCHIVIST, and ECHO are durable but currently unstaffed.
+- CLAUDE is external and `UNVERIFIED`; do not simulate it. SENTINEL, HARBOR,
+  MERIDIAN, and ARCHIVIST completed/released concrete review sessions in CR-003.
+  ECHO remains unstaffed until a concrete question is routed.
 - No more than FORGE, ARGUS, and LUMEN may hold mutating fronts concurrently.
 
 ## Promotion Readback

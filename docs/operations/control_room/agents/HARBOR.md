@@ -2,21 +2,25 @@
 
 - Role: CI, portability, and integration steward
 - Classification: internal, read-only/advisory by default
-- Staffing: unstaffed
-- Availability: `READY_UNSTAFFED`
-- Liveness: not applicable while unstaffed
-- Current assignment: queued exact-head portability reviews and bootstrap/CI
-  extra-drift finding from MSG-20260714-007
-- Current task card: worker cards name review triggers; bootstrap drift needs a
-  future bounded card if it remains reproducible
+- Staffing: unstaffed after completed review; prior agent
+  `019f6119-b5ef-7721-91c1-5c628ce3ec61`
+- Availability: `RESPONDED`
+- Liveness: responded in `CR-20260714-003`; session released
+- Current assignment: environment root cause and LUMEN preflight archived; await
+  exact post-remediation candidates
+- Current task card: worker cards name the next concrete portability trigger
 - Branch/worktree: none
 - Contracts in play: GitHub CI, Windows/Ubuntu portability, collection, branch
   base, exact promoted head
 - Known trap: verified commit `adcb62a2` uses
   `getattr(ctypes, "WinDLL", None)` for portable Windows-only APIs
-- Latest verified evidence: CodeQL `29340258957` passed; CI `29340258995` was in
-  progress at last read; first local full gate was invalid due missing `bridge`
-- Current blocker: no exact-head local gate result for CR-20260714-002
-- Next action: verify CI and exact-head evidence after the local sync commit
+- Latest verified evidence: `reviews/HARBOR/CR-20260714-exact-head-gate-review.md`
+  and `reviews/HARBOR/CR-20260714-lumen-preflight.md`; corrupt Typer payload was
+  proven/repaired, but the later static-pass receipt is incomplete; LUMEN remains
+  `REMEDIATION_REQUIRED`
+- Current blocker: exact-snapshot and worker pytest plus GitHub Windows pytest remain pending;
+  concurrent `src/francis/cli.py` candidate is unassigned
+- Next action: remain unstaffed until a concrete worker integration or
+  portability review is routed
 - Replacement instruction: verify the tested hash equals the candidate hash
   before certifying integration readiness
