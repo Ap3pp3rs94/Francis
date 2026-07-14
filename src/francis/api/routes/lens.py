@@ -90,6 +90,16 @@ from francis.lens import (
     lens_perception_input_authority_grant_receipts,
     lens_perception_input_authority_request_readback,
     lens_perception_runtime_readback,
+    LENS_DESKTOP_ORGANIZATION_SCOPE,
+    actuate_desktop_organization_orb_sequence_item,
+    capture_desktop_icon_position_evidence,
+    create_desktop_organization_orb_sequence,
+    create_desktop_organization_reversal_evidence,
+    execute_desktop_organization_plan,
+    lens_desktop_icon_position_evidence,
+    lens_desktop_icon_semantic_targets,
+    propose_desktop_organization_plan,
+    run_desktop_organization_orb_sequence,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_activation_execution_receipts,
     lens_preflight,
@@ -132,6 +142,7 @@ router = APIRouter()
 
 _LENS_MCP_READBACK_SCOPE = "lens.mcp.readback"
 _LENS_MCP_PERCEIVE_SCOPE = "lens.mcp.perceive"
+_LENS_DESKTOP_ORGANIZATION_SCOPE = LENS_DESKTOP_ORGANIZATION_SCOPE
 
 
 def _lens_permission_denied(decision: ApiPermissionDecision, *, kind: str) -> dict[str, Any]:
@@ -465,6 +476,53 @@ class LensPerceptionInputAuthorityGrantIn(BaseModel):
     lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
+class LensDesktopOrganizationPlanIn(BaseModel):
+    actor: str | None = None
+    objective: str = "organize desktop icons"
+    targets: list[dict[str, Any]] = Field(default_factory=list)
+    workspace: dict[str, Any] = Field(default_factory=dict)
+    max_steps: int = Field(default=40, ge=1, le=80)
+
+
+class LensDesktopOrganizationExecuteIn(BaseModel):
+    actor: str | None = None
+    plan: dict[str, Any] = Field(default_factory=dict)
+    approval: dict[str, Any] = Field(default_factory=dict)
+    reversal_evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class LensDesktopOrganizationOrbSequenceIn(BaseModel):
+    actor: str | None = None
+    plan: dict[str, Any] = Field(default_factory=dict)
+    approval: dict[str, Any] = Field(default_factory=dict)
+    reversal_evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class LensDesktopOrganizationOrbSequenceRunIn(BaseModel):
+    actor: str | None = None
+    orb_sequence: dict[str, Any] = Field(default_factory=dict)
+
+
+class LensDesktopOrganizationOrbItemActuationIn(BaseModel):
+    actor: str | None = None
+    orb_sequence: dict[str, Any] = Field(default_factory=dict)
+    sequence_item_id: str = ""
+    order: int | None = None
+    post_position_readback: dict[str, Any] = Field(default_factory=dict)
+
+
+class LensDesktopIconPositionCaptureIn(BaseModel):
+    actor: str | None = None
+    limit: int = Field(default=80, ge=1, le=80)
+    write_evidence: bool = True
+
+
+class LensDesktopOrganizationReversalEvidenceIn(BaseModel):
+    actor: str | None = None
+    plan: dict[str, Any] = Field(default_factory=dict)
+    position_readback: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -482,6 +540,193 @@ def orb_runtime_identity(
 @router.get("/orb/body-perspective")
 def orb_body_perspective() -> dict[str, Any]:
     return lens_orb_body_perspective_contract()
+
+
+@router.get("/orb/desktop-organization/semantic-targets")
+def orb_desktop_organization_semantic_targets(
+    request: Request,
+    limit: int = Query(80, ge=1, le=80),
+    actor: str = "",
+) -> dict[str, Any]:
+    resolved_actor = actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=resolved_actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/semantic-targets",
+        method="GET",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.semantic_targets")
+    return lens_desktop_icon_semantic_targets(limit=limit)
+
+
+@router.get("/orb/desktop-organization/position-evidence")
+def orb_desktop_organization_position_evidence(
+    request: Request,
+    limit: int = Query(80, ge=1, le=80),
+    actor: str = "",
+) -> dict[str, Any]:
+    resolved_actor = actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=resolved_actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/position-evidence",
+        method="GET",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.position_evidence")
+    return lens_desktop_icon_position_evidence(limit=limit)
+
+
+@router.post("/orb/desktop-organization/position-evidence/capture")
+def orb_desktop_organization_position_evidence_capture(
+    payload: LensDesktopIconPositionCaptureIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/position-evidence/capture",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.position_capture")
+    return capture_desktop_icon_position_evidence(
+        limit=payload.limit,
+        write_evidence=payload.write_evidence,
+    )
+
+
+@router.post("/orb/desktop-organization/reversal-evidence")
+def orb_desktop_organization_reversal_evidence(
+    payload: LensDesktopOrganizationReversalEvidenceIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/reversal-evidence",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.reversal_evidence")
+    return create_desktop_organization_reversal_evidence(
+        actor=actor,
+        plan=payload.plan,
+        position_readback=payload.position_readback,
+    )
+
+
+@router.post("/orb/desktop-organization/plan")
+def orb_desktop_organization_plan(
+    payload: LensDesktopOrganizationPlanIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/plan",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.plan")
+    return propose_desktop_organization_plan(
+        actor=actor,
+        objective=payload.objective,
+        targets=payload.targets,
+        workspace=payload.workspace,
+        max_steps=payload.max_steps,
+    )
+
+
+@router.post("/orb/desktop-organization/execute")
+def orb_desktop_organization_execute(
+    payload: LensDesktopOrganizationExecuteIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/execute",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.execution_preflight")
+    return execute_desktop_organization_plan(
+        actor=actor,
+        plan=payload.plan,
+        approval=payload.approval,
+        reversal_evidence=payload.reversal_evidence,
+    )
+
+
+@router.post("/orb/desktop-organization/orb-sequence")
+def orb_desktop_organization_orb_sequence(
+    payload: LensDesktopOrganizationOrbSequenceIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/orb-sequence",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.orb_sequence")
+    return create_desktop_organization_orb_sequence(
+        actor=actor,
+        plan=payload.plan,
+        approval=payload.approval,
+        reversal_evidence=payload.reversal_evidence,
+    )
+
+
+@router.post("/orb/desktop-organization/orb-sequence/run")
+def orb_desktop_organization_orb_sequence_run(
+    payload: LensDesktopOrganizationOrbSequenceRunIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/orb-sequence/run",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.orb_sequence.run")
+    return run_desktop_organization_orb_sequence(
+        actor=actor,
+        orb_sequence=payload.orb_sequence,
+    )
+
+
+@router.post("/orb/desktop-organization/orb-sequence/actuate-item")
+def orb_desktop_organization_orb_sequence_actuate_item(
+    payload: LensDesktopOrganizationOrbItemActuationIn,
+    request: Request,
+) -> dict[str, Any]:
+    actor = payload.actor or request.headers.get("x-francis-actor", "")
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_DESKTOP_ORGANIZATION_SCOPE],
+        route="/lens/orb/desktop-organization/orb-sequence/actuate-item",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="lens.orb.desktop_organization.orb_sequence.item_actuation")
+    return actuate_desktop_organization_orb_sequence_item(
+        actor=actor,
+        orb_sequence=payload.orb_sequence,
+        sequence_item_id=payload.sequence_item_id,
+        order=payload.order,
+        post_position_readback=payload.post_position_readback,
+    )
 
 
 @router.get("/perception")

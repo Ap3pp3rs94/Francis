@@ -5,6 +5,7 @@ import json
 import os
 import time
 import uuid
+import ctypes
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ ORB_DESKTOP_BRIDGE_STAGE = "Phase 2 / Lens Orb embodied desktop operation"
 ORB_DESKTOP_BRIDGE_ENV_GATE = "FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=1"
 ORB_DESKTOP_BRIDGE_BACKEND_ENV = "FRANCIS_ORB_DESKTOP_BRIDGE_BACKEND"
 ORB_DESKTOP_BRIDGE_DEFAULT_BACKEND = "win32_post_message"
+ORB_DESKTOP_BRIDGE_USER_MOUSE_BACKEND = "win32_user_mouse_drag"
 ORB_DESKTOP_BRIDGE_SOURCE_ID = "orb_desktop_bridge"
 _MAX_COORD = 10000
 _OVERLAY_TITLES = {"Francis Lens Overlay"}
@@ -30,6 +32,37 @@ _BLOCKED_WINDOW_CLASSES = {
 }
 _OBSERVER_POLL_SECONDS = 0.35
 _OBSERVER_POLL_INTERVAL_SECONDS = 0.025
+_INPUT_MOUSE = 0
+_MOUSEEVENTF_MOVE = 0x0001
+_MOUSEEVENTF_LEFTDOWN = 0x0002
+_MOUSEEVENTF_LEFTUP = 0x0004
+_MOUSEEVENTF_ABSOLUTE = 0x8000
+_MOUSEEVENTF_VIRTUALDESK = 0x4000
+_SM_XVIRTUALSCREEN = 76
+_SM_YVIRTUALSCREEN = 77
+_SM_CXVIRTUALSCREEN = 78
+_SM_CYVIRTUALSCREEN = 79
+_ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+
+class _MouseInput(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", _ULONG_PTR),
+    ]
+
+
+class _InputUnion(ctypes.Union):
+    _fields_ = [("mi", _MouseInput)]
+
+
+class _Input(ctypes.Structure):
+    _anonymous_ = ("union",)
+    _fields_ = [("type", ctypes.c_ulong), ("union", _InputUnion)]
 
 
 def _utc_now() -> str:
@@ -90,7 +123,7 @@ def _public_action(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             public["y"] = _bounded_coord(payload.get("y"), "y")
         return public
     if kind == "mouse.drag":
-        return {
+        drag_public: dict[str, Any] = {
             "kind": kind,
             "button": _clean_text(payload.get("button"), "left").lower(),
             "x": _bounded_coord(payload.get("x"), "x"),
@@ -98,6 +131,11 @@ def _public_action(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             "target_x": _bounded_coord(payload.get("target_x"), "target_x"),
             "target_y": _bounded_coord(payload.get("target_y"), "target_y"),
         }
+        if payload.get("desktop_shell_target_required") is True:
+            drag_public["desktop_shell_target_required"] = True
+            drag_public["semantic_target_id"] = _clean_text(payload.get("semantic_target_id"))[:120]
+            drag_public["desktop_position_index"] = _safe_int(payload.get("desktop_position_index"), -1)
+        return drag_public
     if kind == "keyboard.type":
         text = str(payload.get("text", ""))
         public = {"kind": kind, "text_length": len(text), "text_sha256": _hash_text(text)}
@@ -208,7 +246,7 @@ def perform_orb_desktop_action(
             }
         )
 
-    if backend != ORB_DESKTOP_BRIDGE_DEFAULT_BACKEND:
+    if backend not in {ORB_DESKTOP_BRIDGE_DEFAULT_BACKEND, ORB_DESKTOP_BRIDGE_USER_MOUSE_BACKEND}:
         return _finish_attempt(
             {
                 **base,
@@ -218,6 +256,18 @@ def perform_orb_desktop_action(
                 "desktop_effect_performed": False,
                 "desktop_effect_confirmed": False,
                 "error": f"unsupported Orb desktop bridge backend: {backend}",
+            }
+        )
+    if backend == ORB_DESKTOP_BRIDGE_USER_MOUSE_BACKEND and safe_kind != "mouse.drag":
+        return _finish_attempt(
+            {
+                **base,
+                "ok": False,
+                "status": "blocked_unsupported_backend_action",
+                "desktop_action_sent": False,
+                "desktop_effect_performed": False,
+                "desktop_effect_confirmed": False,
+                "error": f"{ORB_DESKTOP_BRIDGE_USER_MOUSE_BACKEND} only supports mouse.drag",
             }
         )
 
@@ -235,7 +285,11 @@ def perform_orb_desktop_action(
         )
 
     try:
-        result = _perform_win32_post_message(safe_kind, payload)
+        result = (
+            _perform_win32_user_mouse_drag(safe_kind, payload)
+            if backend == ORB_DESKTOP_BRIDGE_USER_MOUSE_BACKEND
+            else _perform_win32_post_message(safe_kind, payload)
+        )
     except Exception as exc:
         result = {
             "ok": False,
@@ -275,9 +329,19 @@ def _finish_attempt(payload: dict[str, Any]) -> dict[str, Any]:
         "target_observation_after": (
             payload.get("target_observation_after") if isinstance(payload.get("target_observation_after"), dict) else {}
         ),
-        "uses_user_os_cursor": False,
-        "user_mouse_taken": False,
-        "physical_input_performed": False,
+        "uses_user_os_cursor": bool(payload.get("uses_user_os_cursor")),
+        "user_mouse_taken": bool(payload.get("user_mouse_taken")),
+        "physical_input_performed": bool(payload.get("physical_input_performed")),
+        "user_mouse_input_method": _clean_text(payload.get("user_mouse_input_method")),
+        "desktop_shell_target_required": bool(payload.get("desktop_shell_target_required")),
+        "desktop_shell_exposure": (
+            payload.get("desktop_shell_exposure") if isinstance(payload.get("desktop_shell_exposure"), dict) else {}
+        ),
+        "desktop_shell_target_check": (
+            payload.get("desktop_shell_target_check")
+            if isinstance(payload.get("desktop_shell_target_check"), dict)
+            else {}
+        ),
         "raw_input": False,
         "message_delivery": _clean_text(payload.get("message_delivery")),
         "error": _clean_text(payload.get("error")),
@@ -285,9 +349,11 @@ def _finish_attempt(payload: dict[str, Any]) -> dict[str, Any]:
             "mode": "orb_pointer_desktop_bridge",
             "env_gate_required": True,
             "env_gate": ORB_DESKTOP_BRIDGE_ENV_GATE,
-            "uses_user_os_cursor": False,
-            "user_mouse_taken": False,
-            "physical_input_performed": False,
+            "uses_user_os_cursor": bool(payload.get("uses_user_os_cursor")),
+            "user_mouse_taken": bool(payload.get("user_mouse_taken")),
+            "physical_input_performed": bool(payload.get("physical_input_performed")),
+            "user_mouse_input_method": _clean_text(payload.get("user_mouse_input_method")),
+            "desktop_shell_target_required": bool(payload.get("desktop_shell_target_required")),
             "desktop_effect_confirmed": bool(payload.get("desktop_effect_confirmed")),
             "raw_input": False,
             "receipt_written": True,
@@ -317,6 +383,10 @@ def _finish_attempt(payload: dict[str, Any]) -> dict[str, Any]:
             "target_observer_polls": result["target_observer_polls"],
             "target_observation_before": result["target_observation_before"],
             "target_observation_after": result["target_observation_after"],
+            "user_mouse_input_method": result["user_mouse_input_method"],
+            "desktop_shell_target_required": result["desktop_shell_target_required"],
+            "desktop_shell_exposure": result["desktop_shell_exposure"],
+            "desktop_shell_target_check": result["desktop_shell_target_check"],
             "message_delivery": result["message_delivery"],
             "error": result["error"],
         },
@@ -369,6 +439,85 @@ def _perform_win32_post_message(kind: str, payload: dict[str, Any]) -> dict[str,
     }
 
 
+def _perform_win32_user_mouse_drag(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+    desktop_shell_target_required = payload.get("desktop_shell_target_required") is True
+    exposure = _expose_desktop_shell_for_drag() if desktop_shell_target_required else {}
+    if exposure.get("ok") is False:
+        return {
+            "ok": False,
+            "status": "blocked_desktop_shell_exposure_failed",
+            "desktop_action_sent": False,
+            "desktop_effect_performed": False,
+            "desktop_effect_confirmed": False,
+            "message_delivery": "not_sent",
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+            "desktop_shell_target_required": desktop_shell_target_required,
+            "desktop_shell_exposure": exposure,
+            "error": _clean_text(exposure.get("error"), "desktop shell exposure failed"),
+        }
+    target = _target_for_payload(kind, payload)
+    if target is None:
+        return {
+            "ok": False,
+            "status": "blocked_no_target_window",
+            "desktop_action_sent": False,
+            "desktop_effect_performed": False,
+            "desktop_effect_confirmed": False,
+            "message_delivery": "not_sent",
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+            "desktop_shell_target_required": desktop_shell_target_required,
+            "desktop_shell_exposure": exposure,
+            "error": "no non-Francis desktop window resolved at Orb coordinate",
+        }
+
+    observation_before = _observe_target_state(target)
+    target_check = _desktop_shell_drag_target_check(payload) if desktop_shell_target_required else {}
+    if target_check.get("ok") is False:
+        return {
+            "ok": False,
+            "status": "blocked_desktop_shell_target_mismatch",
+            "desktop_action_sent": False,
+            "desktop_effect_performed": False,
+            "desktop_effect_confirmed": False,
+            "message_delivery": "not_sent",
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+            "desktop_shell_target_required": desktop_shell_target_required,
+            "desktop_shell_exposure": exposure,
+            "desktop_shell_target_check": target_check,
+            "target": target.to_dict(),
+            "error": _clean_text(target_check.get("error"), "desktop shell target mismatch"),
+        }
+    drag_result = _drag_user_mouse(payload) or {}
+    confirmation = _confirm_target_effect(target, observation_before)
+    return {
+        "ok": True,
+        "status": "desktop_action_confirmed" if confirmation["desktop_effect_confirmed"] else "desktop_action_sent",
+        "desktop_action_sent": True,
+        "desktop_effect_performed": True,
+        "desktop_effect_confirmed": confirmation["desktop_effect_confirmed"],
+        "uses_user_os_cursor": True,
+        "user_mouse_taken": True,
+        "physical_input_performed": True,
+        "user_mouse_input_method": _clean_text(drag_result.get("input_method"), "sendinput_absolute_drag"),
+        "desktop_shell_target_required": desktop_shell_target_required,
+        "desktop_shell_exposure": exposure,
+        "desktop_shell_target_check": target_check,
+        "target": target.to_dict(),
+        "target_observer_status": confirmation["target_observer_status"],
+        "target_state_changed": confirmation["target_state_changed"],
+        "target_observer_polls": confirmation["target_observer_polls"],
+        "target_observation_before": confirmation["target_observation_before"],
+        "target_observation_after": confirmation["target_observation_after"],
+        "message_delivery": "sent_via_win32_user_mouse_drag",
+    }
+
+
 def _target_for_payload(kind: str, payload: dict[str, Any]) -> _WindowTarget | None:
     if kind in {"mouse.click", "mouse.drag"}:
         x = _bounded_coord(payload.get("x"), "x")
@@ -376,11 +525,110 @@ def _target_for_payload(kind: str, payload: dict[str, Any]) -> _WindowTarget | N
     else:
         x = _bounded_coord(payload.get("x"), "x")
         y = _bounded_coord(payload.get("y"), "y")
+    if payload.get("desktop_shell_target_required") is True:
+        return _resolve_desktop_shell_target(x, y)
     return _resolve_target_window(
         x,
         y,
         expected_target_title=_clean_text(payload.get("expected_target_title")),
     )
+
+
+def _resolve_desktop_shell_target(x: int, y: int) -> _WindowTarget | None:
+    try:
+        import win32gui  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise InputActuatorError("win32gui is required for desktop shell targeting") from exc
+
+    hwnd = _desktop_listview_hwnd(win32gui)
+    if not hwnd:
+        return None
+    rect = tuple(int(item) for item in win32gui.GetWindowRect(hwnd))
+    client_x, client_y = win32gui.ScreenToClient(hwnd, (x, y))
+    return _WindowTarget(
+        hwnd=hwnd,
+        title="Windows Desktop",
+        class_name=_clean_text(win32gui.GetClassName(hwnd), "SysListView32"),
+        rect=rect,  # type: ignore[arg-type]
+        client_x=int(client_x),
+        client_y=int(client_y),
+    )
+
+
+def _desktop_listview_hwnd(win32gui: Any) -> int:
+    def listview_from_shell(parent: int) -> int:
+        shell = int(win32gui.FindWindowEx(parent, 0, "SHELLDLL_DefView", None))
+        return int(win32gui.FindWindowEx(shell, 0, "SysListView32", None)) if shell else 0
+
+    progman = int(win32gui.FindWindow("Progman", None))
+    listview = listview_from_shell(progman) if progman else 0
+    if listview:
+        return listview
+
+    found = 0
+
+    def collect(hwnd: int, _extra: object) -> None:
+        nonlocal found
+        if found:
+            return
+        if _clean_text(win32gui.GetClassName(hwnd))[:120] == "WorkerW":
+            found = listview_from_shell(hwnd)
+
+    win32gui.EnumWindows(collect, None)
+    return found
+
+
+def _desktop_shell_drag_target_check(payload: dict[str, Any]) -> dict[str, Any]:
+    expected_index = _safe_int(payload.get("desktop_position_index"), -1)
+    x = _bounded_coord(payload.get("x"), "x")
+    y = _bounded_coord(payload.get("y"), "y")
+    semantic_target_id = _clean_text(payload.get("semantic_target_id"))[:120]
+    if expected_index < 0:
+        return {
+            "ok": False,
+            "error": "desktop_position_index_required_for_shell_drag",
+            "semantic_target_id": semantic_target_id,
+            "expected_index": expected_index,
+            "point": {"x": x, "y": y},
+        }
+    try:
+        items = _desktop_shell_listview_items(limit=max(80, expected_index + 1))
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": _clean_text(exc, "desktop_shell_target_check_failed"),
+            "semantic_target_id": semantic_target_id,
+            "expected_index": expected_index,
+            "point": {"x": x, "y": y},
+        }
+    matched = next((item for item in items if _safe_int(item.get("index"), -1) == expected_index), {})
+    rect = matched.get("current_rect") if isinstance(matched.get("current_rect"), dict) else {}
+    contains = _rect_contains_point(rect, x, y)
+    return {
+        "ok": bool(contains),
+        "semantic_target_id": semantic_target_id,
+        "expected_index": expected_index,
+        "point": {"x": x, "y": y},
+        "matched_label_present": bool(_clean_text(matched.get("label"))),
+        "matched_rect": rect if isinstance(rect, dict) else {},
+        "error": "" if contains else "desktop_shell_start_point_not_on_approved_item",
+    }
+
+
+def _desktop_shell_listview_items(*, limit: int) -> list[dict[str, Any]]:
+    from francis.lens.desktop_icon_positions import _win32_desktop_listview_items
+
+    return _win32_desktop_listview_items(limit=limit)
+
+
+def _rect_contains_point(rect: Any, x: int, y: int) -> bool:
+    if not isinstance(rect, dict):
+        return False
+    left = _safe_int(rect.get("left"), -1)
+    top = _safe_int(rect.get("top"), -1)
+    width = _safe_int(rect.get("width"), 0)
+    height = _safe_int(rect.get("height"), 0)
+    return left <= x < left + width and top <= y < top + height
 
 
 def _resolve_target_window(x: int, y: int, *, expected_target_title: str = "") -> _WindowTarget | None:
@@ -591,6 +839,107 @@ def _post_mouse_drag(target: _WindowTarget, payload: dict[str, Any]) -> None:
         win32gui.PostMessage(hwnd, move, held, _make_lparam(x, y))
         time.sleep(0.02)
     win32gui.PostMessage(hwnd, up, 0, _make_lparam(client_end[0], client_end[1]))
+
+
+def _expose_desktop_shell_for_drag() -> dict[str, Any]:
+    try:
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        user32.keybd_event(0x5B, 0, 0, 0)
+        user32.keybd_event(0x4D, 0, 0, 0)
+        user32.keybd_event(0x4D, 0, 0x0002, 0)
+        user32.keybd_event(0x5B, 0, 0x0002, 0)
+        time.sleep(0.35)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "performed": False,
+            "method": "win_m_key_chord",
+            "error": _clean_text(exc, "desktop_shell_exposure_failed"),
+        }
+    return {
+        "ok": True,
+        "performed": True,
+        "method": "win_m_key_chord",
+        "restores_windows": False,
+    }
+
+
+def _drag_user_mouse(payload: dict[str, Any]) -> dict[str, Any]:
+    start_x = _bounded_coord(payload.get("x"), "x")
+    start_y = _bounded_coord(payload.get("y"), "y")
+    end_x = _bounded_coord(payload.get("target_x"), "target_x")
+    end_y = _bounded_coord(payload.get("target_y"), "target_y")
+    button = _clean_text(payload.get("button"), "left").lower()
+    if button != "left":
+        raise InputActuatorError("win32_user_mouse_drag supports left-button desktop drags only")
+
+    _send_mouse_absolute_move(start_x, start_y)
+    time.sleep(0.16)
+    _send_mouse_left_down()
+    try:
+        time.sleep(0.42)
+        for offset in (4, 8, 12):
+            x = round(start_x + ((end_x - start_x) * offset / 24))
+            y = round(start_y + ((end_y - start_y) * offset / 24))
+            _send_mouse_absolute_move(x, y)
+            time.sleep(0.045)
+        for index in range(13, 25):
+            ratio = index / 24
+            x = round(start_x + ((end_x - start_x) * ratio))
+            y = round(start_y + ((end_y - start_y) * ratio))
+            _send_mouse_absolute_move(x, y)
+            time.sleep(0.03)
+        time.sleep(0.18)
+    finally:
+        _send_mouse_left_up()
+    time.sleep(0.25)
+    return {
+        "input_method": "sendinput_absolute_drag",
+        "selected_before_drag": False,
+        "button": "left",
+        "move_step_count": 15,
+    }
+
+
+def _send_mouse_absolute_move(x: int, y: int) -> None:
+    absolute_x, absolute_y = _absolute_mouse_coordinates(x, y)
+    _send_mouse_input(_MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK, absolute_x, absolute_y)
+
+
+def _send_mouse_left_down() -> None:
+    _send_mouse_input(_MOUSEEVENTF_LEFTDOWN, 0, 0)
+
+
+def _send_mouse_left_up() -> None:
+    _send_mouse_input(_MOUSEEVENTF_LEFTUP, 0, 0)
+
+
+def _send_mouse_input(flags: int, dx: int, dy: int) -> None:
+    event = _Input(
+        type=_INPUT_MOUSE,
+        mi=_MouseInput(
+            dx=dx,
+            dy=dy,
+            mouseData=0,
+            dwFlags=flags,
+            time=0,
+            dwExtraInfo=0,
+        ),
+    )
+    sent = ctypes.windll.user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_Input))  # type: ignore[attr-defined]
+    if sent != 1:
+        raise InputActuatorError(f"SendInput failed with result {sent}")
+
+
+def _absolute_mouse_coordinates(x: int, y: int) -> tuple[int, int]:
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    left = int(user32.GetSystemMetrics(_SM_XVIRTUALSCREEN))
+    top = int(user32.GetSystemMetrics(_SM_YVIRTUALSCREEN))
+    width = max(1, int(user32.GetSystemMetrics(_SM_CXVIRTUALSCREEN)))
+    height = max(1, int(user32.GetSystemMetrics(_SM_CYVIRTUALSCREEN)))
+    absolute_x = round(((x - left) * 65535) / max(1, width - 1))
+    absolute_y = round(((y - top) * 65535) / max(1, height - 1))
+    return max(0, min(65535, absolute_x)), max(0, min(65535, absolute_y))
 
 
 def _post_text(target: _WindowTarget, text: str) -> None:

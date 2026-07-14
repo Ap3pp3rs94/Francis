@@ -36,6 +36,20 @@ class FakeWin32Gui:
             if not self.windows[hwnd].get("child", False):
                 callback(hwnd, extra)
 
+    def FindWindow(self, class_name: str, _title: Any) -> int:
+        for hwnd, window in self.windows.items():
+            if window.get("child", False):
+                continue
+            if str(window.get("class_name", "")) == class_name:
+                return hwnd
+        return 0
+
+    def FindWindowEx(self, parent: int, _after: int, class_name: str, _title: Any) -> int:
+        for hwnd, window in self.windows.items():
+            if int(window.get("parent", 0)) == parent and str(window.get("class_name", "")) == class_name:
+                return hwnd
+        return 0
+
     def ScreenToClient(self, hwnd: int, point: tuple[int, int]) -> tuple[int, int]:
         left, top, _right, _bottom = self.GetWindowRect(hwnd)
         return point[0] - left, point[1] - top
@@ -219,6 +233,191 @@ def test_mouse_click_does_not_claim_confirmation_without_observed_state_change(
     assert result["target_observer_status"] == "observed_no_target_state_change"
     assert result["target_state_changed"] is False
     assert fake.posts
+
+
+def test_user_mouse_drag_backend_records_physical_cursor_use(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _state_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_BACKEND", "win32_user_mouse_drag")
+    fake = _install_fake_win32gui(
+        monkeypatch,
+        {
+            100: {
+                "title": "Safe Desktop Surface",
+                "text": "unchanged",
+                "class_name": "SafeWindow",
+                "rect": (0, 0, 300, 240),
+            },
+        },
+    )
+    drags: list[dict[str, object]] = []
+
+    def fake_drag(payload: dict[str, object]) -> None:
+        drags.append(payload)
+
+    monkeypatch.setattr(orb_desktop_bridge, "_drag_user_mouse", fake_drag)
+
+    result = orb_desktop_bridge.perform_orb_desktop_action(
+        input_kind="mouse.drag",
+        payload={"x": 10, "y": 20, "target_x": 60, "target_y": 80, "button": "left"},
+        actor="test",
+        objective="perform a real click hold drag gesture",
+        session_id="user-mouse-drag",
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "desktop_action_sent"
+    assert result["backend"] == "win32_user_mouse_drag"
+    assert result["desktop_action_sent"] is True
+    assert result["desktop_effect_performed"] is True
+    assert result["desktop_effect_confirmed"] is False
+    assert result["uses_user_os_cursor"] is True
+    assert result["user_mouse_taken"] is True
+    assert result["physical_input_performed"] is True
+    assert result["governance"]["uses_user_os_cursor"] is True
+    assert result["governance"]["physical_input_performed"] is True
+    assert result["message_delivery"] == "sent_via_win32_user_mouse_drag"
+    assert drags == [{"x": 10, "y": 20, "target_x": 60, "target_y": 80, "button": "left"}]
+    assert fake.posts == []
+
+
+def test_user_mouse_drag_backend_targets_desktop_shell_when_required(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_BACKEND", "win32_user_mouse_drag")
+    fake = _install_fake_win32gui(
+        monkeypatch,
+        {
+            100: {"class_name": "Progman", "rect": (0, 0, 900, 700), "text": ""},
+            101: {"child": True, "parent": 100, "class_name": "SHELLDLL_DefView", "rect": (0, 0, 900, 700)},
+            102: {
+                "child": True,
+                "parent": 101,
+                "class_name": "SysListView32",
+                "text": "desktop-shell",
+                "rect": (0, 0, 900, 700),
+            },
+            200: {"title": "Covered Window", "class_name": "SafeWindow", "rect": (0, 0, 900, 700)},
+        },
+    )
+    drags: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        orb_desktop_bridge,
+        "_expose_desktop_shell_for_drag",
+        lambda: {"ok": True, "performed": True, "method": "test"},
+    )
+    monkeypatch.setattr(
+        orb_desktop_bridge,
+        "_desktop_shell_listview_items",
+        lambda *, limit: [
+            {
+                "index": 4,
+                "label": "Approved Icon",
+                "current_rect": {"left": 26, "top": 104, "width": 96, "height": 96},
+            }
+        ],
+    )
+
+    def fake_drag(payload: dict[str, object]) -> None:
+        drags.append(payload)
+
+    monkeypatch.setattr(orb_desktop_bridge, "_drag_user_mouse", fake_drag)
+
+    result = orb_desktop_bridge.perform_orb_desktop_action(
+        input_kind="mouse.drag",
+        payload={
+            "x": 74,
+            "y": 152,
+            "target_x": 266,
+            "target_y": 152,
+            "button": "left",
+            "desktop_shell_target_required": True,
+            "semantic_target_id": "desktop-icon-a",
+            "desktop_position_index": 4,
+        },
+        actor="test",
+        objective="perform a desktop shell click hold drag",
+        session_id="desktop-shell-drag",
+    )
+
+    assert result["ok"] is True
+    assert result["backend"] == "win32_user_mouse_drag"
+    assert result["desktop_shell_target_required"] is True
+    assert result["desktop_shell_exposure"] == {"ok": True, "performed": True, "method": "test"}
+    assert result["target"]["class_name"] == "SysListView32"
+    assert result["target"]["title"] == "Windows Desktop"
+    assert result["uses_user_os_cursor"] is True
+    assert result["physical_input_performed"] is True
+    assert drags
+    assert fake.posts == []
+
+
+def test_user_mouse_drag_backend_denies_when_shell_point_is_not_approved_item(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_BACKEND", "win32_user_mouse_drag")
+    _install_fake_win32gui(
+        monkeypatch,
+        {
+            100: {"class_name": "Progman", "rect": (0, 0, 900, 700), "text": ""},
+            101: {"child": True, "parent": 100, "class_name": "SHELLDLL_DefView", "rect": (0, 0, 900, 700)},
+            102: {
+                "child": True,
+                "parent": 101,
+                "class_name": "SysListView32",
+                "text": "desktop-shell",
+                "rect": (0, 0, 900, 700),
+            },
+        },
+    )
+    monkeypatch.setattr(
+        orb_desktop_bridge,
+        "_expose_desktop_shell_for_drag",
+        lambda: {"ok": True, "performed": True, "method": "test"},
+    )
+    monkeypatch.setattr(
+        orb_desktop_bridge,
+        "_desktop_shell_listview_items",
+        lambda *, limit: [
+            {
+                "index": 4,
+                "label": "Approved Icon",
+                "current_rect": {"left": 300, "top": 300, "width": 96, "height": 96},
+            }
+        ],
+    )
+    drags: list[dict[str, object]] = []
+    monkeypatch.setattr(orb_desktop_bridge, "_drag_user_mouse", lambda payload: drags.append(payload))
+
+    result = orb_desktop_bridge.perform_orb_desktop_action(
+        input_kind="mouse.drag",
+        payload={
+            "x": 74,
+            "y": 136,
+            "target_x": 362,
+            "target_y": 136,
+            "button": "left",
+            "desktop_shell_target_required": True,
+            "semantic_target_id": "desktop-icon-a",
+            "desktop_position_index": 4,
+        },
+        actor="test",
+        objective="deny mismatched shell target before mouse input",
+        session_id="desktop-shell-drag-mismatch",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked_desktop_shell_target_mismatch"
+    assert result["desktop_action_sent"] is False
+    assert result["physical_input_performed"] is False
+    assert result["desktop_shell_target_check"]["ok"] is False
+    assert result["desktop_shell_target_check"]["error"] == "desktop_shell_start_point_not_on_approved_item"
+    assert drags == []
 
 
 def test_target_resolution_excludes_francis_overlay_and_claude_windows(
