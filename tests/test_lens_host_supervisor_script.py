@@ -64,7 +64,11 @@ def _wait_for_supervisor_heartbeat(
     latest: dict[str, object] = {}
     while time.monotonic() < deadline:
         if path.is_file():
-            latest = json.loads(path.read_text(encoding="utf-8-sig"))
+            try:
+                latest = json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                time.sleep(0.1)
+                continue
             heartbeat_count = int(latest.get("heartbeat_count") or 0)
             if (
                 latest.get("status") == "resident_supervising"
