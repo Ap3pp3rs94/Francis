@@ -86,6 +86,60 @@ def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dic
     }
 
 
+def _game_teaching_review() -> dict[str, object]:
+    return {
+        "kind": "francis.apprenticeship.game_teaching_episode_review.status",
+        "version": 1,
+        "status": "operator_accepted",
+        "episode_receipt_id": "game_teaching_episode_0123456789abcdef",
+        "episode_digest": "a" * 64,
+        "session_id": "game_teaching_0123456789abcdef",
+        "target_id": "sand",
+        "intent_label": "reach active gameplay",
+        "declared_scope": "semantic Sand scene transitions only",
+        "success_condition": "active gameplay observed",
+        "event_count": 3,
+        "scene_transition_count": 3,
+        "ready_for_operator_review": True,
+        "replay_ready": True,
+        "review_state": "operator_accepted",
+        "review_decision": "accepted",
+        "review_revision": 1,
+        "latest_review_receipt_id": "game_teaching_review_0123456789abcdef",
+        "correction_count": 0,
+        "operator_review_required": False,
+        "generalization_candidate_ready": True,
+        "generalization_performed": False,
+        "skillization_performed": False,
+        "blockers": [],
+        "summary": "must-not-project",
+        "corrections": [{"note": "must-not-project"}],
+        "governance": {
+            "source_episode_immutable": True,
+            "source_digest_required": True,
+            "semantic_replay_only": True,
+            "operator_review_required": True,
+            "corrections_append_only": True,
+            "replay_executes_input": False,
+            "replay_runs_tools": False,
+            "replay_runs_shell": False,
+            "replay_starts_processes": False,
+            "raw_pixels_persisted": False,
+            "window_titles_persisted": False,
+            "keyboard_content_captured": False,
+            "user_mouse_captured": False,
+            "remote_frame_transfer": False,
+            "memory_write": False,
+            "learning_authority": False,
+            "reward_authority": False,
+            "input_execution_authority": False,
+            "automatic_generalization": False,
+            "automatic_skillization": False,
+            "automatic_capability_promotion": False,
+        },
+    }
+
+
 def test_situation_model_readback_is_missing_without_runtime_write(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
 
@@ -211,6 +265,39 @@ def test_situation_model_projects_only_bounded_game_observation_fields(tmp_path:
     assert "must-not-persist" not in projected
     assert "raw_pixels" not in projected
     assert "frame_bytes" not in projected
+
+
+def test_situation_model_projects_bounded_game_teaching_review_without_operator_notes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-game-review")
+    observation["teaching_review"] = _game_teaching_review()
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-game-review", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    review = readback["present"]["game"]["teaching_review"]
+    projected = json.dumps(review)
+    assert review["status"] == "operator_accepted"
+    assert review["replay_ready"] is True
+    assert review["generalization_candidate_ready"] is True
+    assert review["generalization_performed"] is False
+    assert review["governance"]["replay_executes_input"] is False
+    assert review["governance"]["learning_authority"] is False
+    assert "must-not-project" not in projected
+    assert "summary" not in review
+    assert "corrections" not in review
     assert "access_token" not in projected
 
 

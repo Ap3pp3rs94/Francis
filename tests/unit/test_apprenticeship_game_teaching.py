@@ -132,6 +132,8 @@ def test_game_teaching_records_only_semantic_transitions_and_finalizes_for_revie
     assert second["event_count"] == 2
     assert receipt["ok"] is True
     assert receipt["event_count"] == 2
+    assert receipt["integrity_algorithm"] == "sha256"
+    assert len(receipt["episode_digest"]) == 64
     assert [item["scene_id"] for item in receipt["scene_sequence"]] == ["loading", "active_gameplay"]
     assert receipt["review_state"] == "pending_operator_review"
     assert receipt["ready_for_operator_review"] is True

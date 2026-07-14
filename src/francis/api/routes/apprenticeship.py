@@ -37,6 +37,14 @@ from francis.apprenticeship_game_teaching import (
     start_game_teaching_session,
     stop_game_teaching_session,
 )
+from francis.apprenticeship_game_episode_review import (
+    GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE,
+    game_teaching_episode_replay,
+    game_teaching_episode_review_contract,
+    game_teaching_episode_review_receipts,
+    game_teaching_episode_review_status,
+    record_game_teaching_episode_review,
+)
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 
 router = APIRouter()
@@ -74,6 +82,24 @@ class ApprenticeshipGameTeachingSessionStopIn(BaseModel):
     session_id: str = Field(default="", min_length=1, max_length=80)
     outcome: str = Field(default="needs_review", max_length=80)
     notes: str = Field(default="", max_length=500)
+
+
+class ApprenticeshipGameTeachingEpisodeCorrectionIn(BaseModel):
+    correction_type: str = Field(default="", min_length=1, max_length=80)
+    sequence: int = Field(default=0, ge=0, le=1_000)
+    note: str = Field(default="", min_length=1, max_length=500)
+    replacement: str = Field(default="", max_length=240)
+
+
+class ApprenticeshipGameTeachingEpisodeReviewIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    decision: str = Field(default="needs_correction", max_length=80)
+    summary: str = Field(default="", min_length=1, max_length=1_000)
+    corrections: list[ApprenticeshipGameTeachingEpisodeCorrectionIn] = Field(
+        default_factory=list,
+        max_length=50,
+    )
 
 
 class ApprenticeshipReplayReceiptIn(BaseModel):
@@ -219,6 +245,40 @@ def game_teaching_status() -> dict[str, Any]:
 @router.get("/game-teaching-session/receipts")
 def game_teaching_receipts(limit: int = 20) -> dict[str, Any]:
     return game_teaching_episode_receipts(limit=limit)
+
+
+@router.get("/game-teaching-episode-review/contract")
+def game_teaching_review_contract() -> dict[str, Any]:
+    return game_teaching_episode_review_contract()
+
+
+@router.get("/game-teaching-episode-review/status")
+def game_teaching_review_status(episode_receipt_id: str = "") -> dict[str, Any]:
+    return game_teaching_episode_review_status(episode_receipt_id=episode_receipt_id)
+
+
+@router.get("/game-teaching-episode-review/receipts")
+def game_teaching_review_receipts(
+    limit: int = 20,
+    episode_receipt_id: str = "",
+) -> dict[str, Any]:
+    return game_teaching_episode_review_receipts(
+        limit=limit,
+        episode_receipt_id=episode_receipt_id,
+    )
+
+
+@router.get("/game-teaching-episode/{episode_receipt_id}/replay")
+def game_teaching_replay(
+    episode_receipt_id: str,
+    cursor: int = 0,
+    limit: int = 50,
+) -> dict[str, Any]:
+    return game_teaching_episode_replay(
+        episode_receipt_id=episode_receipt_id,
+        cursor=cursor,
+        limit=limit,
+    )
 
 
 @router.get("/replay-receipts")
@@ -388,6 +448,48 @@ def game_teaching_stop(
             **_as_dict(result.get("governance")),
             "permission_gate": True,
             "required_scope": GAME_TEACHING_SESSION_WRITE_SCOPE,
+            "route": str(request.url.path),
+        },
+    }
+
+
+@router.post("/game-teaching-episode/{episode_receipt_id}/review")
+def game_teaching_review(
+    request: Request,
+    episode_receipt_id: str,
+    payload: ApprenticeshipGameTeachingEpisodeReviewIn,
+) -> dict[str, Any]:
+    route = "/apprenticeship/game-teaching-episode/{episode_receipt_id}/review"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE,
+            next_step="configure_game_teaching_episode_review_write_scope_before_reviewing",
+        )
+
+    result = record_game_teaching_episode_review(
+        actor=payload.actor,
+        reason=payload.reason,
+        episode_receipt_id=episode_receipt_id,
+        decision=payload.decision,
+        summary=payload.summary,
+        corrections=[item.model_dump() for item in payload.corrections],
+    )
+    return {
+        **result,
+        "kind": "francis.apprenticeship.game_teaching_episode_review.record",
+        "receipt_kind": result.get("kind", ""),
+        "route": str(request.url.path),
+        "governance": {
+            **_as_dict(result.get("governance")),
+            "permission_gate": True,
+            "required_scope": GAME_TEACHING_EPISODE_REVIEW_WRITE_SCOPE,
             "route": str(request.url.path),
         },
     }

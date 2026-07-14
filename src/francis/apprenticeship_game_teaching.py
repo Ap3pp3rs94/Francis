@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -38,6 +39,7 @@ _ALLOWED_OUTCOMES = {"completed", "cancelled", "needs_review"}
 _TARGET_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 _SCENE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,47}$")
 _SESSION_ID_PATTERN = re.compile(r"^game_teaching_[a-f0-9]{16}$")
+_EPISODE_RECEIPT_ID_PATTERN = re.compile(r"^game_teaching_episode_[a-f0-9]{16}$")
 
 
 class GameTeachingRecorder(Protocol):
@@ -283,6 +285,8 @@ def stop_game_teaching_session(
         "governance": _governance(),
         "next_smallest_truthful_gap": "operator_review_of_game_teaching_episode",
     }
+    receipt["integrity_algorithm"] = "sha256"
+    receipt["episode_digest"] = game_teaching_episode_digest(receipt)
     _append_jsonl(_episode_receipts_path(), receipt)
     _finish_stopped_state(finalizing, receipt)
     audit_record(
@@ -354,6 +358,71 @@ def game_teaching_episode_receipts(*, limit: int = 20) -> dict[str, Any]:
         "writes_receipts": False,
         "governance": _governance(),
     }
+
+
+def game_teaching_episode_receipt(receipt_id: Any) -> dict[str, Any]:
+    safe_receipt_id = _safe_text(receipt_id)
+    if not _EPISODE_RECEIPT_ID_PATTERN.fullmatch(safe_receipt_id):
+        return {}
+    for receipt in reversed(_read_jsonl(_episode_receipts_path())):
+        if (
+            receipt.get("kind") == GAME_TEACHING_EPISODE_RECEIPT_KIND
+            and receipt.get("version") == GAME_TEACHING_CONTRACT_VERSION
+            and _safe_text(receipt.get("receipt_id")) == safe_receipt_id
+        ):
+            return receipt
+    return {}
+
+
+def latest_game_teaching_episode_receipt() -> dict[str, Any]:
+    for receipt in reversed(_read_jsonl(_episode_receipts_path())):
+        if (
+            receipt.get("kind") == GAME_TEACHING_EPISODE_RECEIPT_KIND
+            and receipt.get("version") == GAME_TEACHING_CONTRACT_VERSION
+            and _EPISODE_RECEIPT_ID_PATTERN.fullmatch(_safe_text(receipt.get("receipt_id")))
+        ):
+            return receipt
+    return {}
+
+
+def game_teaching_episode_digest(receipt: dict[str, Any]) -> str:
+    payload = {
+        field: receipt.get(field)
+        for field in (
+            "kind",
+            "version",
+            "receipt_id",
+            "session_id",
+            "start_receipt_id",
+            "actor",
+            "reason",
+            "operator_outcome",
+            "notes",
+            "target_id",
+            "intent_label",
+            "declared_scope",
+            "success_condition",
+            "started_at",
+            "stopped_at",
+            "duration_seconds",
+            "event_count",
+            "scene_transition_count",
+            "scene_sequence",
+            "model_ids",
+            "authority_receipt_ids",
+            "source_observation_kind",
+            "source_observation_version",
+            "capture_mode",
+        )
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class GameTeachingObservationRecorder:

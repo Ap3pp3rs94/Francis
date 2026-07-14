@@ -17,6 +17,7 @@ LENS_SITUATION_MODEL_KIND = "lens.perception.situation_model"
 LENS_SITUATION_MODEL_VERSION = 1
 LENS_SITUATION_MODEL_ROUTE = "/lens/perception/now"
 _GAME_TEACHING_SESSION_STATUS_KIND = "francis.apprenticeship.game_teaching_session.status"
+_GAME_TEACHING_EPISODE_REVIEW_STATUS_KIND = "francis.apprenticeship.game_teaching_episode_review.status"
 _GAME_TEACHING_CONTRACT_VERSION = 1
 
 _MAX_HEARTBEAT_AGE_SECONDS = 2.5
@@ -370,6 +371,7 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
     classification = _as_dict(game_state.get("classification"))
     model = _as_dict(game_state.get("model"))
     teaching_session = _as_dict(game_state.get("teaching_session"))
+    teaching_review = _as_dict(game_state.get("teaching_review"))
     candidates: list[dict[str, Any]] = []
     raw_candidates = scene.get("candidates")
     if isinstance(raw_candidates, list):
@@ -435,6 +437,14 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
             _game_teaching_session_present(teaching_session)
             if _game_teaching_session_contract_valid(
                 teaching_session,
+                target_id=str(target.get("id") or ""),
+            )
+            else {}
+        ),
+        "teaching_review": (
+            _game_teaching_review_present(teaching_review)
+            if _game_teaching_review_contract_valid(
+                teaching_review,
                 target_id=str(target.get("id") or ""),
             )
             else {}
@@ -509,6 +519,82 @@ def _game_teaching_session_present(teaching: dict[str, Any]) -> dict[str, Any]:
             "input_execution_authority": False,
             "automatic_capability_promotion": False,
             "operator_review_required": True,
+        },
+    }
+
+
+def _game_teaching_review_contract_valid(review: dict[str, Any], *, target_id: str) -> bool:
+    governance = _as_dict(review.get("governance"))
+    review_target_id = str(review.get("target_id") or "")
+    return bool(
+        review.get("kind") == _GAME_TEACHING_EPISODE_REVIEW_STATUS_KIND
+        and review.get("version") == _GAME_TEACHING_CONTRACT_VERSION
+        and (not review_target_id or review_target_id == target_id)
+        and governance.get("source_episode_immutable") is True
+        and governance.get("source_digest_required") is True
+        and governance.get("semantic_replay_only") is True
+        and governance.get("operator_review_required") is True
+        and all(
+            governance.get(field) is False
+            for field in (
+                "replay_executes_input",
+                "replay_runs_tools",
+                "replay_runs_shell",
+                "replay_starts_processes",
+                "raw_pixels_persisted",
+                "window_titles_persisted",
+                "keyboard_content_captured",
+                "user_mouse_captured",
+                "remote_frame_transfer",
+                "memory_write",
+                "learning_authority",
+                "reward_authority",
+                "input_execution_authority",
+                "automatic_generalization",
+                "automatic_skillization",
+                "automatic_capability_promotion",
+            )
+        )
+    )
+
+
+def _game_teaching_review_present(review: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": str(review.get("status") or ""),
+        "episode_receipt_id": str(review.get("episode_receipt_id") or ""),
+        "episode_digest": str(review.get("episode_digest") or ""),
+        "session_id": str(review.get("session_id") or ""),
+        "target_id": str(review.get("target_id") or ""),
+        "intent_label": str(review.get("intent_label") or ""),
+        "declared_scope": str(review.get("declared_scope") or ""),
+        "success_condition": str(review.get("success_condition") or ""),
+        "event_count": _safe_int(review.get("event_count")),
+        "scene_transition_count": _safe_int(review.get("scene_transition_count")),
+        "ready_for_operator_review": review.get("ready_for_operator_review") is True,
+        "replay_ready": review.get("replay_ready") is True,
+        "review_state": str(review.get("review_state") or ""),
+        "review_decision": str(review.get("review_decision") or ""),
+        "review_revision": _safe_int(review.get("review_revision")),
+        "latest_review_receipt_id": str(review.get("latest_review_receipt_id") or ""),
+        "correction_count": _safe_int(review.get("correction_count")),
+        "operator_review_required": review.get("operator_review_required") is True,
+        "generalization_candidate_ready": review.get("generalization_candidate_ready") is True,
+        "generalization_performed": False,
+        "skillization_performed": False,
+        "blockers": _string_items(review.get("blockers")),
+        "governance": {
+            "source_episode_immutable": True,
+            "source_digest_required": True,
+            "semantic_replay_only": True,
+            "operator_review_required": True,
+            "replay_executes_input": False,
+            "memory_write": False,
+            "learning_authority": False,
+            "reward_authority": False,
+            "input_execution_authority": False,
+            "automatic_generalization": False,
+            "automatic_skillization": False,
+            "automatic_capability_promotion": False,
         },
     }
 

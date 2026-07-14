@@ -205,6 +205,14 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
         assert "does not persist raw pixels" in game_teaching["notes"]
         assert "learn a policy" in game_teaching["notes"]
 
+    game_episode_review = entries["/apprenticeship/game-teaching-episode/{episode_receipt_id}/review"]
+    assert game_episode_review["family"] == "apprenticeship_game_episode_review"
+    assert game_episode_review["required_actor"] == "payload.actor"
+    assert game_episode_review["required_scope"] == "apprenticeship.game_teaching_episode_review.write"
+    assert game_episode_review["governance_maturity"] == "permission_gated_semantic_replay_review"
+    assert "source episode digest" in game_episode_review["receipt_behavior"]
+    assert "permission_gate" in game_episode_review["denial_behavior"]
+    assert "does not execute input" in game_episode_review["notes"]
     apprenticeship_replay = entries["/apprenticeship/replay-receipt"]
     assert apprenticeship_replay["family"] == "apprenticeship"
     assert apprenticeship_replay["required_actor"] == "payload.actor"

@@ -167,6 +167,23 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship_game_episode_review",
+        prefixes=("/apprenticeship/game-teaching-episode/{episode_receipt_id}/review",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.game_teaching_episode_review.write",
+        approval_requirement=(
+            "not_required_scope_gate_only; a digest-valid nonempty game-teaching episode and explicit operator "
+            "review decision are required"
+        ),
+        receipt_behavior="append-only game-teaching semantic replay review receipt with source episode digest",
+        denial_behavior="api_permission_denied via permission_gate before operator review receipt write",
+        governance_maturity="permission_gated_semantic_replay_review",
+        notes=(
+            "The route records operator review or corrections against a deterministic semantic replay; it does not "
+            "execute input, mutate the source episode, generalize a policy, write memory, or promote a skill."
+        ),
+    ),
+    AuthorityRule(
         family="apprenticeship",
         prefixes=("/apprenticeship/replay-receipt",),
         required_actor="payload.actor",

@@ -23,6 +23,7 @@ from francis.apprenticeship_game_teaching import (
     GameTeachingRecorder,
     game_teaching_recording_error_status,
 )
+from francis.apprenticeship_game_episode_review import game_teaching_episode_review_status
 from francis.kernel.paths import data_dir
 from francis.lens.atomic_io import atomic_write_json as _atomic_write_json
 from francis.lens.atomic_io import read_json_object as _read_json
@@ -198,7 +199,12 @@ class LensPerceptionWorker:
                 )
             except (OSError, ValueError):
                 teaching_session = game_teaching_recording_error_status()
-            game_observation = {**game_observation, "teaching_session": teaching_session}
+            teaching_review = game_teaching_episode_review_status()
+            game_observation = {
+                **game_observation,
+                "teaching_session": teaching_session,
+                "teaching_review": teaching_review,
+            }
             situation_model = write_lens_situation_model_heartbeat(
                 frame=frame,
                 ring_buffer=ring_buffer,

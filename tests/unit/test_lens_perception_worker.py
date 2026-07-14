@@ -243,6 +243,7 @@ def test_worker_records_explicit_game_teaching_transition_and_exposes_lens_state
     state = worker.capture_once()
 
     teaching = state["situation_model"]["present"]["game"]["teaching_session"]
+    review = state["situation_model"]["present"]["game"]["teaching_review"]
     assert started["status"] == "active"
     assert state["state"] == "running"
     assert teaching["status"] == "active"
@@ -251,6 +252,9 @@ def test_worker_records_explicit_game_teaching_transition_and_exposes_lens_state
     assert teaching["recording_active"] is True
     assert teaching["event_count"] == 1
     assert teaching["latest_scene_id"] == "active_gameplay"
+    assert review["status"] == "awaiting_episode"
+    assert review["replay_ready"] is False
+    assert review["governance"]["learning_authority"] is False
     assert teaching["governance"]["raw_pixels_persisted"] is False
     assert teaching["governance"]["learning_authority"] is False
     assert teaching["governance"]["input_execution_authority"] is False
