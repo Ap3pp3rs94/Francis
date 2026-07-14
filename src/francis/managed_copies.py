@@ -42,6 +42,11 @@ from francis.managed_copy_provisioning import (
     managed_copy_provision_receipts_readback,
     record_managed_copy_provision,
 )
+from francis.managed_copy_safe_delta import (
+    managed_copy_safe_delta_review_plan,
+    managed_copy_safe_delta_review_receipts_readback,
+    record_managed_copy_safe_delta_review,
+)
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -483,6 +488,18 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     copy_structural_isolation_verified = bool(latest_aligned_isolation.get("live_state_aligned"))
     copy_isolation_drift_detected = bool(latest_aligned_isolation.get("live_drift_detected"))
     copy_isolation_receipt_id = _safe_str(latest_aligned_isolation.get("receipt_id")).strip()
+    safe_delta_reviews = managed_copy_safe_delta_review_receipts_readback(limit=20)
+    latest_safe_delta_review = safe_delta_reviews.get("latest_valid_receipt")
+    latest_safe_delta_review = latest_safe_delta_review if isinstance(latest_safe_delta_review, dict) else {}
+    safe_delta_review_recorded = bool(
+        copy_structural_isolation_verified
+        and safe_delta_reviews.get("receipt_set_valid")
+        and latest_safe_delta_review.get("live_source_boundary_aligned")
+        and _safe_str(latest_safe_delta_review.get("copy_id")).strip() == provisioned_copy_id
+    )
+    safe_delta_review_receipt_id = (
+        _safe_str(latest_safe_delta_review.get("receipt_id")).strip() if safe_delta_review_recorded else ""
+    )
     deliverables = [
         _deliverable(
             "stage17_ledger_closure_backstop",
@@ -603,10 +620,16 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_model",
             "Safe delta model",
             ready=False,
-            status="contract_readback_ready",
-            next_gap="stage18_safe_delta_model",
+            status="candidate_review_recorded" if safe_delta_review_recorded else "contract_readback_ready",
+            next_gap=(
+                "stage18_safe_delta_operator_approval" if safe_delta_review_recorded else "stage18_safe_delta_model"
+            ),
             evidence=[
-                "GET /managed-copies/safe-delta-model-contract exposes allowed signal classes without exporting data.",
+                (
+                    f"Hash-only safe-delta review receipt: {safe_delta_review_receipt_id}; operator approval and export remain disabled."
+                    if safe_delta_review_recorded
+                    else "GET /managed-copies/safe-delta-model-contract exposes allowed signal classes without exporting data."
+                ),
             ],
         ),
         _deliverable(
@@ -684,6 +707,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "isolation_verifications": "/managed-copies/isolation-verifications",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "safe_delta_review": "/managed-copies/safe-delta-review",
+            "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -747,6 +771,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "copy_isolation_drift_detected": copy_isolation_drift_detected,
         "copy_isolation_receipt_id": copy_isolation_receipt_id,
         "copy_full_customer_isolation_verified": False,
+        "safe_delta_review_recorded": safe_delta_review_recorded,
+        "safe_delta_review_receipt_id": safe_delta_review_receipt_id,
+        "safe_delta_approved": False,
+        "safe_delta_exported": False,
+        "safe_delta_learning_written": False,
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
         "copy_creation_enabled": governance["copy_creation_enabled"],
@@ -2567,6 +2596,8 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
     """Return the safe-delta model contract without exporting tenant data."""
     governance = _governance()
     status = managed_copies_status_snapshot()
+    reviews = managed_copy_safe_delta_review_receipts_readback(limit=20)
+    review_recorded = bool(status["safe_delta_review_recorded"])
     allowed_signal_classes = [
         _safe_delta_signal_class(
             "capability_metadata",
@@ -2654,9 +2685,13 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
         "kind": MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "contract_readback_ready",
+        "status": "candidate_review_recorded" if review_recorded else "contract_readback_ready",
         "contract_readback_ready": True,
         "safe_delta_model_ready": False,
+        "safe_delta_review_enabled": bool(status["copy_structural_isolation_verified"]),
+        "safe_delta_review_recorded": review_recorded,
+        "safe_delta_review_receipt_id": status["safe_delta_review_receipt_id"],
+        "safe_delta_review_receipt_count": reviews["valid_count"],
         "delta_export_enabled": False,
         "delta_import_enabled": False,
         "learning_write_enabled": False,
@@ -2699,6 +2734,7 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
             **status["routes"],
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "safe_delta_review": "/managed-copies/safe-delta-review",
+            "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
         },
         "blocked_failure_modes": [
             "raw_private_data_pooling",
@@ -2727,11 +2763,17 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
         "tenant_reidentification_allowed": False,
         "unattributed_learning_allowed": False,
         "safe_delta_flow_active": False,
-        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
+        "next_smallest_truthful_gap": (
+            "stage18_safe_delta_operator_approval"
+            if review_recorded
+            else "stage18_safe_delta_candidate_review"
+            if status["copy_structural_isolation_verified"]
+            else status["next_smallest_truthful_gap"]
+        ),
     }
 
 
-def managed_copy_safe_delta_review_blocked_snapshot(
+def _managed_copy_safe_delta_review_blocked_snapshot(
     payload: dict[str, Any],
     *,
     actor: str,
@@ -2827,6 +2869,202 @@ def managed_copy_safe_delta_review_blocked_snapshot(
         "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
+
+
+def managed_copy_safe_delta_review_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Review a hash-only safe-delta candidate without exporting or learning."""
+    status = managed_copies_status_snapshot()
+    if not bool(status["stage17_closed_by_receipt"]):
+        return _managed_copy_safe_delta_review_blocked_snapshot(payload, actor=actor)
+
+    governance = _governance()
+    copy_id = _safe_str(payload.get("copy_id")).strip()
+    provisioning_receipt_id = _safe_str(payload.get("provisioning_receipt_id")).strip()
+    isolation_receipt_id = _safe_str(payload.get("isolation_verification_receipt_id")).strip()
+    provision_receipt = managed_copy_provision_for_copy(
+        copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+    )
+    isolation_receipt = (
+        latest_managed_copy_isolation_verification_for_provision(
+            provisioning_receipt_id,
+            provision_fingerprint=_safe_str(provision_receipt.get("provision_fingerprint")).strip(),
+            copy_id=copy_id,
+        )
+        if provision_receipt
+        else {}
+    )
+    plan = managed_copy_safe_delta_review_plan(
+        payload,
+        actor=actor,
+        provision_receipt=provision_receipt,
+        isolation_receipt=isolation_receipt,
+    )
+    dry_run_value = payload.get("dry_run", True)
+    dry_run_type_valid = isinstance(dry_run_value, bool)
+    dry_run = dry_run_value if dry_run_type_valid else True
+    outcome: dict[str, Any] = {
+        "ok": False,
+        "status": "blocked_safe_delta_review_contract",
+        "error": "safe_delta_review_contract_not_ready",
+        "receipt": None,
+        "receipt_id": "",
+        "safe_delta_review_recorded": False,
+        "safe_delta_approved": False,
+        "safe_delta_exported": False,
+        "learning_written": False,
+        "writes_receipt": False,
+    }
+    if not provision_receipt:
+        outcome.update(
+            status="blocked_copy_provision_required",
+            error="copy_provision_receipt_missing_or_mismatch",
+        )
+    elif not isolation_receipt.get("live_state_aligned"):
+        outcome.update(
+            status="blocked_live_structural_isolation_required",
+            error="live_structural_isolation_receipt_required",
+        )
+    elif isolation_receipt_id != _safe_str(isolation_receipt.get("receipt_id")).strip():
+        outcome.update(
+            status="blocked_isolation_verification_receipt_mismatch",
+            error="isolation_verification_receipt_id_mismatch",
+        )
+    elif not dry_run_type_valid:
+        outcome.update(error="dry_run_must_be_boolean")
+    elif not plan["review_contract_ready"]:
+        outcome.update(error="safe_delta_review_contract_not_ready")
+    elif dry_run:
+        outcome.update(ok=True, status="safe_delta_review_ready", error="")
+    else:
+        outcome = record_managed_copy_safe_delta_review(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("review_fingerprint")).strip(),
+            confirm_review=payload.get("confirm_safe_delta_review") is True,
+        )
+
+    review_recorded = bool(outcome.get("safe_delta_review_recorded"))
+    writes_receipt = bool(outcome.get("writes_receipt"))
+    return {
+        "ok": bool(outcome["ok"]),
+        "kind": MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": outcome["status"],
+        "error": outcome["error"],
+        "actor": plan["actor"],
+        "copy_id": plan["copy_id"],
+        "copy_id_present": bool(copy_id),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "tenant_key": plan["tenant_key"],
+        "provisioning_receipt_id": plan["provisioning_receipt_id"],
+        "isolation_verification_receipt_id": plan["isolation_verification_receipt_id"],
+        "candidate_present": isinstance(payload.get("candidate"), dict),
+        "candidate_field_presence": plan["candidate_field_presence"],
+        "candidate_unknown_field_count": plan["candidate_unknown_field_count"],
+        "candidate_checks": plan["candidate_checks"],
+        "candidate_fingerprint": plan["candidate_fingerprint"],
+        "tenant_policy_checks": plan["tenant_policy_checks"],
+        "signal_class": plan["signal_class"],
+        "signal_class_known": bool(plan["signal_allowed_by_contract"] or plan["signal_denied_by_contract"]),
+        "signal_allowed_by_contract": bool(plan["signal_allowed_by_contract"]),
+        "signal_denied_by_contract": bool(plan["signal_denied_by_contract"]),
+        "direction": plan["direction"],
+        "stage17_closed_by_receipt": True,
+        "stage17_blocker": "",
+        "safe_delta_model_ready": False,
+        "safe_delta_review_enabled": bool(provision_receipt and isolation_receipt.get("live_state_aligned")),
+        "safe_delta_review_recorded": review_recorded,
+        "safe_delta_approved": False,
+        "safe_delta_flow_active": False,
+        "delta_export_enabled": False,
+        "delta_import_enabled": False,
+        "learning_write_enabled": False,
+        "safe_delta_exported": False,
+        "learning_written": False,
+        "raw_private_pooling_allowed": False,
+        "cross_tenant_data_flow_allowed": False,
+        "tenant_reidentification_allowed": False,
+        "unattributed_learning_allowed": False,
+        "blockers": plan["blockers"],
+        "dry_run": dry_run,
+        "review_contract_ready": bool(plan["review_contract_ready"]),
+        "review_fingerprint": plan["review_fingerprint"],
+        "dry_run_confirmation": {
+            **plan["dry_run_confirmation"],
+            "fingerprint_matched": bool(
+                not dry_run
+                and plan["review_fingerprint"]
+                and _safe_str(payload.get("review_fingerprint")).strip() == plan["review_fingerprint"]
+            ),
+            "review_confirmed": payload.get("confirm_safe_delta_review") is True,
+        },
+        "receipt_ready": bool(outcome.get("receipt_id")),
+        "receipt_id": _safe_str(outcome.get("receipt_id")).strip(),
+        "receipt": outcome.get("receipt"),
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": writes_receipt,
+        "writes_receipts": writes_receipt,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_review_receipt_path": (
+            "managed_copies/tenants/{tenant_key}/receipts/sd/{review_fingerprint_prefix}.json"
+        ),
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+        "routes": {
+            **status["routes"],
+            "safe_delta_review": "/managed-copies/safe-delta-review",
+            "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": dry_run,
+            "permission_scope": MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+            "permission_checked": True,
+            "exact_candidate_schema_enforced": True,
+            "live_structural_isolation_required": True,
+            "tenant_safe_delta_policy_required": True,
+            "operator_approval_required_before_export": True,
+            "does_not_echo_raw_signal_payload": True,
+            "safe_delta_flow_active": False,
+            "exports_delta": False,
+            "imports_delta": False,
+            "writes_learning": False,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": writes_receipt,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": not writes_receipt,
+        "projection_only": not writes_receipt,
+        "next_smallest_truthful_gap": (
+            "stage18_safe_delta_operator_approval" if review_recorded else "stage18_safe_delta_candidate_review"
+        ),
+    }
+
+
+def managed_copy_safe_delta_reviews_snapshot(*, limit: int = 20) -> dict[str, Any]:
+    """Return hash-only safe-delta review receipts without exporting data."""
+    return managed_copy_safe_delta_review_receipts_readback(limit=limit)
 
 
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:

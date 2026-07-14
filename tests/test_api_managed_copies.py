@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
 
+import francis.managed_copy_safe_delta as managed_copy_safe_delta
 from francis.api.app import create_app
 
 
@@ -46,6 +49,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "isolation_verifications": "/managed-copies/isolation-verifications",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "safe_delta_review": "/managed-copies/safe-delta-review",
+        "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -776,7 +780,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     monkeypatch,
     tmp_path,
 ) -> None:
-    data_root = tmp_path / "francis_data"
+    data_root = tmp_path.parent / "managed-copy-plan"
     actor = "stage18.copy-plan-recorder"
     decision_actor = "stage18.copy-plan-approver"
     raw_tenant_id = "customer-plan-private-id"
@@ -790,6 +794,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
                 actor: [
                     "managed_copies.copy_creation.write",
                     "managed_copies.isolation_verification.write",
+                    "managed_copies.safe_delta.write",
                 ],
                 decision_actor: ["approvals.decide"],
             }
@@ -1260,7 +1265,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
         },
     ).json()
 
-    assert provisioned["ok"] is True
+    assert provisioned["ok"] is True, (provisioned["status"], provisioned["error"])
     assert provisioned["status"] == "provisioned"
     assert provisioned["copy_provisioned"] is True
     assert provisioned["copy_created"] is True
@@ -1551,6 +1556,154 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     restored_status = client.get("/managed-copies/status").json()
     assert restored_status["copy_structural_isolation_verified"] is True
     assert restored_status["copy_isolation_drift_detected"] is False
+
+    safe_delta_payload = {
+        "request_actor": actor,
+        "copy_id": provisioned["copy_id"],
+        "provisioning_receipt_id": provisioned["receipt_id"],
+        "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+        "signal_class": "quality_gate_learning",
+        "direction": "export",
+        "candidate": {
+            "signal_fingerprint": "1" * 64,
+            "summary_fingerprint": "2" * 64,
+            "lineage_fingerprint": "3" * 64,
+            "source_record_count": 12,
+            "contains_raw_private_data": False,
+            "contains_tenant_identifiers": False,
+            "redaction_review_complete": True,
+            "abstraction_level": "class_level",
+            "retention_class": "review_receipt_only",
+        },
+        "dry_run": True,
+    }
+    safe_delta_plan = client.post("/managed-copies/safe-delta-review", json=safe_delta_payload).json()
+    assert safe_delta_plan["ok"] is True
+    assert safe_delta_plan["status"] == "safe_delta_review_ready"
+    assert safe_delta_plan["review_contract_ready"] is True
+    assert safe_delta_plan["signal_allowed_by_contract"] is True
+    assert safe_delta_plan["candidate_unknown_field_count"] == 0
+    assert all(check["status"] == "ready" for check in safe_delta_plan["candidate_checks"])
+    assert all(check["status"] == "ready" for check in safe_delta_plan["tenant_policy_checks"])
+    assert len(safe_delta_plan["candidate_fingerprint"]) == 64
+    assert len(safe_delta_plan["review_fingerprint"]) == 64
+    assert safe_delta_plan["safe_delta_review_recorded"] is False
+    assert safe_delta_plan["safe_delta_approved"] is False
+    assert safe_delta_plan["safe_delta_exported"] is False
+    assert safe_delta_plan["learning_written"] is False
+    assert safe_delta_plan["writes_receipts"] is False
+
+    raw_candidate_summary = "private customer summary must never persist"
+    unsafe_safe_delta = client.post(
+        "/managed-copies/safe-delta-review",
+        json={
+            **safe_delta_payload,
+            "candidate": {
+                **safe_delta_payload["candidate"],
+                "summary": raw_candidate_summary,
+            },
+        },
+    ).json()
+    assert unsafe_safe_delta["ok"] is False
+    assert unsafe_safe_delta["error"] == "safe_delta_review_contract_not_ready"
+    assert "safe_delta_candidate_unknown_fields" in unsafe_safe_delta["blockers"]
+    assert unsafe_safe_delta["candidate_unknown_field_count"] == 1
+    assert unsafe_safe_delta["writes_receipts"] is False
+    assert raw_candidate_summary not in json.dumps(unsafe_safe_delta)
+
+    safe_delta_reviews_root = tenant_root / "receipts" / "sd"
+    wrong_safe_delta_fingerprint = client.post(
+        "/managed-copies/safe-delta-review",
+        json={
+            **safe_delta_payload,
+            "dry_run": False,
+            "review_fingerprint": "0" * 64,
+            "confirm_safe_delta_review": True,
+        },
+    ).json()
+    assert wrong_safe_delta_fingerprint["ok"] is False
+    assert wrong_safe_delta_fingerprint["error"] == "safe_delta_review_fingerprint_mismatch"
+    assert wrong_safe_delta_fingerprint["writes_receipts"] is False
+    assert not safe_delta_reviews_root.exists()
+
+    safe_delta_recorded = client.post(
+        "/managed-copies/safe-delta-review",
+        json={
+            **safe_delta_payload,
+            "dry_run": False,
+            "review_fingerprint": safe_delta_plan["review_fingerprint"],
+            "confirm_safe_delta_review": True,
+        },
+    ).json()
+    assert safe_delta_recorded["ok"] is True, (
+        safe_delta_recorded["status"],
+        safe_delta_recorded["error"],
+        safe_delta_recorded["dry_run_confirmation"],
+    )
+    assert safe_delta_recorded["status"] == "operator_approval_required"
+    assert safe_delta_recorded["safe_delta_review_recorded"] is True
+    assert safe_delta_recorded["safe_delta_approved"] is False
+    assert safe_delta_recorded["safe_delta_exported"] is False
+    assert safe_delta_recorded["learning_written"] is False
+    assert safe_delta_recorded["writes_receipts"] is True
+    assert safe_delta_recorded["writes_tenant_state"] is False
+    assert safe_delta_recorded["grants_execution_authority"] is False
+    assert safe_delta_recorded["grants_mutation_authority"] is False
+    assert safe_delta_recorded["next_smallest_truthful_gap"] == "stage18_safe_delta_operator_approval"
+    safe_delta_receipt_paths = list(safe_delta_reviews_root.glob("*.json"))
+    assert len(safe_delta_receipt_paths) == 1
+    safe_delta_receipt_text = safe_delta_receipt_paths[0].read_text(encoding="utf-8")
+    assert raw_tenant_id not in safe_delta_receipt_text
+    assert raw_tenant_name not in safe_delta_receipt_text
+    assert raw_admin not in safe_delta_receipt_text
+    assert raw_candidate_summary not in safe_delta_receipt_text
+
+    safe_delta_readback = client.get("/managed-copies/safe-delta-reviews").json()
+    assert safe_delta_readback["status"] == "operator_approval_required"
+    assert safe_delta_readback["valid_count"] == 1
+    assert safe_delta_readback["live_aligned_count"] == 1
+    assert safe_delta_readback["latest_valid_receipt_id"] == safe_delta_recorded["receipt_id"]
+    assert safe_delta_readback["safe_delta_review_recorded"] is True
+    assert safe_delta_readback["safe_delta_approved"] is False
+    assert safe_delta_readback["safe_delta_exported"] is False
+    assert safe_delta_readback["learning_written"] is False
+    assert safe_delta_readback["next_smallest_truthful_gap"] == "stage18_safe_delta_operator_approval"
+
+    safe_delta_contract = client.get("/managed-copies/safe-delta-model-contract").json()
+    assert safe_delta_contract["status"] == "candidate_review_recorded"
+    assert safe_delta_contract["safe_delta_model_ready"] is False
+    assert safe_delta_contract["safe_delta_review_recorded"] is True
+    assert safe_delta_contract["safe_delta_review_receipt_id"] == safe_delta_recorded["receipt_id"]
+    assert safe_delta_contract["delta_export_enabled"] is False
+    assert safe_delta_contract["learning_write_enabled"] is False
+    assert safe_delta_contract["next_smallest_truthful_gap"] == "stage18_safe_delta_operator_approval"
+
+    safe_delta_status = client.get("/managed-copies/status").json()
+    safe_delta_deliverable = next(
+        item for item in safe_delta_status["deliverables"] if item["id"] == "safe_delta_model"
+    )
+    assert safe_delta_deliverable["status"] == "candidate_review_recorded"
+    assert safe_delta_deliverable["ready"] is False
+    assert safe_delta_status["safe_delta_review_recorded"] is True
+    assert safe_delta_status["safe_delta_review_receipt_id"] == safe_delta_recorded["receipt_id"]
+    assert safe_delta_status["safe_delta_approved"] is False
+    assert safe_delta_status["safe_delta_exported"] is False
+    assert safe_delta_status["safe_delta_learning_written"] is False
+
+    duplicate_safe_delta = client.post(
+        "/managed-copies/safe-delta-review",
+        json={
+            **safe_delta_payload,
+            "dry_run": False,
+            "review_fingerprint": safe_delta_plan["review_fingerprint"],
+            "confirm_safe_delta_review": True,
+        },
+    ).json()
+    assert duplicate_safe_delta["ok"] is True
+    assert duplicate_safe_delta["status"] == "already_reviewed"
+    assert duplicate_safe_delta["receipt_id"] == safe_delta_recorded["receipt_id"]
+    assert duplicate_safe_delta["writes_receipts"] is False
+    assert len(list(safe_delta_reviews_root.glob("*.json"))) == 1
 
     invalid_approval_path = approvals_root / "pending" / "managed-copy-invalid.json"
     invalid_approval_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3396,6 +3549,314 @@ def test_managed_copy_rogue_recovery_review_blocks_scoped_actor_until_stage17_cl
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
+
+
+def _configure_safe_delta_receipt_test_sources(
+    monkeypatch,
+    data_root: Path,
+) -> tuple[dict[str, dict[str, Any]], Path]:
+    tenant_key = "a" * 64
+    source_state: dict[str, dict[str, Any]] = {
+        "provision": {
+            "copy_id": "managed_copy_safe_delta_test",
+            "tenant_key": tenant_key,
+            "receipt_id": "managed_copy_provision_safe_delta_test",
+            "provision_fingerprint": "b" * 64,
+        },
+        "isolation": {
+            "receipt_id": "managed_copy_isolation_safe_delta_test",
+            "live_state_aligned": True,
+        },
+    }
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    def provision_for_copy(
+        copy_id: str,
+        *,
+        provisioning_receipt_id: str = "",
+    ) -> dict[str, Any]:
+        receipt = source_state["provision"]
+        if copy_id != receipt["copy_id"]:
+            return {}
+        if provisioning_receipt_id and provisioning_receipt_id != receipt["receipt_id"]:
+            return {}
+        return dict(receipt)
+
+    def isolation_for_provision(
+        provisioning_receipt_id: str,
+        *,
+        provision_fingerprint: str = "",
+        copy_id: str = "",
+    ) -> dict[str, Any]:
+        provision = source_state["provision"]
+        if provisioning_receipt_id != provision["receipt_id"]:
+            return {}
+        if provision_fingerprint and provision_fingerprint != provision["provision_fingerprint"]:
+            return {}
+        if copy_id and copy_id != provision["copy_id"]:
+            return {}
+        return dict(source_state["isolation"])
+
+    monkeypatch.setattr(managed_copy_safe_delta, "managed_copy_provision_for_copy", provision_for_copy)
+    monkeypatch.setattr(
+        managed_copy_safe_delta,
+        "latest_managed_copy_isolation_verification_for_provision",
+        isolation_for_provision,
+    )
+    config_path = data_root / "managed_copies" / "tenants" / tenant_key / "config" / "managed_copy.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "safe_delta_policy": {
+                    "raw_private_pooling_allowed": False,
+                    "operator_review_required": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return source_state, config_path
+
+
+def _safe_delta_receipt_test_plan(
+    source_state: dict[str, dict[str, Any]],
+    *,
+    actor: str = "safe-delta.test-reviewer",
+    summary_fingerprint: str = "2" * 64,
+) -> dict[str, Any]:
+    provision = source_state["provision"]
+    isolation = source_state["isolation"]
+    payload = {
+        "copy_id": provision["copy_id"],
+        "provisioning_receipt_id": provision["receipt_id"],
+        "isolation_verification_receipt_id": isolation["receipt_id"],
+        "signal_class": "quality_gate_learning",
+        "direction": "export",
+        "candidate": {
+            "signal_fingerprint": "1" * 64,
+            "summary_fingerprint": summary_fingerprint,
+            "lineage_fingerprint": "3" * 64,
+            "source_record_count": 12,
+            "contains_raw_private_data": False,
+            "contains_tenant_identifiers": False,
+            "redaction_review_complete": True,
+            "abstraction_level": "class_level",
+            "retention_class": "review_receipt_only",
+        },
+    }
+    plan = managed_copy_safe_delta.managed_copy_safe_delta_review_plan(
+        payload,
+        actor=actor,
+        provision_receipt=dict(provision),
+        isolation_receipt=dict(isolation),
+    )
+    assert plan["review_contract_ready"] is True
+    return plan
+
+
+def _record_safe_delta_receipt(plan: dict[str, Any]) -> dict[str, Any]:
+    return managed_copy_safe_delta.record_managed_copy_safe_delta_review(
+        plan,
+        provided_fingerprint=str(plan["review_fingerprint"]),
+        confirm_review=True,
+    )
+
+
+def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-malformed",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    receipt_path = managed_copy_safe_delta._review_receipt_path(
+        str(plan["tenant_key"]),
+        str(plan["review_fingerprint"]),
+    )
+    malformed_receipt = '{"raw_customer_data":"must-not-overwrite"'
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(malformed_receipt, encoding="utf-8")
+
+    result = _record_safe_delta_receipt(plan)
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked_safe_delta_review_receipt_conflict"
+    assert result["error"] == "safe_delta_review_receipt_conflict"
+    assert result["writes_receipt"] is False
+    assert receipt_path.read_text(encoding="utf-8") == malformed_receipt
+    assert "must-not-overwrite" not in json.dumps(result)
+
+
+def test_managed_copy_safe_delta_full_fingerprint_prefix_collision_fails_closed(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-collision",
+    )
+    first_plan = _safe_delta_receipt_test_plan(source_state)
+    colliding_plan = _safe_delta_receipt_test_plan(
+        source_state,
+        actor="safe-delta.second-reviewer",
+        summary_fingerprint="4" * 64,
+    )
+    assert first_plan["review_fingerprint"] != colliding_plan["review_fingerprint"]
+    collision_path = managed_copy_safe_delta._review_receipt_path(
+        str(first_plan["tenant_key"]),
+        str(first_plan["review_fingerprint"]),
+    )
+
+    def colliding_receipt_path(tenant_key: str, review_fingerprint: str) -> Path:
+        assert tenant_key == first_plan["tenant_key"]
+        assert review_fingerprint in {
+            first_plan["review_fingerprint"],
+            colliding_plan["review_fingerprint"],
+        }
+        return collision_path
+
+    monkeypatch.setattr(managed_copy_safe_delta, "_review_receipt_path", colliding_receipt_path)
+    first_result = _record_safe_delta_receipt(first_plan)
+    original_receipt = collision_path.read_text(encoding="utf-8")
+
+    collision_result = _record_safe_delta_receipt(colliding_plan)
+
+    assert first_result["ok"] is True
+    assert collision_result["ok"] is False
+    assert collision_result["status"] == "blocked_safe_delta_review_receipt_conflict"
+    assert collision_result["error"] == "safe_delta_review_receipt_conflict"
+    assert collision_result["writes_receipt"] is False
+    assert collision_path.read_text(encoding="utf-8") == original_receipt
+
+
+def test_managed_copy_safe_delta_readback_redacts_invalid_latest_candidate(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-invalid-latest",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    receipt_path = managed_copy_safe_delta._review_receipt_path(
+        str(plan["tenant_key"]),
+        str(plan["review_fingerprint"]),
+    )
+    raw_customer_marker = "private-customer-latest-marker"
+    invalid_path = receipt_path.with_name("ffffffffffffffff.json")
+    invalid_path.write_text(
+        json.dumps(
+            {
+                "kind": "invalid-safe-delta-receipt",
+                "receipt_id": "invalid-latest",
+                "recorded_ts": int(recorded["receipt"]["recorded_ts"]) + 1,
+                "raw_customer_data": raw_customer_marker,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    readback = managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback()
+
+    assert readback["status"] == "receipt_validation_failed"
+    assert readback["count"] == 2
+    assert readback["valid_count"] == 1
+    assert readback["invalid_receipt_count"] == 1
+    assert readback["receipt_set_valid"] is False
+    assert readback["latest_receipt_valid"] is True
+    assert readback["latest_receipt_id"] == recorded["receipt_id"]
+    assert raw_customer_marker not in json.dumps(readback)
+
+
+def test_managed_copy_safe_delta_readback_reports_post_write_source_drift(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-source-drift",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    source_state["isolation"]["live_state_aligned"] = False
+
+    readback = managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback()
+
+    assert recorded["ok"] is True
+    assert readback["status"] == "source_drift_detected"
+    assert readback["valid_count"] == 1
+    assert readback["live_aligned_count"] == 0
+    assert readback["latest_receipt_valid"] is True
+    assert readback["latest_receipt"]["live_source_boundary_aligned"] is False
+    assert readback["latest_receipt"]["live_source_boundary_drift_detected"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage18_safe_delta_source_boundary_reverification"
+
+
+def test_managed_copy_safe_delta_short_receipt_path_supports_long_windows_data_root(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    tenant_key = "a" * 64
+    placeholder_path = (
+        tmp_path.parent / "x" / "managed_copies" / "tenants" / tenant_key / "receipts" / "sd" / f"{'f' * 16}.json"
+    )
+    padding_length = max(1, 238 - len(str(placeholder_path)) + 1)
+    data_root = tmp_path.parent / ("l" * padding_length)
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, data_root)
+    plan = _safe_delta_receipt_test_plan(source_state)
+    receipt_path = managed_copy_safe_delta._review_receipt_path(
+        str(plan["tenant_key"]),
+        str(plan["review_fingerprint"]),
+    )
+    full_fingerprint_path = receipt_path.with_name(f"{plan['review_fingerprint']}.json")
+
+    result = _record_safe_delta_receipt(plan)
+
+    assert len(str(receipt_path)) < 260
+    assert len(str(full_fingerprint_path)) >= 260
+    assert result["ok"] is True
+    assert receipt_path.exists()
+
+
+def test_managed_copy_safe_delta_receipt_creation_is_exclusive(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-exclusive",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    original_write = managed_copy_safe_delta._write_json_atomic
+    competing_receipt = '{"unknown_receipt":"private-race-marker"}\n'
+
+    def create_competing_receipt_before_write(path: Path, payload: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(competing_receipt, encoding="utf-8")
+        original_write(path, payload)
+
+    monkeypatch.setattr(
+        managed_copy_safe_delta,
+        "_write_json_atomic",
+        create_competing_receipt_before_write,
+    )
+
+    result = _record_safe_delta_receipt(plan)
+    receipt_path = managed_copy_safe_delta._review_receipt_path(
+        str(plan["tenant_key"]),
+        str(plan["review_fingerprint"]),
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked_safe_delta_review_receipt_conflict"
+    assert result["error"] == "safe_delta_review_receipt_conflict"
+    assert result["writes_receipt"] is False
+    assert receipt_path.read_text(encoding="utf-8") == competing_receipt
+    assert "private-race-marker" not in json.dumps(result)
 
 
 def test_managed_copy_safe_delta_model_contract_denies_raw_pooling_and_exports(

@@ -40,7 +40,8 @@ from francis.managed_copies import (
     managed_copy_runtime_evidence_readback_blocked_snapshot,
     managed_copy_runtime_evidence_readbacks_snapshot,
     managed_copy_safe_delta_model_contract_snapshot,
-    managed_copy_safe_delta_review_blocked_snapshot,
+    managed_copy_safe_delta_review_snapshot,
+    managed_copy_safe_delta_reviews_snapshot,
     managed_copy_sla_commitment_review_blocked_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
@@ -383,7 +384,12 @@ def safe_delta_review(payload: dict[str, Any], request: Request) -> dict[str, An
             required_scope=MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
             next_step="configure_actor_scope_before_reviewing_managed_copy_safe_delta",
         )
-    return managed_copy_safe_delta_review_blocked_snapshot(payload, actor=actor)
+    return managed_copy_safe_delta_review_snapshot(payload, actor=actor)
+
+
+@router.get("/safe-delta-reviews")
+def safe_delta_reviews(limit: int = 20) -> dict[str, Any]:
+    return managed_copy_safe_delta_reviews_snapshot(limit=limit)
 
 
 @router.get("/rogue-recovery-contract")
