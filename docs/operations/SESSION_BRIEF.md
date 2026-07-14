@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-14, sync cycle `CR-20260714-004` (America/Chicago)
+Updated: 2026-07-14, sync cycle `CR-20260714-005` (America/Chicago)
 
 ## Manager Role
 
@@ -16,20 +16,23 @@ local `main` only when certain. Escalate every listed operator boundary.
 Cold-start order:
 
 1. Read `AGENTS.md`.
-2. Read `docs/operations/COMPLETION_LEDGER.md`.
-3. Read this brief and the active task cards under `docs/operations/task_cards/`.
-4. Read `docs/operations/control_room/BOARD.md`, `PROTOCOL.md`,
-   `SESSION_TOPOLOGY.md`, `DEPENDENCY_GRAPH.md`, `RUNTIME_LEASES.md`,
-   `VALIDATION_RUNS.md`, `OPERATOR_QUEUE.md`, `EVIDENCE_INDEX.md`,
-   `MESSAGE_LOG.md`, affected shards, and the seat file.
-5. Verify `git status --short --branch`, `git worktree list --porcelain`,
-   `git branch -avv`, and current GitHub checks before acting.
+2. Read only the current-phase/latest-evidence/remaining-gap sections of
+   `docs/operations/COMPLETION_LEDGER.md` needed for orientation.
+3. Read this brief, `BOARD.md`, `INTEGRATION_QUEUE.md`, `RUNTIME_LEASES.md`, and
+   the active task card for each current front.
+4. Verify Git/worktree state, native agent reachability, validation exits,
+   runtime leases/ports, and protected runtime boundaries.
+5. Load messages, reviews, evidence records, architecture, and history only when
+   the next decision requires them.
 
 ## Canonical Posture
 
-- Canonical local `main`: `8a5ca378a854b29eb0ca7adcad591e2a57f1a653`;
-  remote `origin/main`: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`.
-  The local docs-only Control Room commit has not been pushed.
+- CR-005 local-`main` parent:
+  `6e883d1d19a18d157ed99799d598a7f8285771fd`; resolve the containing sync
+  commit with `git rev-parse HEAD`. Remote `origin/main`:
+  `8c84dc4e972b7921e9204e62f7cd655bd3ede037`. The local docs-only Control Room
+  commits have not been pushed. Remote CI and CodeQL for `8c84dc4e` are green;
+  that does not validate local-only commits.
 - Canonical phase: Phase 2.
 - Canonical active workstream: Stage 18 / Managed Copies Platform groundwork.
 - Stage 17 is closed by governed receipt
@@ -56,14 +59,15 @@ hash-only safe-delta candidate-review receipt while approval, export, import,
 learning writes, and cross-tenant flow remain disabled. Readback must detect live
 source-boundary drift and must not echo or persist raw customer data.
 
-Current state: clean cycle-one commit `cd9cd504` passed focused worker validation
-but failed exact-diff review. `CR-DEC-0012` authorizes the final cycle to expose
-the existing isolation-owned guarded-subpath API, remove safe-delta's duplicate
-guard, bind exact full-fingerprint readback, and add four direct regressions.
+Current state: FORGE correction `24658090` enforces exact nested Boolean types
+and passed focused tests, Ruff, format, mypy, and diff-check. SENTINEL and VERA
+passed the affected correction. ATLAS integration head `cdfc4a23` adds a bounded
+test-harness retry for transient supervisor status-file locks. Full gate
+`VAL-20260714-028` passed with explicit exit `0` on that exact head in `D:\fg`.
 
-Next smallest truthful gap: FORGE produces one cycle-two commit and focused
-evidence. A third independent issue set parks or splits the front. This remains a
-hash-only review slice, not an approval or export slice.
+Next smallest truthful gap: commit CR-005, rebase onto that exact local-main
+head, and re-prove the rebased promotion candidate. This remains a hash-only
+review slice, not approval or export.
 
 ### Lens game observer
 
@@ -179,6 +183,11 @@ water mark and producer outcome surface. Do not launch or touch the live Orb.
 - The old tool-managed roadmap goal remains `blocked`; the goal controller
   rejected the operator-requested replacement as "unfinished." This tool-state
   mismatch does not override the active repository-backed ATLAS mandate.
+- A reread/reconciliation inside the current conversation is a context refresh,
+  not context replacement. True replacement requires a fresh root manager
+  session. This session performed only a refresh; no native control available to
+  ATLAS creates a fresh root manager session, so replacement is unavailable here
+  and is not simulated.
 
 ## Control Room
 

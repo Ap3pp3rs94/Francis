@@ -2,13 +2,15 @@
 
 - Role: Orb interaction, visual behavior, and choreography
 - Classification: internal mutating worker; slot 3
-- Staffing: resumable agent `019f6100-9898-7353-9359-ed4727e2a4cb`
-- Liveness: completed/released; front parked in `CR-20260714-004`
+- Staffing: unstaffed; prior handle `019f6100-9898-7353-9359-ed4727e2a4cb`
+  returned `not_found`
+- Liveness: unavailable; front parked in `CR-20260714-005`
 - Current assignment: CR-LUMEN-001 Orb right-click delivery / visual-lock alignment
 - Current task card: `docs/operations/task_cards/orb-visual-choreography.md`
 - Branch: `codex/lumen-orb-choreography`
 - Worktree: `D:\FWT\lumen`
-- Runtime lease: `LEASE-LUMEN-001`; compile-only, services/launch/real Orb denied
+- Runtime lease: `LEASE-LUMEN-001` released with state preserved; reacquisition
+  required before compile; services/launch/real Orb denied
 - Contracts in play: native renderer status/right-click request, overlay request
   queue/readback, visual-lock ring count, click-through/no-activate behavior,
   bounded messages, no-input authority
@@ -21,6 +23,7 @@
   failure/outcome readback ownership
 - Current blocker: both guarantees require a schema/file owner outside the card
 - Dependencies: task-card reassignment before any new edit or validation
-- Next action: remain parked; preserve branch, moved worktree, and runtime lease
+- Next action: remain parked; preserve branch and moved worktree; reacquire the
+  lease only after a revised card authorizes work
 - Replacement instruction: verify branch/worktree, read the card and CR messages,
   and resume only the recorded next action

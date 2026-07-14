@@ -1,6 +1,6 @@
 # Francis Control Room Runtime Leases
 
-Updated: 2026-07-14T10:24:54-05:00
+Updated: 2026-07-14T12:12:22-05:00
 
 Runtime access is denied unless a current task card explicitly grants it. A
 worktree does not isolate runtime state. The default operator ports `8000`,
@@ -17,11 +17,20 @@ isolate writable runtime/test state but do not isolate package files or physical
 disk load. Package installation, sync, repair, or removal is prohibited while a
 leased validation process is active.
 
+At CR-005 reconciliation, no persistent worker service is running and every
+assigned worker port is free. Only the protected unknown listener on operator-
+reserved port `5173` remains. FORGE's test-only lease completed full gate
+`VAL-20260714-028` on clean integration head `cdfc4a23` in `D:\fg`, using
+`D:\Francis-runtime-leases\forge-managed-copies-safe-delta\val-028-full-gate`.
+The gate exited `0`, its test-owned process tree exited, and the lease is released
+with logs/state preserved. ARGUS and LUMEN remain released. No persistent service
+or live Orb access occurred.
+
 | Lease | Seat | Front | Task card | Branch / worktree | State directories | API / overlay / frontend ports | Permitted services | Real Orb | Processes | Acquired | Cleanup evidence | Release state |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `LEASE-FORGE-001` | FORGE | CR-FORGE-001 | `task_cards/managed-copy-safe-delta.md` | `codex/forge-managed-copies-safe-delta` / `D:\Francis-worktrees\forge-managed-copies-safe-delta` | assigned `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\forge-managed-copies-safe-delta\data`; pytest retention `worktree\data\test_runs\pytest` | `18001` / `18781` / `15171` | none; focused tests only after edit | denied | no persistent/test process at CR-003 close | 2026-07-14T09:37:19-05:00 | full pytest PIDs absent; partial state preserved; assigned ports remain free | `IN_USE_EDIT_ONLY` |
-| `LEASE-ARGUS-001` | ARGUS | CR-ARGUS-001 | `task_cards/lens-game-observer.md` | `codex/argus-game-observer` / `D:\Francis-worktrees\argus-game-observer` | assigned `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\argus-game-observer\data`; pytest retention `worktree\data\test_runs\pytest` | `18002` / `18782` / `15172` | none; focused tests only after edit | denied | no persistent/test process at CR-003 close | 2026-07-14T09:37:19-05:00 | full pytest PIDs absent; partial state preserved; assigned ports remain free | `IN_USE_EDIT_ONLY` |
-| `LEASE-LUMEN-001` | LUMEN | CR-LUMEN-001 | `task_cards/orb-visual-choreography.md` | `codex/lumen-orb-choreography` / `D:\Francis-worktrees\lumen-orb-choreography` | assigned `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\lumen-orb-choreography\data`; pytest retention `worktree\data\test_runs\pytest` | `18003` / `18783` / `15173` | none; focused tests and compile only after edit | denied | no persistent/test process at CR-003 close | 2026-07-14T09:37:19-05:00 | full pytest PIDs absent; partial state preserved; assigned ports remain free | `IN_USE_EDIT_ONLY` |
+| `LEASE-FORGE-001` | FORGE | CR-FORGE-001 | `task_cards/managed-copy-safe-delta.md` | `codex/forge-managed-copies-safe-delta` / `D:\fg` | `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\forge-managed-copies-safe-delta\val-028-full-gate`; pytest retention `D:\fg\data\test_runs\pytest` | `18001` / `18781` / `15171` | none while released | denied | none; `VAL-028` test tree exited | 2026-07-14 reacquired | clean `cdfc4a23`; exit `0`; logs/state preserved; assigned ports free | `RELEASED` |
+| `LEASE-ARGUS-001` | ARGUS | CR-ARGUS-001 | `task_cards/lens-game-observer.md` | `codex/argus-game-observer` / `D:\Francis-worktrees\argus-game-observer` | assigned `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\argus-game-observer\data`; pytest retention `worktree\data\test_runs\pytest` | `18002` / `18782` / `15172` | none while released | denied | none at CR-005 reconciliation | 2026-07-14T09:37:19-05:00 | no validation/service process; partial state preserved; assigned ports free | `RELEASED` |
+| `LEASE-LUMEN-001` | LUMEN | CR-LUMEN-001 | `task_cards/orb-visual-choreography.md` | `codex/lumen-orb-choreography` / `D:\Francis-worktrees\lumen-orb-choreography` | assigned `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\lumen-orb-choreography\data`; pytest retention `worktree\data\test_runs\pytest` | `18003` / `18783` / `15173` | none while released | denied | none at CR-005 reconciliation | 2026-07-14T09:37:19-05:00 | no validation/service process; partial state preserved; assigned ports free | `RELEASED` |
 
 ## Lease Rules
 

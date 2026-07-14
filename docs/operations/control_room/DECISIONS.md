@@ -162,15 +162,20 @@
 - Issue: the protocol had no numeric remediation ceiling or docs-only movement
   budget, allowing defensible hardening and Control Room commits to indefinitely
   delay promotion
-- Agents involved: ATLAS; external reviewer challenge; ARCHIVIST evidence audit
+- Agents involved: operator, ATLAS; external reviewer challenge; ARCHIVIST
+  evidence audit
 - Evidence considered:
   `reviews/ATLAS_EXTERNAL_THROUGHPUT_CHALLENGE_2026-07-14.txt`, three first
   candidate commits, specialist findings, and open CR-003 drift
-- Decision: after a first reviewable candidate, permit at most two remediation
-  cycles; cycle one handles card-mapped findings and cycle two only regressions
-  introduced by cycle one. Split, park, or escalate a third independent issue
-  set. Hold at most one open Control Room sync and freeze local-main docs movement
-  once a candidate becomes review-ready until it is promoted or rejected.
+- Decision, corrected by the operator after exact FORGE review: the two-cycle
+  ceiling applies to new independent defect families and scope expansion. Proof
+  that an existing acceptance criterion still fails remains in the current cycle
+  until that criterion is satisfied. After two unsuccessful attempts on the same
+  defect, replace or pair the worker instead of escalating automatically.
+  Operator approval is required only when correction changes authority, product
+  policy, trust boundaries, accepted scope, or another established gate. Hold at
+  most one open Control Room sync and freeze local-main docs movement once a
+  candidate becomes review-ready until it is promoted or rejected.
 - Affected fronts: all current and future fronts
 - Affected task cards: all current and future cards
 - Affected contracts: scope containment, review economics, validation scheduling,
@@ -199,3 +204,22 @@
   unchanged
 - Operator involvement: none; no production request, approval, authority,
   export, learning, push, or stage-closure action is authorized
+
+## CR-DEC-0013 - Push the validated integrated main head
+
+- Date: 2026-07-14
+- Issue: local Control Room and worker commits are ahead of GitHub while the
+  operator requires the repository to be updated
+- Agents involved: operator, ATLAS
+- Evidence considered: operator direction to ensure GitHub is updated; local
+  main `6e883d1d`; origin/main `8c84dc4e`; FORGE `VAL-028` exit `0`
+- Decision: operator authorizes ATLAS to push only the final validated integrated
+  `main` head after CR-005, exact rebase proof, local promotion, and meaningful
+  post-promotion validation. Intermediate docs-only, pre-rebase, failed, or
+  uncertain heads remain prohibited.
+- Affected fronts: `CR-FORGE-001` and Control Room integration
+- Affected task cards: `managed-copy-safe-delta.md`
+- Affected contracts: exact-head validation, promotion, remote CI and CodeQL
+- ADR required: no; this is an external-action authorization
+- Operator involvement: explicit push authorization; no release, stage closure,
+  authority grant, production request, or live-runtime action is authorized

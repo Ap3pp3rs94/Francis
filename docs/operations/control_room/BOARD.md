@@ -2,10 +2,10 @@
 
 Updated: 2026-07-14
 
-Sync cycle: `CR-20260714-004`
+Sync cycle: `CR-20260714-005`
 
 Cycle-start local main:
-`8a5ca378a854b29eb0ca7adcad591e2a57f1a653`.
+`6e883d1d19a18d157ed99799d598a7f8285771fd`.
 
 Remote `origin/main` observed during this sync:
 `8c84dc4e972b7921e9204e62f7cd655bd3ede037`.
@@ -17,17 +17,14 @@ indexed in `EVIDENCE_INDEX.md`.
 
 GitHub baseline:
 
-- CodeQL run `29337593904`: success.
-- CI run `29337593360`: cancelled by the Control Room baseline push.
-- Control Room head CI `29340258995`: in progress; Ubuntu Python 3.12 and
-  3.13 passed, both Windows jobs remain in pytest.
-- Control Room head CodeQL `29340258957`: success.
-- Local `scripts/check.ps1`: after exact CI-extra resync, exact head `d5516a54`
-  passed branch state, Ruff, and format but failed mypy on the environment-
-  sensitive optional `typer` import. HARBOR proved a corrupt Typer payload;
-  locked reinstall repaired importability. A later static-pass observation lacks
-  a reproducible validation receipt and is not a gate claim. Exact-head pytest is
-  active as `VAL-20260714-001`.
+- Remote CI run `29340258995` for `8c84dc4e`: success.
+- Remote CodeQL run `29340258957` for `8c84dc4e`: success.
+- Local `scripts/check.ps1` on historical head `d5516a54` did not produce a full
+  pass: its initial run failed on a corrupt local Typer payload, and the later
+  baseline pytest `VAL-20260714-001` was interrupted for integration priority.
+- Full gate `VAL-20260714-028` passed with explicit exit `0` on exact integration
+  head `cdfc4a23` in `D:\fg`. No full-gate claim exists for CR-005 parent
+  `6e883d1d` or either parked worker head.
 
 ## Fronts
 
@@ -37,18 +34,17 @@ GitHub baseline:
 - Roadmap: Phase 2, Stage 18 Managed Copies Platform
 - Task card: `docs/operations/task_cards/managed-copy-safe-delta.md`
 - Branch: `codex/forge-managed-copies-safe-delta`
-- Worktree: `D:\Francis-worktrees\forge-managed-copies-safe-delta`
-- State: `REMEDIATION_REQUIRED`; final cycle-two reassignment authorized
-- Latest verified worker commit: `cd9cd50422115761a2340e3d322b449516f85b0d`
-- Validation: `VAL-20260714-006` diff-check passed; full pytest
-  `VAL-20260714-002` was `INTERRUPTED_KNOWN_REMEDIATION`; no pass/fail claim
+- Worktree: `D:\fg`
+- State: `READY_FOR_PROMOTION`; pre-rebase exact integration gate passed
+- Latest verified worker commit: `246580901b145a7f1f59d9c85d199ffdfdf536d8`
+- Integration head: `cdfc4a23fe030b4e31dbf3b067c39d3e3daae1f8`
+- Validation: correction focused suite/Ruff/format/mypy/diff-check passed;
+  `VAL-20260714-028` full gate passed with explicit exit `0`
 - Dependencies: provision receipt, live structural-isolation receipt, tenant
   safe-delta policy, API actor-scope contract
-- Blocker: cycle one duplicated structural-isolation path ownership and exact-
-  fingerprint readback accepts a colliding shortened path; four direct evidence
-  gaps remain
-- Next action: FORGE executes the final `CR-DEC-0012` cycle using the isolation-
-  owned guarded-subpath API; no third remediation cycle is authorized
+- Blocker: post-CR-005 rebase and exact rebased-head proof remain outstanding
+- Next action: commit CR-005, freeze local main, rebase, and re-prove the exact
+  promotion head
 - Runtime lease: `LEASE-FORGE-001`; no service or live Orb access permitted
 
 ### CR-ARGUS-001 - Lens game observer
@@ -96,19 +92,23 @@ GitHub baseline:
 - VERA state: `RESPONDED`
 - Evidence: `MSG-20260714-008` and
   `reviews/VERA/CR-20260714-preflight.md`
-- Disposition: ARGUS and LUMEN are parked on explicit contract-ownership scope;
-  FORGE alone is assigned one final bounded remediation cycle
-- SENTINEL disposition: exact ARGUS/LUMEN remediation reviews reject promotion;
-  see `reviews/SENTINEL/CR-20260714-exact-remediation.md`
-- MERIDIAN disposition: FORGE requires canonical path-owner reuse under
-  `CR-DEC-0012`; no ADR; see
-  `reviews/MERIDIAN/CR-20260714-exact-remediation.md`
-- HARBOR disposition: LUMEN and FORGE exact remediation candidates remain
-  blocked; see `reviews/HARBOR/CR-20260714-exact-remediation.md`
+- Disposition: FORGE passed its pre-rebase full gate at integration head
+  `cdfc4a23`; ARGUS and LUMEN remain parked on their recorded contract-ownership
+  boundaries
+- SENTINEL disposition: exact-type correction passed; see
+  `reviews/SENTINEL/CR-20260714-forge-exact-types.md`
+- VERA disposition: exact-type correction and discriminating regression passed;
+  see `reviews/VERA/CR-20260714-forge-exact-types.md`
+- MERIDIAN disposition: FORGE final architecture pass; no ADR; see
+  `reviews/MERIDIAN/CR-20260714-forge-final.md`
+- HARBOR disposition: FORGE final portability/integration static pass; see
+  `reviews/HARBOR/CR-20260714-forge-final.md`
 - ARCHIVIST disposition: LUMEN receipt/readback truth remains blocked; see
   `reviews/ARCHIVIST/CR-20260714-lumen-remediation.md`
-- Next action: review only the next FORGE cycle-two hash; do not repeat unchanged
-  findings or start a full gate before focused acceptance passes
+- HARBOR passed only the affected `cdfc4a23` test-harness delta; no unchanged
+  specialist finding was repeated
+- Next action: commit CR-005, freeze local main, then rebase and re-prove the
+  exact promotion head
 
 Specialist sessions used in this cycle are completed/released. Their concrete
 reports are stored above. CLAUDE is `UNVERIFIED`; no external audit is simulated.
@@ -116,9 +116,10 @@ reports are stored above. CLAUDE is `UNVERIFIED`; no external audit is simulated
 ## Runtime Leases
 
 `control_room/RUNTIME_LEASES.md` records three unique isolated leases. All current
-cards deny persistent services and the operator-visible Orb. Each lease is in
-test-only use; no assigned ports are listening. Default ports remain reserved;
-an unknown listener on `5173` is out of scope and must not be killed.
+cards deny persistent services and the operator-visible Orb. All test-only leases
+are released after `VAL-20260714-028`; required logs/state are preserved. No
+assigned worker port is listening. Default ports remain reserved; an unknown
+listener on `5173` is out of scope and must not be killed.
 
 ## Unassigned Dirty Work
 

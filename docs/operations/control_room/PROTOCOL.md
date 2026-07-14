@@ -4,6 +4,26 @@
 
 Central coordination. Isolated execution. Evidence-backed integration.
 
+## ATLAS Outcome Ownership
+
+ATLAS owns the technical approach, decomposition, agent topology, critical-path
+scheduling, test strategy, review economy, integration readiness, context health,
+and final evidence-backed recommendation. Operator prompts define intent,
+priority, constraints, and reserved authority; they do not require literal
+execution when repository evidence supports a stronger routine engineering path.
+
+Inside canonical roadmap direction, ATLAS may challenge sequencing, replace a
+flawed approach, split/combine/park internal cards, pair or replace workers,
+choose only materially necessary reviewers, add focused tooling, and make routine
+technical decisions without operator choice. Decisive reasoning is recorded
+briefly and revised when evidence disproves it.
+
+This ownership never permits roadmap redefinition, weaker governance or receipts,
+fabricated product/runtime evidence, hidden authority or trust expansion, live-Orb
+access outside an explicit lease, destructive treatment of uncertain work, or an
+operator-gated external action. Creative authority improves delivery; it does not
+consume operator authority.
+
 Seats are durable; sessions are replaceable. A seat name never proves a live
 agent exists. No conversation, capability, review, or audit may be fabricated.
 
@@ -158,13 +178,16 @@ Review is not ceremonial. Each requested seat receives a concrete question. A
 reviewer reports findings; it does not edit the worker branch or redefine the
 card. Remediation returns to the owning worker.
 
-A front receives at most two remediation cycles after its first reviewable
-candidate. Cycle one addresses findings mapped directly to the existing card;
-cycle two may address only regressions introduced by cycle one. A third
-independent issue set must be split into a new card, parked, or escalated. Every
-new regression test must name the original acceptance criterion, a reachable
-failure path, and the exact contract claim it protects. General fail-closed value
-alone does not expand a card.
+The two-cycle ceiling applies to new independent defect families and scope
+expansion, not to proof that an existing acceptance criterion still fails. A
+review finding mapped directly to an unsatisfied card criterion remains in the
+current cycle until that criterion passes. After two unsuccessful attempts on the
+same defect, ATLAS replaces or pairs the worker rather than escalating
+automatically. Split, park, or seek operator direction only when correction would
+expand accepted scope or change authority, policy, trust boundaries, or another
+established gate. Every new regression test must name the original acceptance
+criterion, a reachable failure path, and the exact contract claim it protects.
+General fail-closed value alone does not expand a card.
 
 A completed specialist question is not repeated unless the new diff materially
 touches that contract. No additional pre-remediation review runs against an
@@ -294,7 +317,7 @@ When a gate is reached: stop that action, preserve work, stage exact evidence,
 name the decision, present options, recommend one, state risks/consequences, and
 ask the operator. Other isolated work may continue.
 
-## ATLAS Context Reset
+## ATLAS Context Lifecycle
 
 ATLAS is a durable seat; its conversational session is disposable. A reset is
 justified only by a repository-truth contradiction, loss of a precise critical
@@ -302,10 +325,33 @@ path, context dominated by completed or superseded work, materially degraded
 clarity after compaction, a clean campaign or promotion boundary, or an operator
 request. Elapsed time and sync count alone are not reset triggers.
 
+An in-session reread and reconciliation is a **context refresh**. It improves
+hygiene but does not erase or replace conversation. A **context replacement**
+starts a genuinely fresh ATLAS root session. ATLAS must never claim replacement
+after only refreshing or summarizing. If native controls cannot create a fresh
+root manager session, ATLAS says so and may prepare only the minimum operator
+action or bounded checkpoint required; it does not simulate replacement.
+
 Truth order is operator instruction, `AGENTS.md`, completion-ledger shipped
 posture, live Git/agent/process/validation/lease/runtime evidence, Control Room
 campaign state, roadmap/architecture intent, then old conversation. Goal-
 controller labels do not define Francis build state.
+
+Continuity has four layers: the standing goal preserves mission, the completion
+ledger preserves accepted shipped posture, the Control Room preserves campaign
+organization, and live inspection preserves present-tense truth. Old conversation
+is not an authoritative continuity layer. Unpromoted commits, assignments,
+reviews, context maintenance, and running validations never move ledger posture
+or completion percentages.
+
+During a refresh, ATLAS pauses new dispatches briefly; reads `AGENTS.md`, bounded
+current ledger sections, `SESSION_BRIEF.md`, `BOARD.md`, `INTEGRATION_QUEUE.md`,
+`RUNTIME_LEASES.md`, and active cards; verifies heads, worktrees, dirty ownership,
+controllable sessions, validation exits, leases, ports, and protected runtime;
+classifies remembered claims as current, stale, superseded, incomplete, or
+unverified; discards stale assumptions; reconstructs the critical path; and
+continues useful work in the same turn. Refresh alone creates no handoff, commit,
+service action, full gate, or operator request.
 
 Before reset, ATLAS briefly stops new assignments, reconciles exact heads, dirty
 ownership, sessions, validations, leases, blockers, reviews, and gates, and
@@ -314,12 +360,22 @@ assignment, next action, and lease. Existing Control Room files are updated and
 committed only when material state already requires a normal sync. Routine
 resets do not create parallel handoffs or stop workers.
 
+An actual replacement uses existing Control Room surfaces when sufficient. Only
+exceptional recovery may add one `ATLAS-CONTEXT-REPLACEMENT-YYYYMMDD-NNN.md`
+checkpoint under `handoffs/`, below 8 KiB and limited to navigation facts. The
+checkpoint is not a source of truth and never justifies a commit by itself.
+
 A fresh ATLAS reads only `AGENTS.md`, current/latest ledger sections,
 `SESSION_BRIEF.md`, `BOARD.md`, `INTEGRATION_QUEUE.md`, `RUNTIME_LEASES.md`, and
 active task cards before verifying local/remote heads, worktrees, controllable
 sessions, validation exits, and protected runtime boundaries. It loads deeper
 history only when the next action requires it and must dispatch or resume useful
 work in the same turn.
+
+A fresh ATLAS assumes no old agent handle is controllable. It matches exact IDs
+through native controls, requests acknowledgement before depending on delivery,
+preserves unreachable worktrees, and replaces sessions through the durable-seat
+protocol. A successful send proves control-plane acceptance, not worker receipt.
 
 Reset success means the fresh seat can state shipped posture, active fronts,
 exact heads, validation state, critical path, cheapest promotion candidate,

@@ -4,7 +4,8 @@ Task ID: `CR-FORGE-001`
 
 Assigned seat: FORGE
 
-Status: `REMEDIATION_REQUIRED` at `cd9cd504` after cycle-one review
+Status: `READY_FOR_PROMOTION`; worker correction `24658090`, integration head
+`cdfc4a23`, pre-rebase full gate passed
 
 ## Objective
 
@@ -14,7 +15,7 @@ without approving, exporting, importing, or learning from tenant data.
 ## Branch And Worktree
 
 - Branch: `codex/forge-managed-copies-safe-delta`
-- Worktree: `D:\Francis-worktrees\forge-managed-copies-safe-delta`
+- Worktree: `D:\fg`
 - Transfer source base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
 - First candidate parent: `d5516a54e9b939b2ae076f3be7b338b6cd2ed762`
 - Final review base: exact committed local `main` head after Control Room sync
@@ -23,7 +24,8 @@ without approving, exporting, importing, or learning from tenant data.
 ## RUNTIME ISOLATION
 
 - Lease: `LEASE-FORGE-001` in `control_room/RUNTIME_LEASES.md`
-- `FRANCIS_DATA_DIR`: `D:\Francis-runtime-leases\forge-managed-copies-safe-delta\data`
+- `FRANCIS_DATA_DIR` for completed pre-rebase full gate:
+  `D:\Francis-runtime-leases\forge-managed-copies-safe-delta\val-028-full-gate`
 - Pytest retention: worktree-local `data\test_runs\pytest`; unique to this
   worktree and governed by `tests/conftest.py`
 - API / overlay / frontend ports: `18001` / `18781` / `15171`
@@ -148,8 +150,34 @@ and `docs/operations/control_room/reviews/MERIDIAN/CR-20260714-forge-preflight.m
 - preserve every existing trust, tenancy, authority, and no-production-action
   assumption. Changing any of those assumptions is outside this revision.
 
-No third remediation cycle is authorized. A remaining independent blocker must
-park or split the front under `CR-DEC-0011`.
+The two-cycle ceiling in `CR-DEC-0011` applies only to a new independent defect
+family or scope expansion. A review proving that this card's existing
+exact-schema criterion still fails remains in the current cycle.
+
+## Existing-Criterion Continuation
+
+Candidate `1ca30a048f07111861c07e59a8a6afc9b9b606df` passed focused tests,
+Ruff, format, mypy, and diff-check. MERIDIAN and HARBOR returned static passes.
+SENTINEL and VERA rejected promotion because Python equality permits JSON integer
+`0`/`1` to satisfy expected boolean `false`/`true` in nested governance/check
+structures, and the malformed-type regression does not discriminate that path.
+
+The operator confirmed this is not a safety exception or third independent
+remediation scope. The correction remains inside this card and is limited to
+exact nested Boolean type validation plus a discriminating regression that
+changes those Boolean fields to integer `0`/`1` while preserving surrounding
+valid structure. Only SENTINEL and VERA repeat affected-delta review unless the
+correction changes another reviewed contract.
+
+FORGE delivered correction `246580901b145a7f1f59d9c85d199ffdfdf536d8`.
+The discriminating regression and complete card-focused suite passed, as did
+changed-path Ruff, format, mypy, and diff-check. SENTINEL and VERA both passed
+the affected delta. During exact full-gate preparation, ATLAS added bounded
+test-only integration commit `cdfc4a23fe030b4e31dbf3b067c39d3e3daae1f8`
+to tolerate transient Windows status-file locks without weakening the Lens
+supervisor lifecycle assertions. HARBOR passed that exact integration delta.
+Full gate `VAL-20260714-028` passed on `cdfc4a23` with explicit exit `0`.
+Promotion remains unproven until the required post-CR-005 rebase proof.
 
 ## Worker Receipt
 
