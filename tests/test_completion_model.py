@@ -38,8 +38,8 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the first actual Stage 18 runtime gap, `stage18_copy_creation_process`; "
-            "contract-only surfaces do not satisfy it."
+            "record the first real operator-approved managed-copy request through the hash-bound "
+            "dry-run/apply route; customer identity and policy are not inferred or fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,
@@ -188,7 +188,7 @@ def test_stage17_roadmap_steering_excludes_fr017_forearm_naming_collision() -> N
     matrix = (root / "docs" / "operations" / "STAGE17_CLOSURE_MATRIX.md").read_text(encoding="utf-8")
     manifest = (root / "FR-017_Stage17_Package" / "FR-017-STAGE17-PACKAGE-MANIFEST.json").read_text(encoding="utf-8")
 
-    assert "The current goal is the first actual Stage 18 runtime gap" in ledger
+    assert "The current goal is record the first real operator-approved managed-copy request" in ledger
     assert "stage17_capability_economy_closure_afd0fa32f7d1" in ledger
     assert "The current goal is the FR-017 operator/physical evidence boundary" not in ledger
     assert "The remaining gates are the physically present" not in matrix

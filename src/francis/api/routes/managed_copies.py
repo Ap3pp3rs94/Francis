@@ -19,6 +19,7 @@ from francis.managed_copies import (
     managed_copy_completion_review_snapshot,
     managed_copy_creation_contract_snapshot,
     managed_copy_creation_request_blocked_snapshot,
+    managed_copy_creation_requests_snapshot,
     managed_copy_decommission_contract_snapshot,
     managed_copy_decommission_review_blocked_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
@@ -226,6 +227,11 @@ def copy_creation_request(payload: dict[str, Any], request: Request) -> dict[str
             next_step="configure_actor_scope_before_requesting_managed_copy_creation",
         )
     return managed_copy_creation_request_blocked_snapshot(payload, actor=actor)
+
+
+@router.get("/copy-creation-requests")
+def copy_creation_requests(limit: int = 20) -> dict[str, Any]:
+    return managed_copy_creation_requests_snapshot(limit=limit)
 
 
 @router.get("/isolation-rules-contract")

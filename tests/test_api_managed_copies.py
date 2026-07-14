@@ -32,6 +32,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "status": "/managed-copies/status",
         "copy_creation_contract": "/managed-copies/copy-creation-contract",
         "copy_creation_request": "/managed-copies/copy-creation-request",
+        "copy_creation_requests": "/managed-copies/copy-creation-requests",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "isolation_verification": "/managed-copies/isolation-verification",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
@@ -164,7 +165,7 @@ def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_r
     assert status["stage17_blocker"] == ""
     assert status["ready_count"] == 1
     assert status["deliverables"][0]["ready"] is True
-    assert status["next_smallest_truthful_gap"] == "stage18_copy_creation_process"
+    assert status["next_smallest_truthful_gap"] == "stage18_copy_creation_request_recording"
 
     contract_routes = [
         "/managed-copies/copy-creation-contract",
@@ -179,7 +180,7 @@ def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_r
         contract = client.get(route).json()
         assert contract["stage17_closed_by_receipt"] is True, route
         assert contract["stage17_blocker"] == "", route
-        assert contract["next_smallest_truthful_gap"] == "stage18_copy_creation_process", route
+        assert contract["next_smallest_truthful_gap"] == "stage18_copy_creation_request_recording", route
         assert contract["grants_execution_authority"] is False, route
         assert contract["grants_mutation_authority"] is False, route
 
@@ -213,8 +214,9 @@ def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_r
             "tenant_id": "tenant-still-not-created",
         },
     ).json()
-    assert request["status"] == "blocked_stage18_runtime_not_implemented"
-    assert request["error"] == "stage18_runtime_not_implemented"
+    assert request["status"] == "blocked_copy_request_contract"
+    assert request["error"] == "copy_request_contract_not_ready"
+    assert "tenant_identity_missing_or_invalid" in request["blockers"]
     assert request["stage17_closed_by_receipt"] is True
     assert request["stage17_blocker"] == ""
     assert request["copy_created"] is False
@@ -222,6 +224,215 @@ def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_r
     assert request["writes_tenant_state"] is False
     assert request["grants_execution_authority"] is False
     assert request["grants_mutation_authority"] is False
+
+
+def test_managed_copy_request_records_redacted_receipt_after_hash_bound_dry_run(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.copy-request-recorder"
+    raw_tenant_id = "customer-alpha-private-id"
+    raw_tenant_name = "Customer Alpha Private Name"
+    raw_admin = "customer.alpha.admin@example.test"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.copy_creation.write"]}),
+    )
+
+    from francis.economy.stage17_closure import record_stage17_operator_stage_closure_decision
+
+    criteria = [{"id": f"criterion_{index}", "status": "ready", "blockers": []} for index in range(1, 7)]
+    stage17_receipt = record_stage17_operator_stage_closure_decision(
+        actor="test.stage17.operator",
+        reason="validated Stage 17 closure fixture",
+        decision="close_stage17",
+        review={
+            "status": "ready",
+            "stage17_completion_review_ready": True,
+            "criteria_ready_count": 6,
+            "criteria_required_count": 6,
+            "closure_matrix": {
+                "kind": "plugin.capability_catalog.stage17_closure_matrix",
+                "status": "ready_for_closure_review",
+                "all_criteria_ready": True,
+                "criteria": criteria,
+                "source_readbacks": {"catalog_route": "/plugins/capabilities/catalog"},
+            },
+        },
+    )
+    payload = {
+        "request_actor": actor,
+        "tenant_id": raw_tenant_id,
+        "tenant_identity": {"tenant_name": raw_tenant_name, "tenant_admin_actor": raw_admin},
+        "tenant_policy": {
+            "core_surrender_allowed": False,
+            "privacy_weak_pooling_allowed": False,
+        },
+        "isolation_profile": {
+            "tenant_data": "isolated",
+            "tenant_memory": "isolated",
+            "tenant_receipts": "isolated",
+        },
+        "capability_lineage": {"base_pack": "francis-core", "customization_layer": "tenant"},
+        "safe_delta_policy": {"raw_private_pooling_allowed": False, "operator_review_required": True},
+        "support_boundary": {"support_access_default": "denied", "time_bound": True},
+        "decommission_policy": {"export_required": True, "proof_receipts_required": True},
+        "dry_run": True,
+    }
+    client = TestClient(create_app())
+
+    planned = client.post("/managed-copies/copy-creation-request", json=payload).json()
+
+    assert planned["ok"] is True
+    assert planned["status"] == "planned"
+    assert planned["request_contract_ready"] is True
+    assert planned["stage17_closed_by_receipt"] is True
+    assert planned["dry_run"] is True
+    assert len(planned["dry_run_fingerprint"]) == 64
+    assert len(planned["tenant_key"]) == 64
+    assert planned["blockers"] == []
+    assert planned["copy_request_recording_enabled"] is True
+    assert planned["copy_request_recorded"] is False
+    assert planned["copy_created"] is False
+    assert planned["writes_receipts"] is False
+    assert planned["writes_tenant_state"] is False
+    assert planned["grants_execution_authority"] is False
+    assert planned["grants_mutation_authority"] is False
+    assert raw_tenant_id not in json.dumps(planned)
+    assert raw_tenant_name not in json.dumps(planned)
+    assert raw_admin not in json.dumps(planned)
+
+    receipt_path = data_root / "logs" / "managed_copies" / "copy_requests.jsonl"
+    assert not receipt_path.exists()
+
+    mismatched = client.post(
+        "/managed-copies/copy-creation-request",
+        json={
+            **payload,
+            "dry_run": False,
+            "dry_run_fingerprint": "0" * 64,
+            "confirm_request_recording": True,
+        },
+    ).json()
+    assert mismatched["ok"] is False
+    assert mismatched["status"] == "blocked_dry_run_confirmation"
+    assert mismatched["error"] == "dry_run_fingerprint_mismatch"
+    assert mismatched["writes_receipts"] is False
+    assert not receipt_path.exists()
+
+    recorded = client.post(
+        "/managed-copies/copy-creation-request",
+        json={
+            **payload,
+            "dry_run": False,
+            "dry_run_fingerprint": planned["dry_run_fingerprint"],
+            "confirm_request_recording": True,
+        },
+    ).json()
+
+    assert recorded["ok"] is True
+    assert recorded["status"] == "recorded"
+    assert recorded["copy_request_recorded"] is True
+    assert recorded["copy_created"] is False
+    assert recorded["receipt_ready"] is True
+    assert recorded["receipt_id"].startswith("managed_copy_request_")
+    assert recorded["writes_receipts"] is True
+    assert recorded["writes_tenant_state"] is False
+    assert recorded["grants_execution_authority"] is False
+    assert recorded["grants_mutation_authority"] is False
+    assert recorded["receipt"]["stage17_closure_receipt_id"] == stage17_receipt["receipt_id"]
+    assert recorded["receipt"]["governance"]["dry_run_fingerprint_matched"] is True
+    assert recorded["receipt"]["governance"]["contains_raw_tenant_payload"] is False
+    assert recorded["receipt"]["governance"]["does_not_create_copy"] is True
+    assert recorded["next_smallest_truthful_gap"] == "stage18_copy_creation_preflight_process"
+
+    receipt_text = receipt_path.read_text(encoding="utf-8")
+    assert len(receipt_text.splitlines()) == 1
+    assert raw_tenant_id not in receipt_text
+    assert raw_tenant_name not in receipt_text
+    assert raw_admin not in receipt_text
+
+    readback = client.get("/managed-copies/copy-creation-requests").json()
+    assert readback["status"] == "ready"
+    assert readback["count"] == 1
+    assert readback["valid_count"] == 1
+    assert readback["latest_receipt_id"] == recorded["receipt_id"]
+    assert readback["latest_receipt_valid"] is True
+    assert readback["copy_request_recording_ready"] is True
+    assert readback["writes_receipts"] is False
+    assert readback["writes_tenant_state"] is False
+    assert readback["next_smallest_truthful_gap"] == "stage18_copy_creation_preflight_process"
+
+    duplicate = client.post(
+        "/managed-copies/copy-creation-request",
+        json={
+            **payload,
+            "dry_run": False,
+            "dry_run_fingerprint": planned["dry_run_fingerprint"],
+            "confirm_request_recording": True,
+        },
+    ).json()
+    assert duplicate["status"] == "already_recorded"
+    assert duplicate["receipt_id"] == recorded["receipt_id"]
+    assert duplicate["copy_request_recorded"] is True
+    assert duplicate["writes_receipts"] is False
+    assert len(receipt_path.read_text(encoding="utf-8").splitlines()) == 1
+
+    status = client.get("/managed-copies/status").json()
+    creation = next(item for item in status["deliverables"] if item["id"] == "copy_creation_process")
+    assert creation["ready"] is False
+    assert creation["status"] == "request_recorded"
+    assert status["copy_request_recorded"] is True
+    assert status["copy_request_receipt_id"] == recorded["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage18_copy_creation_preflight_process"
+
+    contract = client.get("/managed-copies/copy-creation-contract").json()
+    assert contract["copy_creation_enabled"] is False
+    assert contract["copy_request_recording_enabled"] is True
+    assert contract["copy_request_recorded"] is True
+    assert contract["copy_request_receipt_id"] == recorded["receipt_id"]
+    assert contract["ready_count"] == contract["required_count"]
+    step_by_id = {item["id"]: item for item in contract["process_steps"]}
+    assert step_by_id["request"]["status"] == "complete"
+    assert step_by_id["preflight"]["status"] == "enabled"
+    assert step_by_id["plan"]["status"] == "enabled"
+    assert step_by_id["provision"]["status"] == "disabled"
+    assert contract["state_machine"]["current_state"] == "requested"
+    assert contract["state_machine"]["enabled_transitions"] == ["record_request"]
+    assert not (data_root / "managed_copies").exists()
+
+    foreign_receipt = json.loads(json.dumps(recorded["receipt"]))
+    foreign_receipt["receipt_id"] = "managed_copy_request_foreign"
+    foreign_receipt["stage17_closure_receipt_id"] = "stage17_capability_economy_closure_foreign"
+    with receipt_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(foreign_receipt) + "\n")
+        handle.write(json.dumps({"receipt_id": "invalid_trailing_row"}) + "\n")
+
+    mixed_readback = client.get("/managed-copies/copy-creation-requests").json()
+    assert mixed_readback["count"] == 3
+    assert mixed_readback["valid_count"] == 2
+    assert mixed_readback["latest_receipt_valid"] is False
+    assert mixed_readback["latest_valid_receipt_id"] == "managed_copy_request_foreign"
+
+    aligned_status = client.get("/managed-copies/status").json()
+    assert aligned_status["copy_request_recorded"] is True
+    assert aligned_status["copy_request_receipt_id"] == recorded["receipt_id"]
+    assert aligned_status["copy_request_stage17_receipt_aligned"] is True
+
+    duplicate_after_foreign = client.post(
+        "/managed-copies/copy-creation-request",
+        json={
+            **payload,
+            "dry_run": False,
+            "dry_run_fingerprint": planned["dry_run_fingerprint"],
+            "confirm_request_recording": True,
+        },
+    ).json()
+    assert duplicate_after_foreign["status"] == "already_recorded"
+    assert duplicate_after_foreign["receipt_id"] == recorded["receipt_id"]
+    assert duplicate_after_foreign["writes_receipts"] is False
 
 
 def test_managed_copy_creation_request_denies_unscoped_actor_without_writing(
@@ -2472,8 +2683,9 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
     assert all(item["ready"] is False for item in body["requirements"])
 
     step_by_id = {item["id"]: item for item in body["process_steps"]}
-    assert step_by_id["preflight"]["status"] == "contract_only"
-    assert step_by_id["plan"]["status"] == "contract_only"
+    assert step_by_id["request"]["status"] == "blocked"
+    assert step_by_id["preflight"]["status"] == "blocked"
+    assert step_by_id["plan"]["status"] == "blocked"
     assert step_by_id["approve"]["status"] == "contract_only"
     assert step_by_id["provision"]["status"] == "disabled"
     assert step_by_id["provision"]["writes_tenant_state"] is True
@@ -2486,6 +2698,7 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
     assert body["state_machine"] == {
         "current_state": "not_implemented",
         "states": [
+            "request_recording_enabled",
             "requested",
             "preflight_blocked",
             "planned",
@@ -2497,6 +2710,7 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
             "decommissioned",
         ],
         "active_transitions_enabled": False,
+        "enabled_transitions": [],
     }
     assert body["required_receipts"] == [
         "copy_request_receipt",

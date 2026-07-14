@@ -60,8 +60,9 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is the first actual Stage 18 runtime gap,
-`stage18_copy_creation_process`; contract-only surfaces do not satisfy it.
+The current goal is record the first real operator-approved managed-copy request
+through the hash-bound dry-run/apply route; customer identity and policy are not
+inferred or fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -122,6 +123,54 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-14 00:08Z - Stage 18 managed-copy request recording implemented
+
+Current posture: Phase 2 and Stage 18 remain open. The first executable
+copy-creation state-machine step is now implemented: a scoped actor can dry-run
+a complete managed-copy request, receive a privacy-bounded fingerprint, and
+record one durable redacted request receipt only by replaying the same request
+with the matching fingerprint and explicit confirmation. Production readback
+reports request recording enabled but zero requests. No customer copy, tenant
+state, runtime, role authority, or execution authority has been created.
+
+Evidence:
+
+- `POST /managed-copies/copy-creation-request` checks
+  `managed_copies.copy_creation.write`, Stage 17 receipt closure, actor and
+  required request-field presence, a hash-bound dry-run fingerprint, and
+  explicit `confirm_request_recording=true` before writing.
+- Confirmed apply writes only
+  `data/logs/managed_copies/copy_requests.jsonl`; receipts contain an opaque
+  tenant key and request-field fingerprints, not the raw tenant identifier,
+  identity, policy, isolation, lineage, support, safe-delta, or decommission
+  payloads.
+- `GET /managed-copies/copy-creation-requests` validates receipt structure and
+  governance. Status and contract readbacks consume the latest valid receipt
+  bound to the current Stage 17 closure, ignoring malformed or foreign rows.
+- Duplicate confirmed requests are idempotent for the same request fingerprint
+  and Stage 17 closure receipt. A request receipt does not create tenant state,
+  launch a runtime, or satisfy the copy-creation runtime-evidence gate.
+- The entire `tests/test_api_managed_copies.py` contract file passed after the
+  implementation, including permission denial, prerequisite blocking,
+  incomplete-request blocking, fingerprint mismatch, redaction, idempotency,
+  stale-row alignment, and disabled-provisioning checks. Ruff, Ruff format,
+  mypy, and diff checks passed for the touched Stage 18 path.
+- Fresh source-loaded production GET readback returned
+  `stage18_groundwork_open`, `copy_request_recording_enabled=true`,
+  `copy_request_recorded=false`, `copy_creation_enabled=false`, zero request
+  receipts, and `next_smallest_truthful_gap=stage18_copy_creation_request_recording`.
+
+Remaining truthful gap:
+
+- A real tenant identifier plus identity, policy, isolation, capability-lineage,
+  safe-delta, support, and decommission declarations must come from the operator
+  before a production request can be dry-run and confirmed. Francis will not
+  invent those business and customer facts.
+- Request recording is only the first copy-creation step. Governed preflight,
+  approval, isolated provisioning, verification, and handoff remain disabled.
+- No canonical Stage 18 deliverable, Stage 18 completion, FR-018 clearance, or
+  physical-validation claim is made by this slice.
 
 ### 2026-07-13 23:40Z - Stage 17 Capability Economy governed closure
 
