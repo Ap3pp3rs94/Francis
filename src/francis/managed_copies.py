@@ -23,6 +23,12 @@ from francis.managed_copy_creation import (
     record_managed_copy_preflight,
     record_managed_copy_request,
 )
+from francis.managed_copy_approval import (
+    latest_managed_copy_creation_approval_for_plan,
+    managed_copy_creation_approval_request_plan,
+    managed_copy_creation_approval_requests_readback,
+    record_managed_copy_creation_approval_request,
+)
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -30,6 +36,7 @@ MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.cop
 MANAGED_COPIES_COPY_CREATION_REQUEST_KIND = "francis.stage18.managed_copies.copy_creation_request"
 MANAGED_COPIES_COPY_CREATION_PREFLIGHT_KIND = "francis.stage18.managed_copies.copy_creation_preflight"
 MANAGED_COPIES_COPY_CREATION_PLAN_KIND = "francis.stage18.managed_copies.copy_creation_plan"
+MANAGED_COPIES_COPY_CREATION_APPROVAL_REQUEST_KIND = "francis.stage18.managed_copies.copy_creation_approval_request"
 MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE = "managed_copies.copy_creation.write"
 MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
 MANAGED_COPIES_ISOLATION_VERIFICATION_KIND = "francis.stage18.managed_copies.isolation_verification"
@@ -324,6 +331,24 @@ def _managed_copy_preflight_block(stage17_closed: bool) -> tuple[str, str]:
     return ("blocked_stage17_prerequisite", "stage17_prerequisite_not_closed")
 
 
+def _copy_approval_next_gap(status: str) -> str:
+    return {
+        "pending": "stage18_copy_creation_approval_decision",
+        "approved": "stage18_copy_creation_approval_consumption",
+        "rejected": "stage18_copy_creation_plan_revision",
+        "emergency": "stage18_copy_creation_approval_emergency_review",
+    }.get(_safe_str(status).strip(), "stage18_copy_creation_approval_request")
+
+
+def _copy_approval_state(status: str) -> str:
+    return {
+        "pending": "approval_pending",
+        "approved": "approval_decided",
+        "rejected": "approval_rejected",
+        "emergency": "approval_emergency",
+    }.get(_safe_str(status).strip(), "planned")
+
+
 def _runtime_evidence_requirement(
     requirement_id: str,
     title: str,
@@ -411,6 +436,13 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     plan_preflight_receipt_aligned = bool(copy_preflight_recorded and latest_aligned_plan)
     copy_plan_recorded = plan_preflight_receipt_aligned
     copy_plan_receipt_id = _safe_str(latest_aligned_plan.get("receipt_id")).strip()
+    latest_aligned_approval = latest_managed_copy_creation_approval_for_plan(
+        copy_plan_receipt_id,
+        plan_fingerprint=_safe_str(latest_aligned_plan.get("plan_fingerprint")).strip(),
+    )
+    copy_approval_request_recorded = bool(copy_plan_recorded and latest_aligned_approval)
+    copy_approval_id = _safe_str(latest_aligned_approval.get("id")).strip()
+    copy_approval_status = _safe_str(latest_aligned_approval.get("status")).strip()
     deliverables = [
         _deliverable(
             "stage17_ledger_closure_backstop",
@@ -429,7 +461,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "Copy creation process",
             ready=False,
             status=(
-                "plan_recorded"
+                f"approval_{copy_approval_status}"
+                if copy_approval_request_recorded
+                else "plan_recorded"
                 if copy_plan_recorded
                 else "preflight_recorded"
                 if copy_preflight_recorded
@@ -438,7 +472,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
                 else "request_recording_ready"
             ),
             next_gap=(
-                "stage18_copy_creation_approval_process"
+                _copy_approval_next_gap(copy_approval_status)
+                if copy_approval_request_recorded
+                else "stage18_copy_creation_approval_request"
                 if copy_plan_recorded
                 else "stage18_copy_creation_plan_process"
                 if copy_preflight_recorded
@@ -461,6 +497,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
                     f"Managed-copy creation plan receipt: {copy_plan_receipt_id}"
                     if copy_plan_recorded
                     else "No request/preflight-aligned managed-copy creation plan receipt is recorded."
+                ),
+                (
+                    f"Managed-copy exact-action approval {copy_approval_status}: {copy_approval_id}"
+                    if copy_approval_request_recorded
+                    else "No plan-aligned managed-copy provisioning approval request is recorded."
                 ),
                 "No managed-copy tenant state or runtime has been created.",
             ],
@@ -551,6 +592,8 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "copy_creation_preflights": "/managed-copies/copy-creation-preflights",
             "copy_creation_plan": "/managed-copies/copy-creation-plan",
             "copy_creation_plans": "/managed-copies/copy-creation-plans",
+            "copy_creation_approval_request": "/managed-copies/copy-creation-approval-request",
+            "copy_creation_approval_requests": "/managed-copies/copy-creation-approval-requests",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "isolation_verification": "/managed-copies/isolation-verification",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
@@ -603,6 +646,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "copy_plan_recorded": copy_plan_recorded,
         "copy_plan_receipt_id": copy_plan_receipt_id,
         "copy_plan_preflight_receipt_aligned": plan_preflight_receipt_aligned,
+        "copy_approval_request_recording_enabled": copy_plan_recorded,
+        "copy_approval_request_recorded": copy_approval_request_recorded,
+        "copy_approval_id": copy_approval_id,
+        "copy_approval_status": copy_approval_status,
+        "copy_approval_plan_receipt_aligned": copy_approval_request_recorded,
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
         "copy_creation_enabled": governance["copy_creation_enabled"],
@@ -618,7 +666,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
         "next_smallest_truthful_gap": (
-            "stage18_copy_creation_approval_process"
+            _copy_approval_next_gap(copy_approval_status)
+            if stage17_closed and copy_approval_request_recorded
+            else "stage18_copy_creation_approval_request"
             if stage17_closed and copy_plan_recorded
             else "stage18_copy_creation_plan_process"
             if stage17_closed and copy_preflight_recorded
@@ -643,6 +693,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
     copy_request_recorded = bool(status["copy_request_recorded"])
     copy_preflight_recorded = bool(status["copy_preflight_recorded"])
     copy_plan_recorded = bool(status["copy_plan_recorded"])
+    copy_approval_request_recorded = bool(status["copy_approval_request_recorded"])
+    copy_approval_status = _safe_str(status.get("copy_approval_status")).strip()
 
     def request_field_ready(field: str) -> bool:
         return copy_request_recorded and bool(request_field_presence.get(field))
@@ -730,7 +782,14 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         _contract_step(
             "approve",
             "Require explicit tenant-admin or operator approval before any provision step",
-            status="not_implemented" if copy_plan_recorded else "contract_only",
+            status=(
+                copy_approval_status
+                if copy_approval_request_recorded
+                else "enabled"
+                if copy_plan_recorded
+                else "contract_only"
+            ),
+            writes_receipt=False,
         ),
         _contract_step(
             "provision",
@@ -774,6 +833,11 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "copy_plan_recorded": copy_plan_recorded,
         "copy_plan_receipt_id": _safe_str(status.get("copy_plan_receipt_id")).strip(),
         "copy_plan_preflight_receipt_aligned": bool(status["copy_plan_preflight_receipt_aligned"]),
+        "copy_approval_request_recording_enabled": copy_plan_recorded,
+        "copy_approval_request_recorded": copy_approval_request_recorded,
+        "copy_approval_id": _safe_str(status.get("copy_approval_id")).strip(),
+        "copy_approval_status": copy_approval_status,
+        "copy_approval_plan_receipt_aligned": bool(status["copy_approval_plan_receipt_aligned"]),
         "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
         "stage17_blocker": status["stage17_blocker"],
         "requirements": requirements,
@@ -782,7 +846,9 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "process_steps": process_steps,
         "state_machine": {
             "current_state": (
-                "planned"
+                _copy_approval_state(copy_approval_status)
+                if copy_approval_request_recorded
+                else "planned"
                 if copy_plan_recorded
                 else "preflighted"
                 if copy_preflight_recorded
@@ -798,6 +864,10 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
                 "preflight_blocked",
                 "preflighted",
                 "planned",
+                "approval_pending",
+                "approval_decided",
+                "approval_rejected",
+                "approval_emergency",
                 "approved",
                 "provisioning",
                 "verifying",
@@ -808,6 +878,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
             "active_transitions_enabled": bool(status["stage17_closed_by_receipt"]),
             "enabled_transitions": (
                 []
+                if copy_approval_request_recorded
+                else ["request_approval"]
                 if copy_plan_recorded
                 else ["create_plan"]
                 if copy_preflight_recorded
@@ -837,6 +909,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
             "copy_creation_preflights": "/managed-copies/copy-creation-preflights",
             "copy_creation_plan": "/managed-copies/copy-creation-plan",
             "copy_creation_plans": "/managed-copies/copy-creation-plans",
+            "copy_creation_approval_request": "/managed-copies/copy-creation-approval-request",
+            "copy_creation_approval_requests": "/managed-copies/copy-creation-approval-requests",
         },
         "isolation_boundaries": [
             "tenant_data",
@@ -1357,7 +1431,7 @@ def managed_copy_creation_plan_snapshot(
         if not request_receipt
         else "stage18_copy_creation_preflight_process"
         if not preflight_receipt
-        else "stage18_copy_creation_approval_process"
+        else "stage18_copy_creation_approval_request"
         if copy_plan_recorded
         else "stage18_copy_creation_plan_process"
     )
@@ -1461,6 +1535,246 @@ def managed_copy_creation_plan_snapshot(
 def managed_copy_creation_plans_snapshot(*, limit: int = 20) -> dict[str, Any]:
     """Return redacted managed-copy creation plan receipts without mutating state."""
     return managed_copy_creation_plan_receipts_readback(limit=limit)
+
+
+def managed_copy_creation_approval_request_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Plan or record an exact-action approval request without provisioning."""
+    governance = _governance()
+    status = managed_copies_status_snapshot()
+    stage17_receipt_id = _safe_str(status.get("stage17_closure_receipt_id")).strip()
+    request_receipt = latest_managed_copy_request_receipt_for_stage17(stage17_receipt_id)
+    preflight_receipt = latest_managed_copy_preflight_receipt_for_request(
+        _safe_str(request_receipt.get("receipt_id")).strip(),
+        request_fingerprint=_safe_str(request_receipt.get("request_fingerprint")).strip(),
+        stage17_receipt_id=stage17_receipt_id,
+    )
+    plan_receipt = latest_managed_copy_creation_plan_receipt_for_preflight(
+        _safe_str(preflight_receipt.get("receipt_id")).strip(),
+        preflight_fingerprint=_safe_str(preflight_receipt.get("preflight_fingerprint")).strip(),
+        request_receipt_id=_safe_str(request_receipt.get("receipt_id")).strip(),
+        request_fingerprint=_safe_str(request_receipt.get("request_fingerprint")).strip(),
+        stage17_receipt_id=stage17_receipt_id,
+    )
+    plan = managed_copy_creation_approval_request_plan(
+        payload,
+        actor=actor,
+        plan_receipt=plan_receipt,
+    )
+    dry_run_value = payload.get("dry_run", True)
+    dry_run_type_valid = isinstance(dry_run_value, bool)
+    dry_run = dry_run_value if dry_run_type_valid else True
+    if not bool(status["stage17_closed_by_receipt"]):
+        outcome: dict[str, Any] = {
+            "ok": False,
+            "status": "blocked_stage17_prerequisite",
+            "error": "stage17_prerequisite_not_closed",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    elif not request_receipt:
+        outcome = {
+            "ok": False,
+            "status": "blocked_copy_request_required",
+            "error": "copy_request_receipt_missing",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    elif not preflight_receipt:
+        outcome = {
+            "ok": False,
+            "status": "blocked_copy_preflight_required",
+            "error": "copy_preflight_receipt_missing",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    elif not plan_receipt:
+        outcome = {
+            "ok": False,
+            "status": "blocked_copy_creation_plan_required",
+            "error": "copy_creation_plan_receipt_missing",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    elif not dry_run_type_valid:
+        outcome = {
+            "ok": False,
+            "status": "blocked_copy_approval_request_contract",
+            "error": "dry_run_must_be_boolean",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    elif not plan["approval_request_contract_ready"]:
+        outcome = {
+            "ok": False,
+            "status": "blocked_copy_approval_request_contract",
+            "error": "copy_approval_request_contract_not_ready",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    elif dry_run:
+        outcome = {
+            "ok": True,
+            "status": "approval_request_ready",
+            "error": "",
+            "approval": None,
+            "approval_id": "",
+            "approval_status": "",
+            "copy_approval_request_recorded": False,
+            "writes_approval_request": False,
+            "writes_receipt": False,
+        }
+    else:
+        outcome = record_managed_copy_creation_approval_request(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("approval_action_fingerprint")).strip(),
+            confirm_approval_request=payload.get("confirm_approval_request") is True,
+        )
+
+    approval_status = _safe_str(outcome.get("approval_status")).strip()
+    approval_recorded = bool(outcome.get("copy_approval_request_recorded"))
+    writes_approval_request = bool(outcome.get("writes_approval_request"))
+    next_gap = (
+        status["stage17_blocker"]
+        if not bool(status["stage17_closed_by_receipt"])
+        else "stage18_copy_creation_request_recording"
+        if not request_receipt
+        else "stage18_copy_creation_preflight_process"
+        if not preflight_receipt
+        else "stage18_copy_creation_plan_process"
+        if not plan_receipt
+        else _copy_approval_next_gap(approval_status)
+        if approval_recorded
+        else "stage18_copy_creation_approval_request"
+    )
+    approval_id = _safe_str(outcome.get("approval_id")).strip()
+    return {
+        "ok": bool(outcome["ok"]),
+        "kind": MANAGED_COPIES_COPY_CREATION_APPROVAL_REQUEST_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": outcome["status"],
+        "error": outcome["error"],
+        "actor": _safe_str(plan["actor"]).strip(),
+        "plan_receipt_id": plan["plan_receipt_id"],
+        "plan_fingerprint": plan["plan_fingerprint"],
+        "plan_receipt_aligned": bool(plan["plan_receipt_aligned"]),
+        "exact_action": plan["exact_action"],
+        "approval_action_fingerprint": plan["approval_action_fingerprint"],
+        "blockers": plan["blockers"],
+        "dry_run": dry_run,
+        "approval_request_contract_ready": bool(plan["approval_request_contract_ready"]),
+        "dry_run_confirmation": {
+            **plan["dry_run_confirmation"],
+            "fingerprint_matched": bool(
+                not dry_run
+                and plan["approval_action_fingerprint"]
+                and _safe_str(payload.get("approval_action_fingerprint")).strip() == plan["approval_action_fingerprint"]
+            ),
+            "request_confirmed": payload.get("confirm_approval_request") is True,
+        },
+        "copy_request_recorded": bool(request_receipt),
+        "copy_preflight_recorded": bool(preflight_receipt),
+        "copy_plan_recorded": bool(plan_receipt),
+        "copy_approval_request_recording_enabled": bool(plan_receipt),
+        "copy_approval_request_recorded": approval_recorded,
+        "copy_approval_id": approval_id,
+        "copy_approval_status": approval_status,
+        "operator_approval_recorded": approval_status == "approved",
+        "operator_approval_consumed": False,
+        "copy_created": False,
+        "approval": outcome.get("approval"),
+        "writes_approval_request": writes_approval_request,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "starts_runtime": False,
+        "consumes_approval": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_approval_path": (
+            f"approvals/{approval_status}/{approval_id}.json" if approval_status and approval_id else ""
+        ),
+        "required_scope": MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+        "routes": {
+            **status["routes"],
+            "copy_creation_approval_request": "/managed-copies/copy-creation-approval-request",
+            "copy_creation_approval_requests": "/managed-copies/copy-creation-approval-requests",
+            "approval_decision": "/approvals/decision",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": dry_run,
+            "permission_scope": MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+            "permission_checked": True,
+            "exact_action_hash_bound": bool(plan["approval_action_fingerprint"]),
+            "copy_creation_plan_receipt_required": True,
+            "operator_decision_required": True,
+            "approval_request_only": True,
+            "records_pending_approval_request": writes_approval_request,
+            "contains_raw_tenant_payload": False,
+            "does_not_consume_approval": True,
+            "does_not_provision_copy": True,
+            "does_not_write_tenant_state": True,
+            "does_not_start_runtime": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "starts_runtime": False,
+            "consumes_approval": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": not writes_approval_request,
+        "projection_only": not writes_approval_request,
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def managed_copy_creation_approval_requests_snapshot(*, limit: int = 20) -> dict[str, Any]:
+    """Return managed-copy exact-action approval requests without mutating state."""
+    return managed_copy_creation_approval_requests_readback(limit=limit)
 
 
 def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:

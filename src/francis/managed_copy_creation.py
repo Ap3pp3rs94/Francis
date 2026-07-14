@@ -733,7 +733,7 @@ def managed_copy_creation_plan_receipts_readback(*, limit: int = 20) -> dict[str
         "grants_mutation_authority": False,
         "expected_receipt_path": "logs/managed_copies/copy_plans.jsonl",
         "next_smallest_truthful_gap": (
-            "stage18_copy_creation_approval_process" if valid_count else "stage18_copy_creation_plan_process"
+            "stage18_copy_creation_approval_request" if valid_count else "stage18_copy_creation_plan_process"
         ),
     }
 

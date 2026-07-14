@@ -37,6 +37,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "copy_creation_preflights": "/managed-copies/copy-creation-preflights",
         "copy_creation_plan": "/managed-copies/copy-creation-plan",
         "copy_creation_plans": "/managed-copies/copy-creation-plans",
+        "copy_creation_approval_request": "/managed-copies/copy-creation-approval-request",
+        "copy_creation_approval_requests": "/managed-copies/copy-creation-approval-requests",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "isolation_verification": "/managed-copies/isolation-verification",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
@@ -652,13 +654,19 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
 ) -> None:
     data_root = tmp_path / "francis_data"
     actor = "stage18.copy-plan-recorder"
+    decision_actor = "stage18.copy-plan-approver"
     raw_tenant_id = "customer-plan-private-id"
     raw_tenant_name = "Customer Plan Private Name"
     raw_admin = "customer.plan.admin@example.test"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv(
         "FRANCIS_API_ACTOR_SCOPES",
-        json.dumps({actor: ["managed_copies.copy_creation.write"]}),
+        json.dumps(
+            {
+                actor: ["managed_copies.copy_creation.write"],
+                decision_actor: ["approvals.decide"],
+            }
+        ),
     )
 
     from francis.economy.stage17_closure import record_stage17_operator_stage_closure_decision
@@ -819,7 +827,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert receipt_governance["operator_approval_required_before_provisioning"] is True
     assert receipt_governance["contains_raw_tenant_payload"] is False
     assert receipt_governance["does_not_provision_copy"] is True
-    assert recorded["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_process"
+    assert recorded["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_request"
 
     receipt_text = plan_path.read_text(encoding="utf-8")
     assert len(receipt_text.splitlines()) == 1
@@ -834,7 +842,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert readback["copy_plan_recording_ready"] is True
     assert readback["writes_receipts"] is False
     assert readback["writes_tenant_state"] is False
-    assert readback["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_process"
+    assert readback["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_request"
 
     status = client.get("/managed-copies/status").json()
     creation = next(item for item in status["deliverables"] if item["id"] == "copy_creation_process")
@@ -842,16 +850,16 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert status["copy_plan_recorded"] is True
     assert status["copy_plan_receipt_id"] == recorded["receipt_id"]
     assert status["copy_plan_preflight_receipt_aligned"] is True
-    assert status["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_process"
+    assert status["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_request"
 
     contract = client.get("/managed-copies/copy-creation-contract").json()
     step_by_id = {item["id"]: item for item in contract["process_steps"]}
     assert step_by_id["plan"]["status"] == "complete"
-    assert step_by_id["approve"]["status"] == "not_implemented"
+    assert step_by_id["approve"]["status"] == "enabled"
     assert contract["copy_plan_recorded"] is True
     assert contract["copy_plan_receipt_id"] == recorded["receipt_id"]
     assert contract["state_machine"]["current_state"] == "planned"
-    assert contract["state_machine"]["enabled_transitions"] == []
+    assert contract["state_machine"]["enabled_transitions"] == ["request_approval"]
 
     duplicate = client.post(
         "/managed-copies/copy-creation-plan",
@@ -885,6 +893,190 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert aligned_status["copy_plan_receipt_id"] == recorded["receipt_id"]
     assert aligned_status["copy_plan_preflight_receipt_aligned"] is True
 
+    approval_payload = {
+        "request_actor": actor,
+        "plan_receipt_id": recorded["receipt_id"],
+        "operator_note": f"do not persist {raw_tenant_name} or {raw_admin}",
+        "dry_run": True,
+    }
+    approval_plan = client.post(
+        "/managed-copies/copy-creation-approval-request",
+        json=approval_payload,
+    ).json()
+
+    assert approval_plan["ok"] is True
+    assert approval_plan["status"] == "approval_request_ready"
+    assert approval_plan["plan_receipt_id"] == recorded["receipt_id"]
+    assert approval_plan["plan_receipt_aligned"] is True
+    assert approval_plan["approval_request_contract_ready"] is True
+    assert len(approval_plan["approval_action_fingerprint"]) == 64
+    assert approval_plan["exact_action"]["requested_action"] == "managed_copies.provision_copy"
+    assert approval_plan["exact_action"]["requested_transition"] == "planned_to_provisioning"
+    assert approval_plan["exact_action"]["future_effects"] == {
+        "creates_isolated_copy_state": True,
+        "writes_tenant_state": True,
+        "writes_registry": True,
+        "writes_provisioning_receipt": True,
+        "starts_runtime": False,
+    }
+    assert approval_plan["copy_approval_request_recorded"] is False
+    assert approval_plan["writes_approval_request"] is False
+    assert approval_plan["writes_receipts"] is False
+    assert approval_plan["writes_tenant_state"] is False
+    assert approval_plan["consumes_approval"] is False
+    assert raw_tenant_id not in json.dumps(approval_plan)
+    assert raw_tenant_name not in json.dumps(approval_plan)
+    assert raw_admin not in json.dumps(approval_plan)
+
+    approvals_root = data_root / "approvals"
+    assert not approvals_root.exists()
+
+    mismatched_approval = client.post(
+        "/managed-copies/copy-creation-approval-request",
+        json={**approval_payload, "plan_receipt_id": "managed_copy_creation_plan_wrong"},
+    ).json()
+    assert mismatched_approval["ok"] is False
+    assert mismatched_approval["error"] == "copy_approval_request_contract_not_ready"
+    assert "copy_creation_plan_receipt_id_mismatch" in mismatched_approval["blockers"]
+    assert mismatched_approval["writes_approval_request"] is False
+    assert not approvals_root.exists()
+
+    wrong_approval_fingerprint = client.post(
+        "/managed-copies/copy-creation-approval-request",
+        json={
+            **approval_payload,
+            "dry_run": False,
+            "approval_action_fingerprint": "0" * 64,
+            "confirm_approval_request": True,
+        },
+    ).json()
+    assert wrong_approval_fingerprint["ok"] is False
+    assert wrong_approval_fingerprint["error"] == "copy_approval_request_fingerprint_mismatch"
+    assert wrong_approval_fingerprint["writes_approval_request"] is False
+    assert not approvals_root.exists()
+
+    approval_record = client.post(
+        "/managed-copies/copy-creation-approval-request",
+        json={
+            **approval_payload,
+            "dry_run": False,
+            "approval_action_fingerprint": approval_plan["approval_action_fingerprint"],
+            "confirm_approval_request": True,
+        },
+    ).json()
+
+    assert approval_record["ok"] is True
+    assert approval_record["status"] == "approval_pending"
+    assert approval_record["copy_approval_request_recorded"] is True
+    assert approval_record["copy_approval_status"] == "pending"
+    assert approval_record["operator_approval_recorded"] is False
+    assert approval_record["operator_approval_consumed"] is False
+    assert approval_record["writes_approval_request"] is True
+    assert approval_record["writes_receipts"] is False
+    assert approval_record["writes_tenant_state"] is False
+    assert approval_record["copy_created"] is False
+    assert approval_record["consumes_approval"] is False
+    assert approval_record["grants_execution_authority"] is False
+    assert approval_record["grants_mutation_authority"] is False
+    assert approval_record["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_decision"
+    approval_id = approval_record["copy_approval_id"]
+    pending_path = approvals_root / "pending" / f"{approval_id}.json"
+    assert pending_path.exists()
+    pending_text = pending_path.read_text(encoding="utf-8")
+    assert raw_tenant_id not in pending_text
+    assert raw_tenant_name not in pending_text
+    assert raw_admin not in pending_text
+
+    approval_readback = client.get("/managed-copies/copy-creation-approval-requests").json()
+    assert approval_readback["status"] == "ready"
+    assert approval_readback["valid_count"] == 1
+    assert approval_readback["latest_valid_approval_id"] == approval_id
+    assert approval_readback["latest_valid_approval_status"] == "pending"
+    assert approval_readback["writes_approval_requests"] is False
+    assert approval_readback["writes_tenant_state"] is False
+    assert approval_readback["consumes_approval"] is False
+    assert approval_readback["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_decision"
+
+    pending_status = client.get("/managed-copies/status").json()
+    creation = next(item for item in pending_status["deliverables"] if item["id"] == "copy_creation_process")
+    assert creation["status"] == "approval_pending"
+    assert pending_status["copy_approval_request_recorded"] is True
+    assert pending_status["copy_approval_id"] == approval_id
+    assert pending_status["copy_approval_status"] == "pending"
+    assert pending_status["copy_approval_plan_receipt_aligned"] is True
+    assert pending_status["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_decision"
+
+    pending_contract = client.get("/managed-copies/copy-creation-contract").json()
+    pending_step_by_id = {item["id"]: item for item in pending_contract["process_steps"]}
+    assert pending_step_by_id["approve"]["status"] == "pending"
+    assert pending_contract["state_machine"]["current_state"] == "approval_pending"
+    assert pending_contract["state_machine"]["enabled_transitions"] == []
+
+    duplicate_approval = client.post(
+        "/managed-copies/copy-creation-approval-request",
+        json={
+            **approval_payload,
+            "dry_run": False,
+            "approval_action_fingerprint": approval_plan["approval_action_fingerprint"],
+            "confirm_approval_request": True,
+        },
+    ).json()
+    assert duplicate_approval["status"] == "already_requested"
+    assert duplicate_approval["copy_approval_id"] == approval_id
+    assert duplicate_approval["writes_approval_request"] is False
+
+    decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": decision_actor,
+            "reason": "validated exact Stage 18 plan envelope",
+        },
+    ).json()
+    assert decision["ok"] is True
+    assert decision["status"] == "approved"
+    assert not pending_path.exists()
+    assert (approvals_root / "approved" / f"{approval_id}.json").exists()
+
+    approved_status = client.get("/managed-copies/status").json()
+    assert approved_status["copy_approval_request_recorded"] is True
+    assert approved_status["copy_approval_id"] == approval_id
+    assert approved_status["copy_approval_status"] == "approved"
+    assert approved_status["copy_creation_enabled"] is False
+    assert approved_status["writes_tenant_state"] is False
+    assert approved_status["next_smallest_truthful_gap"] == "stage18_copy_creation_approval_consumption"
+
+    approved_contract = client.get("/managed-copies/copy-creation-contract").json()
+    approved_step_by_id = {item["id"]: item for item in approved_contract["process_steps"]}
+    assert approved_step_by_id["approve"]["status"] == "approved"
+    assert approved_contract["state_machine"]["current_state"] == "approval_decided"
+    assert approved_contract["state_machine"]["enabled_transitions"] == []
+
+    invalid_approval_path = approvals_root / "pending" / "managed-copy-invalid.json"
+    invalid_approval_path.parent.mkdir(parents=True, exist_ok=True)
+    invalid_approval_path.write_text(
+        json.dumps(
+            {
+                "id": "managed-copy-invalid",
+                "ts": 9_999_999_999,
+                "action": "managed_copies.provision_copy",
+                "status": "pending",
+                "payload": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    mixed_approval_readback = client.get("/managed-copies/copy-creation-approval-requests").json()
+    assert mixed_approval_readback["count"] == 2
+    assert mixed_approval_readback["valid_count"] == 1
+    assert mixed_approval_readback["latest_approval_valid"] is False
+
+    final_status = client.get("/managed-copies/status").json()
+    assert final_status["copy_approval_id"] == approval_id
+    assert final_status["copy_approval_status"] == "approved"
+    assert not (data_root / "managed_copies").exists()
+
 
 def test_managed_copy_creation_plan_denies_unscoped_actor_without_writing(
     monkeypatch,
@@ -913,6 +1105,34 @@ def test_managed_copy_creation_plan_denies_unscoped_actor_without_writing(
     assert body["writes_receipts"] is False
     assert body["writes_tenant_state"] is False
     assert not (data_root / "logs" / "managed_copies" / "copy_plans.jsonl").exists()
+
+
+def test_managed_copy_creation_approval_request_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.delenv("FRANCIS_API_ACTOR_SCOPES", raising=False)
+
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/copy-creation-approval-request",
+            json={
+                "request_actor": "stage18.unscoped-approval-request",
+                "plan_receipt_id": "managed_copy_creation_plan_missing",
+            },
+        )
+        .json()
+    )
+
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.copy_creation.write"
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert not (data_root / "approvals").exists()
 
 
 def test_managed_copy_preflight_denies_unscoped_actor_without_writing(
@@ -3174,6 +3394,8 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
     assert body["routes"]["copy_creation_preflights"] == "/managed-copies/copy-creation-preflights"
     assert body["routes"]["copy_creation_plan"] == "/managed-copies/copy-creation-plan"
     assert body["routes"]["copy_creation_plans"] == "/managed-copies/copy-creation-plans"
+    assert body["routes"]["copy_creation_approval_request"] == ("/managed-copies/copy-creation-approval-request")
+    assert body["routes"]["copy_creation_approval_requests"] == ("/managed-copies/copy-creation-approval-requests")
 
     requirement_ids = {item["id"] for item in body["requirements"]}
     assert {
@@ -3212,6 +3434,10 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
             "preflight_blocked",
             "preflighted",
             "planned",
+            "approval_pending",
+            "approval_decided",
+            "approval_rejected",
+            "approval_emergency",
             "approved",
             "provisioning",
             "verifying",
