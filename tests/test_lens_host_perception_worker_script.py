@@ -124,6 +124,15 @@ def _run_resident_host(data_root: Path, *, run_seconds: int) -> subprocess.Compl
     )
 
 
+def test_resident_host_passes_and_restores_game_observer_runtime_config() -> None:
+    script = (_repo_root() / "scripts" / "lens-host.ps1").read_text(encoding="utf-8-sig")
+
+    assert "$GameObserverConfigPath = if ([string]::IsNullOrWhiteSpace($PreviousGameObserverConfig))" in script
+    assert "[System.IO.Path]::Combine($RepoRoot, 'config', 'runtime', 'lens', 'game-observer.json')" in script
+    assert "$env:FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH = $GameObserverConfigPath" in script
+    assert "Remove-Item Env:\\FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH -ErrorAction SilentlyContinue" in script
+
+
 def test_resident_host_consumes_approved_handoff_but_worker_blocks_before_capture_without_supervisor(
     monkeypatch,
     tmp_path: Path,

@@ -62,6 +62,14 @@ def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dic
         },
         "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.78, "margin": 0.44},
         "classification": {"source_frame_id": frame_id, "device": "cpu"},
+        "configuration": {
+            "source": "runtime_config",
+            "loaded": True,
+            "enabled": True,
+            "path": "config/runtime/lens/game-observer.json",
+            "fingerprint": f"sha256:{'a' * 64}",
+            "environment_override_count": 0,
+        },
         "model": {
             "id": "google/siglip-base-patch16-224",
             "configured": True,
@@ -235,6 +243,14 @@ def test_situation_model_accepts_authority_correlated_local_game_scene(tmp_path:
     assert readback["sources"]["game_observer"]["ready"] is True
     assert readback["sources"]["game_observer"]["target_id"] == "sand"
     assert readback["present"]["game"]["scene"]["id"] == "active_gameplay"
+    assert readback["present"]["game"]["configuration"] == {
+        "source": "runtime_config",
+        "loaded": True,
+        "enabled": True,
+        "path": "config/runtime/lens/game-observer.json",
+        "fingerprint": f"sha256:{'a' * 64}",
+        "environment_override_count": 0,
+    }
     assert readback["present"]["game"]["foreground"]["window_title_included"] is False
     assert "lens_game_observer_contract_invalid" not in readback["source_blockers"]
     assert readback["governance"]["learning_authority"] is False
@@ -246,6 +262,7 @@ def test_situation_model_projects_only_bounded_game_observation_fields(tmp_path:
     observation = _game_observation(frame_id="frame-bounded-game")
     observation["scene"]["raw_pixels"] = "must-not-persist"
     observation["classification"]["frame_bytes"] = "must-not-persist"
+    observation["configuration"]["absolute_model_path"] = "must-not-persist"
     observation["model"]["access_token"] = "must-not-persist"
 
     readback = write_lens_situation_model_heartbeat(
@@ -265,6 +282,32 @@ def test_situation_model_projects_only_bounded_game_observation_fields(tmp_path:
     assert "must-not-persist" not in projected
     assert "raw_pixels" not in projected
     assert "frame_bytes" not in projected
+    assert "absolute_model_path" not in projected
+
+
+def test_situation_model_rejects_absolute_game_observer_configuration_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-overbroad-config")
+    observation["configuration"]["path"] = r"C:\private\game-observer.json"
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-overbroad-config", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    assert readback["game_scene_ready"] is False
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
 
 
 def test_situation_model_projects_bounded_game_teaching_review_without_operator_notes(

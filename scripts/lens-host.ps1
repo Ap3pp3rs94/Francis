@@ -458,12 +458,20 @@ function Update-PerceptionWorkerState {
   $PreviousRootExists = Test-Path Env:\FRANCIS_ROOT
   $PreviousDataExists = Test-Path Env:\FRANCIS_DATA_DIR
   $PreviousPythonPathExists = Test-Path Env:\PYTHONPATH
+  $PreviousGameObserverConfigExists = Test-Path Env:\FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH
   $PreviousRoot = [string]$env:FRANCIS_ROOT
   $PreviousData = [string]$env:FRANCIS_DATA_DIR
   $PreviousPythonPath = [string]$env:PYTHONPATH
+  $PreviousGameObserverConfig = [string]$env:FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH
+  $GameObserverConfigPath = if ([string]::IsNullOrWhiteSpace($PreviousGameObserverConfig)) {
+    [System.IO.Path]::Combine($RepoRoot, 'config', 'runtime', 'lens', 'game-observer.json')
+  } else {
+    $PreviousGameObserverConfig
+  }
   try {
     $env:FRANCIS_ROOT = $RepoRoot
     $env:FRANCIS_DATA_DIR = $DataRoot
+    $env:FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH = $GameObserverConfigPath
     $SourceRoot = Join-Path $RepoRoot 'src'
     $PythonPathEntries = @($SourceRoot)
     $SitePackagesPath = Get-PythonSitePackagesPath
@@ -507,6 +515,7 @@ function Update-PerceptionWorkerState {
     if ($PreviousRootExists) { $env:FRANCIS_ROOT = $PreviousRoot } else { Remove-Item Env:\FRANCIS_ROOT -ErrorAction SilentlyContinue }
     if ($PreviousDataExists) { $env:FRANCIS_DATA_DIR = $PreviousData } else { Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue }
     if ($PreviousPythonPathExists) { $env:PYTHONPATH = $PreviousPythonPath } else { Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue }
+    if ($PreviousGameObserverConfigExists) { $env:FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH = $PreviousGameObserverConfig } else { Remove-Item Env:\FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH -ErrorAction SilentlyContinue }
   }
 }
 

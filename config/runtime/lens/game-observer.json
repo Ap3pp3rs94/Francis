@@ -1,0 +1,44 @@
+{
+  "kind": "lens.game_observer.runtime_config",
+  "version": 1,
+  "enabled": true,
+  "target": {
+    "id": "sand",
+    "process_names": [
+      "Sand.exe",
+      "Sand_BE.exe",
+      "Sand-Win64-Shipping.exe"
+    ]
+  },
+  "model": {
+    "id": "google/siglip-base-patch16-224",
+    "data_relative_path": "models/google--siglip-base-patch16-224",
+    "remote_inference": false
+  },
+  "scenes": {
+    "active_gameplay": "an active video game gameplay scene",
+    "game_menu": "a video game menu or setup screen",
+    "loading": "a video game loading or transition screen",
+    "paused": "a paused video game screen with an overlay menu",
+    "other_application": "a computer desktop or another application instead of a game"
+  },
+  "thresholds": {
+    "min_confidence": 0.35,
+    "min_margin": 0.05,
+    "inference_interval_seconds": 2.0,
+    "max_classification_age_seconds": 6.0
+  },
+  "governance": {
+    "observation_only": true,
+    "local_inference_only": true,
+    "remote_frame_transfer": false,
+    "raw_pixels_in_observer_state": false,
+    "window_titles_captured": false,
+    "keyboard_content_captured": false,
+    "user_mouse_captured": false,
+    "input_execution_authority": false,
+    "memory_write": false,
+    "learning_authority": false,
+    "reward_authority": false
+  }
+}

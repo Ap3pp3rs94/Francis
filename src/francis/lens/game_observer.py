@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import math
 import os
@@ -13,11 +14,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from francis.kernel.paths import data_dir, repo_root
 from francis.lens.perception_capture import DesktopFrame
 
 LENS_GAME_OBSERVATION_KIND = "lens.game.observation"
 LENS_GAME_OBSERVATION_VERSION = 1
+LENS_GAME_OBSERVER_CONFIG_KIND = "lens.game_observer.runtime_config"
+LENS_GAME_OBSERVER_CONFIG_VERSION = 1
 
+_CONFIG_PATH_ENV = "FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH"
 _TARGET_PROCESSES_ENV = "FRANCIS_LENS_GAME_TARGET_PROCESSES"
 _TARGET_ID_ENV = "FRANCIS_LENS_GAME_TARGET_ID"
 _MODEL_PATH_ENV = "FRANCIS_LENS_GAME_OBSERVER_MODEL_PATH"
@@ -27,6 +32,41 @@ _MIN_CONFIDENCE_ENV = "FRANCIS_LENS_GAME_OBSERVER_MIN_CONFIDENCE"
 _MIN_MARGIN_ENV = "FRANCIS_LENS_GAME_OBSERVER_MIN_MARGIN"
 _INFERENCE_INTERVAL_ENV = "FRANCIS_LENS_GAME_OBSERVER_INTERVAL_SECONDS"
 _MAX_CLASSIFICATION_AGE_ENV = "FRANCIS_LENS_GAME_OBSERVER_MAX_AGE_SECONDS"
+
+_CONFIG_MAX_BYTES = 64 * 1024
+_CONFIGURATION_SOURCES = frozenset(
+    {
+        "unconfigured",
+        "environment",
+        "runtime_config",
+        "runtime_config_with_environment_overrides",
+        "invalid",
+    }
+)
+_ENVIRONMENT_OVERRIDE_NAMES = (
+    _TARGET_PROCESSES_ENV,
+    _TARGET_ID_ENV,
+    _MODEL_PATH_ENV,
+    _MODEL_ID_ENV,
+    _SCENES_ENV,
+    _MIN_CONFIDENCE_ENV,
+    _MIN_MARGIN_ENV,
+    _INFERENCE_INTERVAL_ENV,
+    _MAX_CLASSIFICATION_AGE_ENV,
+)
+_EXPECTED_RUNTIME_GOVERNANCE = {
+    "observation_only": True,
+    "local_inference_only": True,
+    "remote_frame_transfer": False,
+    "raw_pixels_in_observer_state": False,
+    "window_titles_captured": False,
+    "keyboard_content_captured": False,
+    "user_mouse_captured": False,
+    "input_execution_authority": False,
+    "memory_write": False,
+    "learning_authority": False,
+    "reward_authority": False,
+}
 
 _PROCESS_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_. -]{1,128}\.exe$", re.IGNORECASE)
 _TARGET_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
@@ -56,6 +96,7 @@ _DEFAULT_SCENES = (
 
 @dataclass(frozen=True, slots=True)
 class LensGameObserverConfig:
+    enabled: bool = True
     target_id: str = ""
     target_processes: tuple[str, ...] = ()
     model_path: Path | None = None
@@ -65,8 +106,14 @@ class LensGameObserverConfig:
     min_margin: float = 0.05
     inference_interval_seconds: float = 2.0
     max_classification_age_seconds: float = 6.0
+    configuration_source: str = "unconfigured"
+    configuration_path_label: str = ""
+    configuration_fingerprint: str = ""
+    environment_override_count: int = 0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError("lens_game_observer_enabled_invalid")
         if self.target_id and not _TARGET_ID_PATTERN.fullmatch(self.target_id):
             raise ValueError("lens_game_observer_target_id_invalid")
         if any(not _PROCESS_NAME_PATTERN.fullmatch(process_name) for process_name in self.target_processes):
@@ -88,39 +135,73 @@ class LensGameObserverConfig:
             or not self.inference_interval_seconds <= self.max_classification_age_seconds <= 60.0
         ):
             raise ValueError("lens_game_observer_max_age_invalid")
+        if self.configuration_source not in _CONFIGURATION_SOURCES:
+            raise ValueError("lens_game_observer_configuration_source_invalid")
+        if self.configuration_fingerprint and not re.fullmatch(r"sha256:[0-9a-f]{64}", self.configuration_fingerprint):
+            raise ValueError("lens_game_observer_configuration_fingerprint_invalid")
+        if not 0 <= self.environment_override_count <= len(_ENVIRONMENT_OVERRIDE_NAMES):
+            raise ValueError("lens_game_observer_environment_override_count_invalid")
 
     @property
     def target_configured(self) -> bool:
-        return bool(self.target_id and self.target_processes)
+        return bool(self.enabled and self.target_id and self.target_processes)
 
     @property
     def model_configured(self) -> bool:
-        return self.model_path is not None and bool(self.model_id)
+        return self.enabled and self.model_path is not None and bool(self.model_id)
 
     @classmethod
     def from_environment(cls) -> LensGameObserverConfig:
-        target_processes = tuple(
-            dict.fromkeys(
-                process_name.strip()
-                for process_name in os.environ.get(_TARGET_PROCESSES_ENV, "").split(",")
-                if process_name.strip()
-            )
-        )
+        runtime_config = _runtime_config_from_environment()
+        override_count = sum(1 for name in _ENVIRONMENT_OVERRIDE_NAMES if os.environ.get(name, "").strip())
+        target_processes = tuple(runtime_config.get("target_processes") or ())
+        raw_target_processes = os.environ.get(_TARGET_PROCESSES_ENV, "").strip()
+        if raw_target_processes:
+            target_processes = _process_names_from_csv(raw_target_processes)
+        target_id = str(runtime_config.get("target_id") or "")
         raw_target_id = os.environ.get(_TARGET_ID_ENV, "").strip().casefold()
-        target_id = raw_target_id or (_derived_target_id(target_processes[0]) if target_processes else "")
+        if raw_target_id:
+            target_id = raw_target_id
+        elif not target_id and target_processes:
+            target_id = _derived_target_id(target_processes[0])
+        model_path = runtime_config.get("model_path")
         raw_model_path = os.environ.get(_MODEL_PATH_ENV, "").strip()
-        model_path = Path(raw_model_path).expanduser() if raw_model_path else None
-        model_id = os.environ.get(_MODEL_ID_ENV, "").strip() or (model_path.name if model_path is not None else "")
+        if raw_model_path:
+            model_path = Path(raw_model_path).expanduser()
+        model_id = str(runtime_config.get("model_id") or "")
+        raw_model_id = os.environ.get(_MODEL_ID_ENV, "").strip()
+        if raw_model_id:
+            model_id = raw_model_id
+        elif not model_id and isinstance(model_path, Path):
+            model_id = model_path.name
+        scenes = tuple(runtime_config.get("scenes") or _DEFAULT_SCENES)
+        if os.environ.get(_SCENES_ENV, "").strip():
+            scenes = _scenes_from_environment()
+        if runtime_config:
+            configuration_source = "runtime_config_with_environment_overrides" if override_count else "runtime_config"
+        else:
+            configuration_source = "environment" if override_count else "unconfigured"
         return cls(
+            enabled=bool(runtime_config.get("enabled", True)),
             target_id=target_id,
             target_processes=target_processes,
             model_path=model_path,
             model_id=model_id,
-            scenes=_scenes_from_environment(),
-            min_confidence=_environment_float(_MIN_CONFIDENCE_ENV, 0.35),
-            min_margin=_environment_float(_MIN_MARGIN_ENV, 0.05),
-            inference_interval_seconds=_environment_float(_INFERENCE_INTERVAL_ENV, 2.0),
-            max_classification_age_seconds=_environment_float(_MAX_CLASSIFICATION_AGE_ENV, 6.0),
+            scenes=scenes,
+            min_confidence=_environment_float(_MIN_CONFIDENCE_ENV, float(runtime_config.get("min_confidence", 0.35))),
+            min_margin=_environment_float(_MIN_MARGIN_ENV, float(runtime_config.get("min_margin", 0.05))),
+            inference_interval_seconds=_environment_float(
+                _INFERENCE_INTERVAL_ENV,
+                float(runtime_config.get("inference_interval_seconds", 2.0)),
+            ),
+            max_classification_age_seconds=_environment_float(
+                _MAX_CLASSIFICATION_AGE_ENV,
+                float(runtime_config.get("max_classification_age_seconds", 6.0)),
+            ),
+            configuration_source=configuration_source,
+            configuration_path_label=str(runtime_config.get("configuration_path_label") or ""),
+            configuration_fingerprint=str(runtime_config.get("configuration_fingerprint") or ""),
+            environment_override_count=override_count,
         )
 
 
@@ -262,8 +343,8 @@ class LensGameObserver:
     def from_environment(cls) -> LensGameObserver:
         try:
             config = LensGameObserverConfig.from_environment()
-        except (TypeError, ValueError, json.JSONDecodeError):
-            config = LensGameObserverConfig()
+        except (OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError):
+            config = LensGameObserverConfig(enabled=False, configuration_source="invalid")
             observer = cls(config)
             observer._last_classification = {"error": "lens_game_observer_configuration_invalid"}
             return observer
@@ -433,6 +514,14 @@ class LensGameObserver:
             },
             "scene": {},
             "classification": {},
+            "configuration": {
+                "source": self.config.configuration_source,
+                "loaded": bool(self.config.configuration_fingerprint),
+                "enabled": self.config.enabled,
+                "path": self.config.configuration_path_label,
+                "fingerprint": self.config.configuration_fingerprint,
+                "environment_override_count": self.config.environment_override_count,
+            },
             "model": {
                 "id": self.config.model_id,
                 "configured": self.config.model_configured,
@@ -557,6 +646,154 @@ def _score_items(value: Any) -> list[dict[str, Any]]:
         if _SCENE_ID_PATTERN.fullmatch(scene_id) and score is not None and 0.0 <= score <= 1.0:
             items.append({"scene_id": scene_id, "score": score})
     return items
+
+
+def _runtime_config_from_environment() -> dict[str, Any]:
+    raw_path = os.environ.get(_CONFIG_PATH_ENV, "").strip()
+    if not raw_path:
+        return {}
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        raise ValueError("lens_game_observer_config_path_must_be_absolute")
+    try:
+        resolved_path = path.resolve(strict=True)
+        raw_payload = resolved_path.read_bytes()
+    except OSError as exc:
+        raise ValueError("lens_game_observer_runtime_config_unreadable") from exc
+    if len(raw_payload) > _CONFIG_MAX_BYTES:
+        raise ValueError("lens_game_observer_runtime_config_too_large")
+    try:
+        payload = json.loads(raw_payload.decode("utf-8-sig"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("lens_game_observer_runtime_config_invalid") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("lens_game_observer_runtime_config_invalid")
+    _require_exact_keys(
+        payload,
+        {"kind", "version", "enabled", "target", "model", "scenes", "thresholds", "governance"},
+        "lens_game_observer_runtime_config_invalid",
+    )
+    if payload.get("kind") != LENS_GAME_OBSERVER_CONFIG_KIND:
+        raise ValueError("lens_game_observer_runtime_config_kind_invalid")
+    version = payload.get("version")
+    if isinstance(version, bool) or version != LENS_GAME_OBSERVER_CONFIG_VERSION:
+        raise ValueError("lens_game_observer_runtime_config_version_invalid")
+    enabled = payload.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("lens_game_observer_enabled_invalid")
+
+    target = _required_json_object(payload.get("target"), "lens_game_observer_target_invalid")
+    _require_exact_keys(target, {"id", "process_names"}, "lens_game_observer_target_invalid")
+    target_id = _required_config_string(target.get("id"), "lens_game_observer_target_id_invalid").casefold()
+    raw_processes = target.get("process_names")
+    if (
+        not isinstance(raw_processes, list)
+        or not raw_processes
+        or any(not isinstance(item, str) or not item.strip() for item in raw_processes)
+    ):
+        raise ValueError("lens_game_observer_target_process_invalid")
+    target_processes = tuple(dict.fromkeys(item.strip() for item in raw_processes))
+
+    model = _required_json_object(payload.get("model"), "lens_game_observer_model_invalid")
+    _require_exact_keys(
+        model,
+        {"id", "data_relative_path", "remote_inference"},
+        "lens_game_observer_model_invalid",
+    )
+    if model.get("remote_inference") is not False:
+        raise ValueError("lens_game_observer_remote_inference_forbidden")
+    model_id = _required_config_string(model.get("id"), "lens_game_observer_model_id_invalid")
+    model_path = _data_relative_model_path(model.get("data_relative_path"))
+
+    raw_scenes = _required_json_object(payload.get("scenes"), "lens_game_observer_scenes_invalid")
+    if any(not isinstance(scene_id, str) or not isinstance(prompt, str) for scene_id, prompt in raw_scenes.items()):
+        raise ValueError("lens_game_observer_scenes_invalid")
+    scenes = tuple(GameSceneDefinition(scene_id, prompt) for scene_id, prompt in raw_scenes.items())
+
+    thresholds = _required_json_object(payload.get("thresholds"), "lens_game_observer_thresholds_invalid")
+    _require_exact_keys(
+        thresholds,
+        {
+            "min_confidence",
+            "min_margin",
+            "inference_interval_seconds",
+            "max_classification_age_seconds",
+        },
+        "lens_game_observer_thresholds_invalid",
+    )
+
+    governance = _required_json_object(payload.get("governance"), "lens_game_observer_governance_invalid")
+    if governance != _EXPECTED_RUNTIME_GOVERNANCE:
+        raise ValueError("lens_game_observer_governance_invalid")
+
+    return {
+        "enabled": enabled,
+        "target_id": target_id,
+        "target_processes": target_processes,
+        "model_path": model_path,
+        "model_id": model_id,
+        "scenes": scenes,
+        "min_confidence": _config_float(thresholds.get("min_confidence")),
+        "min_margin": _config_float(thresholds.get("min_margin")),
+        "inference_interval_seconds": _config_float(thresholds.get("inference_interval_seconds")),
+        "max_classification_age_seconds": _config_float(thresholds.get("max_classification_age_seconds")),
+        "configuration_path_label": _configuration_path_label(resolved_path),
+        "configuration_fingerprint": f"sha256:{hashlib.sha256(raw_payload).hexdigest()}",
+    }
+
+
+def _required_json_object(value: Any, error_code: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(error_code)
+    return value
+
+
+def _require_exact_keys(value: dict[str, Any], keys: set[str], error_code: str) -> None:
+    if set(value) != keys:
+        raise ValueError(error_code)
+
+
+def _required_config_string(value: Any, error_code: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(error_code)
+    return value.strip()
+
+
+def _config_float(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ValueError("lens_game_observer_thresholds_invalid")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("lens_game_observer_thresholds_invalid") from exc
+    if not math.isfinite(parsed):
+        raise ValueError("lens_game_observer_thresholds_invalid")
+    return parsed
+
+
+def _data_relative_model_path(value: Any) -> Path:
+    raw_path = _required_config_string(value, "lens_game_observer_model_path_invalid")
+    relative_path = Path(raw_path)
+    if relative_path.is_absolute() or relative_path.drive or ".." in relative_path.parts:
+        raise ValueError("lens_game_observer_model_path_outside_data")
+    data_root = data_dir().resolve()
+    resolved_path = (data_root / relative_path).resolve()
+    try:
+        resolved_path.relative_to(data_root)
+    except ValueError as exc:
+        raise ValueError("lens_game_observer_model_path_outside_data") from exc
+    return resolved_path
+
+
+def _configuration_path_label(path: Path) -> str:
+    try:
+        return path.relative_to(repo_root().resolve()).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _process_names_from_csv(value: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(process_name.strip() for process_name in value.split(",") if process_name.strip()))
 
 
 def _scenes_from_environment() -> tuple[GameSceneDefinition, ...]:

@@ -338,6 +338,7 @@ def _safe_int(value: Any) -> int:
 def _game_observation_contract_valid(game_state: dict[str, Any], *, frame_id: str, receipt_id: str) -> bool:
     if not game_state:
         return False
+    configuration = _as_dict(game_state.get("configuration"))
     governance = _as_dict(game_state.get("governance"))
     runtime_identity = _as_dict(game_state.get("runtime_identity"))
     return bool(
@@ -345,6 +346,7 @@ def _game_observation_contract_valid(game_state: dict[str, Any], *, frame_id: st
         and game_state.get("version") == 1
         and str(game_state.get("source_frame_id") or "") == frame_id
         and str(runtime_identity.get("authority_receipt_id") or "") == receipt_id
+        and _game_observer_configuration_contract_valid(configuration)
         and governance.get("observation_only") is True
         and governance.get("local_inference_only") is True
         and all(
@@ -369,6 +371,7 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
     foreground = _as_dict(game_state.get("foreground"))
     scene = _as_dict(game_state.get("scene"))
     classification = _as_dict(game_state.get("classification"))
+    configuration = _as_dict(game_state.get("configuration"))
     model = _as_dict(game_state.get("model"))
     teaching_session = _as_dict(game_state.get("teaching_session"))
     teaching_review = _as_dict(game_state.get("teaching_review"))
@@ -427,6 +430,18 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
             if classification
             else {}
         ),
+        "configuration": (
+            {
+                "source": str(configuration.get("source") or ""),
+                "loaded": configuration.get("loaded") is True,
+                "enabled": configuration.get("enabled") is True,
+                "path": str(configuration.get("path") or ""),
+                "fingerprint": str(configuration.get("fingerprint") or ""),
+                "environment_override_count": _safe_int(configuration.get("environment_override_count")),
+            }
+            if configuration
+            else {}
+        ),
         "model": {
             "id": str(model.get("id") or ""),
             "configured": model.get("configured") is True,
@@ -450,6 +465,50 @@ def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
             else {}
         ),
     }
+
+
+def _game_observer_configuration_contract_valid(configuration: dict[str, Any]) -> bool:
+    if not configuration:
+        return True
+    source = str(configuration.get("source") or "")
+    path = str(configuration.get("path") or "")
+    fingerprint = str(configuration.get("fingerprint") or "")
+    loaded = configuration.get("loaded")
+    enabled = configuration.get("enabled")
+    override_count = configuration.get("environment_override_count")
+    runtime_config_source = source in {"runtime_config", "runtime_config_with_environment_overrides"}
+    path_parts = Path(path).parts if path else ()
+    return bool(
+        source
+        in {
+            "unconfigured",
+            "environment",
+            "runtime_config",
+            "runtime_config_with_environment_overrides",
+            "invalid",
+        }
+        and isinstance(loaded, bool)
+        and isinstance(enabled, bool)
+        and isinstance(override_count, int)
+        and not isinstance(override_count, bool)
+        and 0 <= override_count <= 9
+        and (
+            not path
+            or (len(path) <= 256 and not Path(path).is_absolute() and ".." not in path_parts and ":" not in path)
+        )
+        and (not fingerprint or _sha256_fingerprint_valid(fingerprint))
+        and loaded is bool(fingerprint)
+        and (not runtime_config_source or (loaded and bool(path)))
+        and (runtime_config_source or (not path and not fingerprint))
+    )
+
+
+def _sha256_fingerprint_valid(value: str) -> bool:
+    prefix = "sha256:"
+    digest = value.removeprefix(prefix)
+    return (
+        value.startswith(prefix) and len(digest) == 64 and all(character in "0123456789abcdef" for character in digest)
+    )
 
 
 def _game_teaching_session_contract_valid(teaching: dict[str, Any], *, target_id: str) -> bool:
