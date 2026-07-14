@@ -27,16 +27,27 @@ function Get-DataRoot {
 }
 
 function Read-JsonFile {
-  param([string]$Path)
+  param(
+    [string]$Path,
+    [int]$MaxAttempts = 20,
+    [int]$DelayMilliseconds = 50
+  )
 
-  try {
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)) {
-      return $null
+  for ($Attempt = 0; $Attempt -lt $MaxAttempts; $Attempt += 1) {
+    try {
+      if (-not (Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)) {
+        return $null
+      }
+      return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      if ($Attempt -ge ($MaxAttempts - 1)) {
+        return $null
+      }
+      Start-Sleep -Milliseconds $DelayMilliseconds
     }
-    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-  } catch {
-    return $null
   }
+
+  return $null
 }
 
 function Write-JsonFile {

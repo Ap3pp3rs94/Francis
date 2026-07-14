@@ -732,6 +732,7 @@ def test_lens_host_supervisor_starts_and_stops_live_resident_lease(tmp_path: Pat
     stop_payload = json.loads(stopped.stdout)
     assert stop_payload["status"] == "resident_supervision_stopped"
     assert stop_payload["ok"] is True
+    assert stop_payload["supervisor_pid"] == payload["supervisor_pid"]
     assert stop_payload["resident_host_process"] is False
     assert stop_payload["resident_supervised_runtime"] is False
     assert stop_payload["supervisor_process_alive"] is False
@@ -744,4 +745,5 @@ def test_lens_host_supervisor_starts_and_stops_live_resident_lease(tmp_path: Pat
         (data_dir / "runtime" / "lens-host-supervisor" / "status.json").read_text(encoding="utf-8-sig")
     )
     assert stopped_supervisor_state["status"] == "resident_supervision_stopped"
+    assert stopped_supervisor_state["supervisor_pid"] == payload["supervisor_pid"]
     assert stopped_supervisor_state["resident_supervised_runtime"] is False
