@@ -752,6 +752,7 @@ def _valid_review_receipt(
         and isinstance(item.get("recorded_ts"), int)
         and not isinstance(item.get("recorded_ts"), bool)
         and int(item["recorded_ts"]) > 0
+        and all(isinstance(governance.get(field), bool) for field in _GOVERNANCE)
         and governance == _GOVERNANCE
         and (not copy_id or _safe_text(item.get("copy_id")) == copy_id)
         and (not tenant_key or _safe_text(item.get("tenant_key")) == tenant_key)
@@ -768,7 +769,10 @@ def _valid_checks(value: Any, *, expected: list[dict[str, Any]]) -> bool:
     if not isinstance(value, list) or len(value) != len(expected):
         return False
     return all(
-        isinstance(item, dict) and set(item) == set(_CHECK_FIELDS) and item == expected_item
+        isinstance(item, dict)
+        and set(item) == set(_CHECK_FIELDS)
+        and isinstance(item.get("ready"), bool)
+        and item == expected_item
         for item, expected_item in zip(value, expected, strict=True)
     )
 

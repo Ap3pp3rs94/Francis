@@ -4028,6 +4028,48 @@ def test_managed_copy_safe_delta_readback_rejects_unknown_governance_schema_with
     assert raw_marker not in json.dumps(readback)
 
 
+def test_managed_copy_safe_delta_readback_rejects_integer_nested_boolean_types(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-nested-boolean-types",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
+    baseline = _safe_delta_receipt_test_readback(plan)
+    mutations = (
+        ("governance", "exact_candidate_schema_enforced", 1),
+        ("governance", "raw_candidate_payload_stored", 0),
+        ("candidate_checks", "ready", 1),
+        ("tenant_policy_checks", "ready", 1),
+    )
+
+    assert baseline["status"] == "operator_approval_required"
+    assert baseline["valid_count"] == 1
+    for section, field, integer_value in mutations:
+        receipt = json.loads(json.dumps(recorded["receipt"]))
+        nested = receipt[section] if section == "governance" else receipt[section][0]
+        expected_boolean = nested[field]
+        assert isinstance(expected_boolean, bool)
+        nested[field] = integer_value
+        assert nested[field] == expected_boolean
+        assert not isinstance(nested[field], bool)
+        assert set(receipt) == set(recorded["receipt"])
+        assert receipt["candidate"] == recorded["receipt"]["candidate"]
+        receipt["receipt_fingerprint"] = managed_copy_safe_delta._receipt_fingerprint(receipt)
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+        readback = _safe_delta_receipt_test_readback(plan)
+
+        assert readback["status"] == "receipt_validation_failed"
+        assert readback["valid_count"] == 0
+        assert readback["invalid_receipt_count"] == 1
+        assert readback["latest_valid_receipt"] == {}
+
+
 def test_managed_copy_safe_delta_readback_rejects_malformed_candidate_json_type(
     monkeypatch,
     tmp_path,
