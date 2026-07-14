@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from francis.governance.redaction import redact_secret_text
-from francis.kernel.paths import data_dir
-from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
+from francis.managed_copy_isolation import (
+    latest_managed_copy_isolation_verification_for_provision,
+    managed_copy_isolation_guarded_subpath,
+)
 from francis.managed_copy_provisioning import managed_copy_provision_for_copy
 from francis.telemetry.audit import record as audit_record
 
@@ -166,22 +168,32 @@ def managed_copy_safe_delta_review_plan(
         if not blockers
         else ""
     )
+    existing_path = (
+        _guarded_review_receipt_path(
+            provision_receipt,
+            isolation_receipt,
+            review_fingerprint,
+            require_live=True,
+        )
+        if review_fingerprint
+        else None
+    )
     existing_present, existing_receipt = (
-        _read_review_receipt_candidate(_review_receipt_path(review_directory, review_fingerprint))
-        if review_fingerprint and review_directory is not None
-        else (False, {})
+        _read_review_receipt_candidate(existing_path) if existing_path is not None else (False, {})
     )
     existing_matches = bool(
         existing_present
         and review_directory is not None
+        and existing_path is not None
         and _valid_review_receipt(
             existing_receipt,
-            path=_review_receipt_path(review_directory, review_fingerprint),
+            path=existing_path,
             review_directory=review_directory,
             copy_id=copy_id,
             tenant_key=tenant_key,
             provisioning_receipt_id=provisioning_receipt_id,
             isolation_receipt_id=isolation_receipt_id,
+            review_fingerprint=review_fingerprint,
         )
         and _safe_text(existing_receipt.get("review_fingerprint")) == review_fingerprint
     )
@@ -301,7 +313,14 @@ def record_managed_copy_safe_delta_review(
     )
     if review_directory is None:
         return _blocked("blocked_safe_delta_review_path_boundary", "safe_delta_review_path_boundary_invalid")
-    receipt_path = _review_receipt_path(review_directory, expected_fingerprint)
+    receipt_path = _guarded_review_receipt_path(
+        provision_receipt,
+        isolation_receipt,
+        expected_fingerprint,
+        require_live=True,
+    )
+    if receipt_path is None:
+        return _blocked("blocked_safe_delta_review_path_boundary", "safe_delta_review_path_boundary_invalid")
     with _REVIEW_LOCK:
         existing_result = _existing_review_receipt_result(
             receipt_path,
@@ -350,6 +369,7 @@ def record_managed_copy_safe_delta_review(
             tenant_key=tenant_key,
             provisioning_receipt_id=provisioning_receipt_id,
             isolation_receipt_id=isolation_receipt_id,
+            review_fingerprint=expected_fingerprint,
         ):
             return _blocked("failed_safe_delta_review_receipt", "safe_delta_review_receipt_invalid")
         try:
@@ -439,6 +459,17 @@ def managed_copy_safe_delta_review_receipts_readback(
         else []
     )
     for path in paths:
+        guarded_path = managed_copy_isolation_guarded_subpath(
+            provision,
+            isolation,
+            domain="tenant_receipts",
+            relative_parts=("sd", path.name),
+            require_live=False,
+        )
+        if guarded_path != path:
+            candidate_count += 1
+            invalid_receipt_count += 1
+            continue
         present, item = _read_review_receipt_candidate(path)
         if not present:
             continue
@@ -451,6 +482,7 @@ def managed_copy_safe_delta_review_receipts_readback(
             tenant_key=expected_tenant_key,
             provisioning_receipt_id=expected_provisioning_receipt_id,
             isolation_receipt_id=expected_isolation_receipt_id,
+            review_fingerprint=expected_review_fingerprint,
         ):
             valid_candidates.append((item, path))
         else:
@@ -662,6 +694,7 @@ def _valid_review_receipt(
     tenant_key: str = "",
     provisioning_receipt_id: str = "",
     isolation_receipt_id: str = "",
+    review_fingerprint: str = "",
 ) -> bool:
     governance = _mapping(item.get("governance"))
     candidate = _mapping(item.get("candidate"))
@@ -686,13 +719,7 @@ def _valid_review_receipt(
     path_valid = path is None and review_directory is None
     if path is not None and review_directory is not None:
         expected_path = _review_receipt_path(review_directory, stored_review_fingerprint)
-        path_valid = bool(
-            path == expected_path
-            and path.parent == review_directory
-            and not (_path_is_link_like(path) if path.exists() else False)
-            and not (_path_is_link_like(review_directory) if review_directory.exists() else False)
-            and (_resolved_within(path, review_directory) if path.exists() else True)
-        )
+        path_valid = bool(path == expected_path and path.parent == review_directory)
     return (
         set(item) == set(_RECEIPT_FIELDS)
         and item.get("ok") is True
@@ -718,6 +745,7 @@ def _valid_review_receipt(
         and _valid_checks(tenant_policy_checks, expected=expected_tenant_policy_checks)
         and _is_sha256(item.get("review_fingerprint"))
         and stored_review_fingerprint == expected_fingerprint
+        and (not review_fingerprint or stored_review_fingerprint == review_fingerprint)
         and item.get("safe_delta_approved") is False
         and item.get("safe_delta_exported") is False
         and item.get("learning_written") is False
@@ -860,32 +888,6 @@ def _source_lineage_matches(
     )
 
 
-def _guarded_tenant_root(
-    provision_receipt: dict[str, Any],
-    isolation_receipt: dict[str, Any],
-    *,
-    require_live: bool,
-) -> Path | None:
-    copy_id = _safe_text(provision_receipt.get("copy_id"))
-    tenant_key = _safe_text(provision_receipt.get("tenant_key"))
-    provisioning_receipt_id = _safe_text(provision_receipt.get("receipt_id"))
-    isolation_receipt_id = _safe_text(isolation_receipt.get("receipt_id"))
-    if not _source_lineage_matches(
-        provision_receipt,
-        isolation_receipt,
-        copy_id=copy_id,
-        tenant_key=tenant_key,
-        provisioning_receipt_id=provisioning_receipt_id,
-        isolation_receipt_id=isolation_receipt_id,
-        require_live=require_live,
-    ):
-        return None
-    tenant_root = data_dir() / Path(_safe_text(provision_receipt.get("state_root")))
-    if not tenant_root.is_dir() or _path_is_link_like(tenant_root) or not _resolved_within(tenant_root, data_dir()):
-        return None
-    return tenant_root
-
-
 def _guarded_review_directory(
     provision_receipt: dict[str, Any],
     isolation_receipt: dict[str, Any],
@@ -893,56 +895,34 @@ def _guarded_review_directory(
     create: bool,
     require_live: bool = True,
 ) -> Path | None:
-    tenant_root = _guarded_tenant_root(
+    return managed_copy_isolation_guarded_subpath(
         provision_receipt,
         isolation_receipt,
+        domain="tenant_receipts",
+        relative_parts=("sd",),
+        create_leaf_directory=create,
         require_live=require_live,
     )
-    if tenant_root is None:
-        return None
-    receipts_directory = tenant_root / "receipts"
-    if (
-        not receipts_directory.is_dir()
-        or _path_is_link_like(receipts_directory)
-        or not _resolved_within(receipts_directory, tenant_root)
-    ):
-        return None
-    review_directory = receipts_directory / "sd"
-    if _path_is_link_like(review_directory):
-        return None
-    if create and not review_directory.exists():
-        try:
-            review_directory.mkdir()
-        except FileExistsError:
-            pass
-        except OSError:
-            return None
-    if _path_is_link_like(review_directory):
-        return None
-    if review_directory.exists() and (
-        not review_directory.is_dir()
-        or _path_is_link_like(review_directory)
-        or not _resolved_within(review_directory, receipts_directory)
-    ):
-        return None
-    return review_directory
+
+
+def _guarded_review_receipt_path(
+    provision_receipt: dict[str, Any],
+    isolation_receipt: dict[str, Any],
+    review_fingerprint: str,
+    *,
+    require_live: bool,
+) -> Path | None:
+    return managed_copy_isolation_guarded_subpath(
+        provision_receipt,
+        isolation_receipt,
+        domain="tenant_receipts",
+        relative_parts=("sd", f"{review_fingerprint[:16]}.json"),
+        require_live=require_live,
+    )
 
 
 def _review_receipt_path(review_directory: Path, review_fingerprint: str) -> Path:
     return review_directory / f"{review_fingerprint[:16]}.json"
-
-
-def _resolved_within(path: Path, root: Path) -> bool:
-    try:
-        path.resolve(strict=True).relative_to(root.resolve(strict=True))
-    except (OSError, ValueError):
-        return False
-    return True
-
-
-def _path_is_link_like(path: Path) -> bool:
-    is_junction = getattr(path, "is_junction", None)
-    return path.is_symlink() or bool(is_junction and is_junction())
 
 
 def _read_review_receipt_candidate(path: Path) -> tuple[bool, dict[str, Any]]:

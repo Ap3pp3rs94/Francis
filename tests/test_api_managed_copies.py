@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 import francis.managed_copy_safe_delta as managed_copy_safe_delta
@@ -3693,11 +3696,16 @@ def _safe_delta_receipt_test_path(
     )
 
 
-def _safe_delta_receipt_test_readback(plan: dict[str, Any]) -> dict[str, Any]:
+def _safe_delta_receipt_test_readback(
+    plan: dict[str, Any],
+    *,
+    review_fingerprint: str = "",
+) -> dict[str, Any]:
     return managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback(
         copy_id=str(plan["copy_id"]),
         provisioning_receipt_id=str(plan["provisioning_receipt_id"]),
         isolation_verification_receipt_id=str(plan["isolation_verification_receipt_id"]),
+        review_fingerprint=review_fingerprint,
     )
 
 
@@ -3750,7 +3758,24 @@ def test_managed_copy_safe_delta_full_fingerprint_prefix_collision_fails_closed(
         }
         return collision_path
 
+    def colliding_guarded_receipt_path(
+        provision_receipt: dict[str, Any],
+        isolation_receipt: dict[str, Any],
+        review_fingerprint: str,
+        *,
+        require_live: bool,
+    ) -> Path:
+        assert provision_receipt == source_state["provision"]
+        assert isolation_receipt == source_state["isolation"]
+        assert require_live is True
+        return colliding_receipt_path(collision_path.parent, review_fingerprint)
+
     monkeypatch.setattr(managed_copy_safe_delta, "_review_receipt_path", colliding_receipt_path)
+    monkeypatch.setattr(
+        managed_copy_safe_delta,
+        "_guarded_review_receipt_path",
+        colliding_guarded_receipt_path,
+    )
     first_result = _record_safe_delta_receipt(first_plan)
     original_receipt = collision_path.read_text(encoding="utf-8")
 
@@ -3762,6 +3787,35 @@ def test_managed_copy_safe_delta_full_fingerprint_prefix_collision_fails_closed(
     assert collision_result["error"] == "safe_delta_review_receipt_conflict"
     assert collision_result["writes_receipt"] is False
     assert collision_path.read_text(encoding="utf-8") == original_receipt
+
+
+def test_managed_copy_safe_delta_readback_rejects_same_prefix_full_fingerprint_collision(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-readback-collision",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    stored_fingerprint = str(plan["review_fingerprint"])
+    replacement = "0" if stored_fingerprint[16] != "0" else "1"
+    colliding_fingerprint = f"{stored_fingerprint[:16]}{replacement}{stored_fingerprint[17:]}"
+    assert colliding_fingerprint != stored_fingerprint
+    assert colliding_fingerprint[:16] == stored_fingerprint[:16]
+
+    readback = _safe_delta_receipt_test_readback(
+        plan,
+        review_fingerprint=colliding_fingerprint,
+    )
+
+    assert recorded["ok"] is True
+    assert readback["status"] == "receipt_validation_failed"
+    assert readback["count"] == 1
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 1
+    assert readback["latest_valid_receipt"] == {}
 
 
 def test_managed_copy_safe_delta_readback_redacts_invalid_latest_candidate(
@@ -3924,7 +3978,7 @@ def test_managed_copy_safe_delta_readback_recomputes_candidate_checks(
     assert "contains_raw_private_data" not in json.dumps(readback)
 
 
-def test_managed_copy_safe_delta_readback_rejects_unknown_schema_without_echoing(
+def test_managed_copy_safe_delta_readback_rejects_unknown_receipt_schema_without_echoing(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -3936,10 +3990,60 @@ def test_managed_copy_safe_delta_readback_rejects_unknown_schema_without_echoing
     recorded = _record_safe_delta_receipt(plan)
     receipt_path = _safe_delta_receipt_test_path(source_state, plan)
     receipt = dict(recorded["receipt"])
-    raw_marker = "private-schema-marker"
+    raw_marker = "private-receipt-schema-marker"
     receipt["raw_customer_data"] = raw_marker
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    readback = _safe_delta_receipt_test_readback(plan)
+
+    assert readback["status"] == "receipt_validation_failed"
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 1
+    assert raw_marker not in json.dumps(readback)
+
+
+def test_managed_copy_safe_delta_readback_rejects_unknown_governance_schema_without_echoing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-governance-schema",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
+    receipt = dict(recorded["receipt"])
+    raw_marker = "private-governance-schema-marker"
     receipt["governance"] = dict(receipt["governance"])
     receipt["governance"]["raw_governance_data"] = raw_marker
+    receipt["receipt_fingerprint"] = managed_copy_safe_delta._receipt_fingerprint(receipt)
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    readback = _safe_delta_receipt_test_readback(plan)
+
+    assert readback["status"] == "receipt_validation_failed"
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 1
+    assert raw_marker not in json.dumps(readback)
+
+
+def test_managed_copy_safe_delta_readback_rejects_malformed_candidate_json_type(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch,
+        tmp_path.parent / "sd-candidate-type",
+    )
+    plan = _safe_delta_receipt_test_plan(source_state)
+    recorded = _record_safe_delta_receipt(plan)
+    receipt_path = _safe_delta_receipt_test_path(source_state, plan)
+    receipt = dict(recorded["receipt"])
+    raw_marker = "private-malformed-candidate-marker"
+    receipt["candidate"] = [raw_marker]
+    receipt["candidate_fingerprint"] = managed_copy_safe_delta._fingerprint(receipt["candidate"])
+    receipt["receipt_fingerprint"] = managed_copy_safe_delta._receipt_fingerprint(receipt)
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
     readback = _safe_delta_receipt_test_readback(plan)
@@ -4052,32 +4156,73 @@ def test_managed_copy_safe_delta_readback_scopes_invalidity_to_requested_lineage
     assert unrelated_marker not in json.dumps(readback)
 
 
-def test_managed_copy_safe_delta_rejects_link_like_review_directory(
+def test_managed_copy_safe_delta_production_source_loaded_readback_is_empty(
     monkeypatch,
     tmp_path,
 ) -> None:
-    source_state, _ = _configure_safe_delta_receipt_test_sources(
-        monkeypatch,
-        tmp_path.parent / "sd-link-boundary",
+    data_root = tmp_path / "source-loaded-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    readback = managed_copy_safe_delta.managed_copy_safe_delta_review_receipts_readback(
+        copy_id="managed_copy_source_loaded_empty",
+        provisioning_receipt_id="managed_copy_provision_source_loaded_empty",
+        isolation_verification_receipt_id="managed_copy_isolation_source_loaded_empty",
     )
+
+    assert readback["status"] == "source_drift_detected"
+    assert readback["count"] == 0
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 0
+    assert readback["items"] == []
+    assert readback["latest_valid_receipt"] == {}
+    assert not data_root.exists()
+
+
+def _create_directory_redirect_or_skip(link: Path, target: Path) -> str:
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError as symlink_error:
+        if os.name != "nt":
+            pytest.skip(f"directory symlink unavailable: {symlink_error}")
+        junction = subprocess.run(
+            ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if junction.returncode != 0:
+            pytest.skip(
+                "directory symlink and Windows junction unavailable: "
+                f"symlink={symlink_error}; junction_exit={junction.returncode}"
+            )
+        return "junction"
+    return "symlink"
+
+
+def test_managed_copy_safe_delta_rejects_real_review_directory_redirect(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path.parent / "sd-real-link-boundary"
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, data_root)
     plan = _safe_delta_receipt_test_plan(source_state)
-    original_link_check = managed_copy_safe_delta._path_is_link_like
+    review_directory = _safe_delta_receipt_test_path(source_state, plan).parent
+    redirect_target = tmp_path.parent / "sd-real-link-target"
+    redirect_target.mkdir()
+    link_kind = _create_directory_redirect_or_skip(review_directory, redirect_target)
+    try:
+        result = _record_safe_delta_receipt(plan)
 
-    def link_like_review_directory(path: Path) -> bool:
-        return path.name == "sd" or original_link_check(path)
-
-    monkeypatch.setattr(managed_copy_safe_delta, "_path_is_link_like", link_like_review_directory)
-
-    result = _record_safe_delta_receipt(plan)
-
-    assert result["ok"] is False
-    assert result["status"] == "blocked_safe_delta_review_path_boundary"
-    assert result["error"] == "safe_delta_review_path_boundary_invalid"
-    assert result["writes_receipt"] is False
-    review_directory = (
-        tmp_path.parent / "sd-link-boundary" / "managed_copies" / "tenants" / ("a" * 64) / "receipts" / "sd"
-    )
-    assert list(review_directory.glob("*.json")) == []
+        assert result["ok"] is False
+        assert result["status"] == "blocked_safe_delta_review_path_boundary"
+        assert result["error"] == "safe_delta_review_path_boundary_invalid"
+        assert result["writes_receipt"] is False
+        assert list(redirect_target.glob("*.json")) == []
+    finally:
+        if link_kind == "symlink":
+            review_directory.unlink(missing_ok=True)
+        elif review_directory.exists():
+            review_directory.rmdir()
 
 
 def test_managed_copy_safe_delta_model_contract_denies_raw_pooling_and_exports(

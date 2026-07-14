@@ -354,6 +354,88 @@ def latest_managed_copy_isolation_verification_for_provision(
     return _with_live_alignment(item, provision_receipt=provision_receipt)
 
 
+def managed_copy_isolation_guarded_subpath(
+    provision_receipt: dict[str, Any],
+    isolation_receipt: dict[str, Any],
+    *,
+    domain: str,
+    relative_parts: tuple[str, ...] = (),
+    create_leaf_directory: bool = False,
+    require_live: bool = True,
+) -> Path | None:
+    """Return a contained, non-linked tenant subpath owned by structural isolation."""
+    relative_name = _ISOLATION_LAYOUT.get(domain)
+    tenant_key = _safe_text(provision_receipt.get("tenant_key"))
+    copy_id = _safe_text(provision_receipt.get("copy_id"))
+    provisioning_receipt_id = _safe_text(provision_receipt.get("receipt_id"))
+    expected_state_root = f"managed_copies/tenants/{tenant_key}" if _is_sha256(tenant_key) else ""
+    if (
+        relative_name is None
+        or not expected_state_root
+        or _safe_text(provision_receipt.get("state_root")) != expected_state_root
+        or _safe_text(isolation_receipt.get("copy_id")) != copy_id
+        or _safe_text(isolation_receipt.get("tenant_key")) != tenant_key
+        or _safe_text(isolation_receipt.get("provisioning_receipt_id")) != provisioning_receipt_id
+        or _safe_text(isolation_receipt.get("state_root")) != expected_state_root
+        or (require_live and isolation_receipt.get("live_state_aligned") is not True)
+        or (create_leaf_directory and not relative_parts)
+        or any(
+            not isinstance(part, str)
+            or not part
+            or part in {".", ".."}
+            or "/" in part
+            or "\\" in part
+            or Path(part).is_absolute()
+            or Path(part).name != part
+            for part in relative_parts
+        )
+    ):
+        return None
+
+    tenant_roots_path = _tenant_roots_path()
+    tenant_root = _tenant_root(tenant_key)
+    domain_path = tenant_root / relative_name
+    if (
+        not tenant_roots_path.is_dir()
+        or _is_link_like(tenant_roots_path)
+        or not _resolved_within(tenant_roots_path, data_dir())
+        or not tenant_root.is_dir()
+        or _is_link_like(tenant_root)
+        or not _resolved_within(tenant_root, tenant_roots_path)
+        or not domain_path.is_dir()
+        or _is_link_like(domain_path)
+        or not _resolved_within(domain_path, tenant_root)
+    ):
+        return None
+
+    guarded_path = domain_path
+    for index, part in enumerate(relative_parts):
+        guarded_path = guarded_path / part
+        leaf = index == len(relative_parts) - 1
+        if _is_link_like(guarded_path):
+            return None
+        if not guarded_path.exists():
+            if create_leaf_directory and leaf:
+                try:
+                    guarded_path.mkdir()
+                except FileExistsError:
+                    pass
+                except OSError:
+                    return None
+            elif leaf:
+                return guarded_path
+            else:
+                return None
+        if (
+            _is_link_like(guarded_path)
+            or not _resolved_within(guarded_path, domain_path)
+            or (not leaf and not guarded_path.is_dir())
+            or (create_leaf_directory and leaf and not guarded_path.is_dir())
+        ):
+            return None
+    return guarded_path
+
+
 def _live_structural_checks(
     provision_receipt: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
