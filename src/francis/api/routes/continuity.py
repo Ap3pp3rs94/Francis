@@ -316,22 +316,28 @@ def presence() -> dict[str, object]:
 @router.get("/presence/unreal-selection")
 @router.get("/grounded-presence/unreal-selection")
 def presence_unreal_selection() -> dict[str, object]:
-    return unreal_presence_selection_readback()
+    return _safe_unreal_presence_selection_readback(route="continuity.presence_unreal_selection")
 
 
 @router.get("/presence/unreal-runtime")
 @router.get("/grounded-presence/unreal-runtime")
 def presence_unreal_runtime() -> dict[str, object]:
-    selection = unreal_presence_selection_readback()
-    return unreal_presence_runtime_readback(selection=selection)
+    selection = _safe_unreal_presence_selection_readback(route="continuity.presence_unreal_runtime.selection")
+    return _safe_unreal_presence_runtime_readback(
+        selection=selection,
+        route="continuity.presence_unreal_runtime",
+    )
 
 
 @router.get("/presence/contracts")
 @router.get("/grounded-presence/contracts")
 def presence_contracts() -> dict[str, object]:
-    selection = unreal_presence_selection_readback()
+    selection = _safe_unreal_presence_selection_readback(route="continuity.presence_contracts.selection")
     selection_confirmed = bool(selection.get("valid"))
-    runtime = unreal_presence_runtime_readback(selection=selection)
+    runtime = _safe_unreal_presence_runtime_readback(
+        selection=selection,
+        route="continuity.presence_contracts.runtime",
+    )
     runtime_observed = bool(runtime.get("observed"))
     return {
         "ok": True,
@@ -405,3 +411,65 @@ def presence_contracts() -> dict[str, object]:
             "grants_approval_authority": False,
         },
     }
+
+
+def _safe_unreal_presence_selection_readback(*, route: str) -> dict[str, object]:
+    try:
+        return unreal_presence_selection_readback()
+    except Exception as exc:
+        return {
+            "kind": "francis.grounded_presence.unreal_selection_readback",
+            "schema_version": UNREAL_PRESENCE_SELECTION_SCHEMA_VERSION,
+            "schema_path": "schemas/grounded_presence_unreal_selection.schema.json",
+            "status": "selection_readback_unavailable",
+            "configured": False,
+            "valid": False,
+            "selection_path": "",
+            "manifest_sha256": "",
+            "selection_id": "",
+            "project_selection_status": "operator_confirmation_required",
+            "technology_selection_status": "operator_confirmation_required",
+            "error": api_error_message(exc, route=route),
+            "validation": {
+                "ok": False,
+                "reasons": ["selection_readback_unavailable"],
+            },
+        }
+
+
+def _safe_unreal_presence_runtime_readback(
+    *,
+    selection: dict[str, object],
+    route: str,
+) -> dict[str, object]:
+    try:
+        return unreal_presence_runtime_readback(selection=selection)
+    except Exception as exc:
+        return {
+            "kind": "francis.grounded_presence.unreal_runtime_readback",
+            "schema_version": UNREAL_PRESENCE_RUNTIME_STATUS_SCHEMA_VERSION,
+            "schema_path": "schemas/grounded_presence_unreal_runtime_status.schema.json",
+            "status": "runtime_readback_unavailable",
+            "observed": False,
+            "fresh": False,
+            "process_alive": False,
+            "status_path": "",
+            "status_digest": "",
+            "age_seconds": None,
+            "runtime": {},
+            "error": api_error_message(exc, route=route),
+            "validation": {
+                "ok": False,
+                "reasons": ["runtime_readback_unavailable"],
+            },
+            "authority": {
+                "francis_core_authoritative": True,
+                "grants_execution_authority": False,
+                "grants_desktop_authority": False,
+                "grants_network_authority": False,
+                "grants_memory_write_authority": False,
+                "grants_approval_authority": False,
+            },
+            "stores_presence_payload": False,
+            "grants_execution_authority": False,
+        }

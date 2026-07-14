@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 
 def test_continuity_presence_route_composes_grounded_readbacks(monkeypatch) -> None:
     from francis.api.routes import continuity
@@ -101,6 +103,48 @@ def test_continuity_presence_routes_are_declared_on_router() -> None:
     assert "/grounded-presence/unreal-selection" in paths
     assert "/presence/unreal-runtime" in paths
     assert "/grounded-presence/unreal-runtime" in paths
+
+
+def test_continuity_unreal_selection_route_sanitizes_readback_exception(monkeypatch) -> None:
+    from francis.api.routes import continuity
+
+    def fail_selection() -> dict[str, object]:
+        raise RuntimeError("selection traceback token=selection-secret")
+
+    monkeypatch.setattr(continuity, "unreal_presence_selection_readback", fail_selection)
+
+    body = continuity.presence_unreal_selection()
+    serialized = json.dumps(body, sort_keys=True)
+
+    assert body["status"] == "selection_readback_unavailable"
+    assert body["error"] == "internal_api_error"
+    assert body["valid"] is False
+    assert "selection-secret" not in serialized
+    assert "traceback" not in serialized.lower()
+
+
+def test_continuity_unreal_runtime_route_sanitizes_readback_exception(monkeypatch) -> None:
+    from francis.api.routes import continuity
+
+    monkeypatch.setattr(
+        continuity,
+        "unreal_presence_selection_readback",
+        lambda: {"valid": True, "status": "operator_selection_confirmed"},
+    )
+
+    def fail_runtime(*, selection) -> dict[str, object]:
+        raise RuntimeError("runtime traceback token=runtime-secret")
+
+    monkeypatch.setattr(continuity, "unreal_presence_runtime_readback", fail_runtime)
+
+    body = continuity.presence_unreal_runtime()
+    serialized = json.dumps(body, sort_keys=True)
+
+    assert body["status"] == "runtime_readback_unavailable"
+    assert body["error"] == "internal_api_error"
+    assert body["observed"] is False
+    assert "runtime-secret" not in serialized
+    assert "traceback" not in serialized.lower()
 
 
 def test_continuity_presence_contract_status_keeps_runtime_and_authority_closed(monkeypatch) -> None:

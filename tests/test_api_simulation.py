@@ -134,6 +134,30 @@ def test_simulation_virtual_workfield_redacts_workload_and_denies_bad_inputs(
     assert not (tmp_path / "francis_data").exists()
 
 
+def test_simulation_virtual_workfield_sanitizes_internal_budget_exception(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client = _client(monkeypatch, tmp_path, actor_scopes={"simulation.reader": ["simulation:virtual-workfield:read"]})
+
+    def fail_budget(**_kwargs):
+        raise ValueError("budget traceback token=simulation-secret")
+
+    monkeypatch.setattr(simulation_route, "VirtualWorkfieldBudget", fail_budget)
+
+    body = client.get(
+        "/simulation/virtual-workfield",
+        params={"actor": "simulation.reader"},
+    ).json()
+    serialized = json.dumps(body, sort_keys=True)
+
+    assert body["ok"] is False
+    assert body["error"] == "malformed_request"
+    assert body["denial_reason"] == "invalid_virtual_workfield_budget"
+    assert "simulation-secret" not in serialized
+    assert "traceback" not in serialized.lower()
+
+
 def test_simulation_virtual_workfield_route_has_no_execution_or_persistence_authority() -> None:
     source = inspect.getsource(simulation_route)
 

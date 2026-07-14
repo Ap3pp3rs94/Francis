@@ -5,7 +5,13 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from francis.compute_substrate import VirtualWorkfieldBudget, create_virtual_workfield_plan
+from francis.compute_substrate import (
+    MAX_VIRTUAL_WORKFIELD_NODES,
+    MAX_VIRTUAL_WORKFIELD_RUNTIME_MS,
+    MAX_VIRTUAL_WORKFIELD_UNITS,
+    VirtualWorkfieldBudget,
+    create_virtual_workfield_plan,
+)
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 
 router = APIRouter()
@@ -78,8 +84,16 @@ def virtual_workfield(
             workload=workload,
             budget=budget,
         ).to_dict()
-    except ValueError as exc:
-        return _malformed_request(_safe_text(str(exc), limit=120) or "invalid_virtual_workfield_budget")
+    except ValueError:
+        return _malformed_request(
+            _budget_denial_reason(
+                work_units=work_units,
+                virtual_node_count=virtual_node_count,
+                max_runtime_ms=max_runtime_ms,
+                max_memory_mb=max_memory_mb,
+                cpu_weight=cpu_weight,
+            )
+        )
 
     return {
         "ok": True,
@@ -154,6 +168,27 @@ def _malformed_request(reason: str) -> dict[str, Any]:
             },
         ),
     }
+
+
+def _budget_denial_reason(
+    *,
+    work_units: int,
+    virtual_node_count: int,
+    max_runtime_ms: int,
+    max_memory_mb: int,
+    cpu_weight: int,
+) -> str:
+    if not 1 <= work_units <= MAX_VIRTUAL_WORKFIELD_UNITS:
+        return "work_units_out_of_range"
+    if not 1 <= virtual_node_count <= MAX_VIRTUAL_WORKFIELD_NODES:
+        return "virtual_node_count_out_of_range"
+    if not 1 <= max_runtime_ms <= MAX_VIRTUAL_WORKFIELD_RUNTIME_MS:
+        return "max_runtime_ms_out_of_range"
+    if not 1 <= max_memory_mb <= 1024:
+        return "max_memory_mb_out_of_range"
+    if not 1 <= cpu_weight <= 100:
+        return "cpu_weight_out_of_range"
+    return "invalid_virtual_workfield_budget"
 
 
 def _route_governance(*, extra: dict[str, Any] | None = None) -> dict[str, Any]:
