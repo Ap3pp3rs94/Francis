@@ -85,7 +85,18 @@ param(
   [int]$RunSeconds = 0,
 
   [ValidateRange(1, 60)]
-  [int]$OrbMovePlaceTimeoutSeconds = 12
+  [int]$OrbMovePlaceTimeoutSeconds = 12,
+
+  [switch]$EnableRuntimeRecovery,
+
+  [ValidateRange(0, 10)]
+  [int]$RuntimeRecoveryMaxRestarts = 3,
+
+  [ValidateRange(5, 3600)]
+  [int]$RuntimeRecoveryWindowSeconds = 60,
+
+  [ValidateRange(1, 60)]
+  [int]$RuntimeRecoveryBackoffSeconds = 2
 )
 
 Set-StrictMode -Version 2
@@ -1736,6 +1747,188 @@ function Get-OverlayRuntimePidFromFile {
   } catch {
     return 0
   }
+}
+
+function Get-OverlayRuntimeRecoveryRoot {
+  param([string]$Root)
+
+  return (Join-Path $Root 'runtime\lens-overlay')
+}
+
+function Get-OverlayRuntimeRecoveryPidPath {
+  param([string]$Root)
+
+  return (Join-Path (Get-OverlayRuntimeRecoveryRoot -Root $Root) 'runtime-recovery-supervisor.pid')
+}
+
+function Get-OverlayRuntimeRecoveryStopRequestPath {
+  param([string]$Root)
+
+  return (Join-Path (Get-OverlayRuntimeRecoveryRoot -Root $Root) 'runtime-recovery-stop-request.json')
+}
+
+function Get-OverlayRuntimeRecoveryManifestPath {
+  param([string]$Root)
+
+  return (Join-Path (Get-OverlayRuntimeRecoveryRoot -Root $Root) 'runtime-recovery-manifest.json')
+}
+
+function Get-OverlayRuntimeRecoveryPid {
+  param([string]$Root)
+
+  $Path = Get-OverlayRuntimeRecoveryPidPath -Root $Root
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return 0
+  }
+  try {
+    return [int]((Get-Content -LiteralPath $Path -Raw -ErrorAction Stop).Trim())
+  } catch {
+    return 0
+  }
+}
+
+function Test-OverlayRuntimeRecoverySupervisorProcess {
+  param([int]$ProcessId)
+
+  if ($ProcessId -le 0 -or -not (Get-ProcessAlive -ProcessId $ProcessId)) {
+    return $false
+  }
+  if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+    return $false
+  }
+  try {
+    $Process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  if ($null -eq $Process) {
+    return $false
+  }
+  $CommandLine = [string]$Process.CommandLine
+  return (
+    $CommandLine -like '*lens-overlay-runtime-supervisor.ps1*' -and
+    $CommandLine -like '*-Mode Run*'
+  )
+}
+
+function Stop-OverlayRuntimeRecoverySupervisorProcess {
+  param([int]$ProcessId)
+
+  if (Test-OverlayRuntimeRecoverySupervisorProcess -ProcessId $ProcessId) {
+    Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+    return $true
+  }
+  return $false
+}
+
+function Get-OverlayRuntimeRecoveryReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Get-OverlayRuntimeRecoveryRoot -Root $Root
+  $StatusPath = Join-Path $RuntimeRoot 'runtime-recovery-status.json'
+  $PidPath = Get-OverlayRuntimeRecoveryPidPath -Root $Root
+  $State = Read-JsonFile -Path $StatusPath
+  $SupervisorPid = Get-OverlayRuntimeRecoveryPid -Root $Root
+  $SupervisorAlive = Test-OverlayRuntimeRecoverySupervisorProcess -ProcessId $SupervisorPid
+  $ChildPid = Get-IntegerProperty -Payload $State -Name 'child_pid' -Default 0
+  $RecoveryGovernance = Get-OverlayPropertyValue -Payload $State -Name 'governance'
+  $OperatorAuthorizationRecorded = Get-BoolProperty -Payload $RecoveryGovernance -Name 'operator_authorized' -Default $false
+  $ProcessSupervisionAuthorityRecorded = Get-BoolProperty -Payload $RecoveryGovernance -Name 'process_supervision_authority' -Default $false
+  $ProcessRestartAuthorityRecorded = Get-BoolProperty -Payload $RecoveryGovernance -Name 'process_restart_authority' -Default $false
+  return [ordered]@{
+    kind = 'lens.overlay.runtime_recovery_readback'
+    status = Get-StringProperty -Payload $State -Name 'status' -Default 'disabled_or_stopped'
+    enabled = $SupervisorAlive
+    lease_active = $SupervisorAlive
+    state_exists = $null -ne $State
+    supervisor_pid = $SupervisorPid
+    supervisor_process_alive = $SupervisorAlive
+    child_pid = $ChildPid
+    child_process_alive = Test-OverlayRuntimeProcess -ProcessId $ChildPid
+    restart_count = Get-IntegerProperty -Payload $State -Name 'restart_count' -Default 0
+    restart_count_in_window = Get-IntegerProperty -Payload $State -Name 'restart_count_in_window' -Default 0
+    max_restarts = Get-IntegerProperty -Payload $State -Name 'max_restarts' -Default 0
+    restart_window_seconds = Get-IntegerProperty -Payload $State -Name 'restart_window_seconds' -Default 0
+    latest_receipt_path = Get-StringProperty -Payload $State -Name 'latest_receipt_path' -Default ''
+    authority_source = Get-StringProperty -Payload $RecoveryGovernance -Name 'authority_source' -Default ''
+    operator_authorization_recorded = $OperatorAuthorizationRecorded
+    operator_authorized = $SupervisorAlive -and $OperatorAuthorizationRecorded
+    process_supervision_authority_recorded = $ProcessSupervisionAuthorityRecorded
+    process_supervision_authority = $SupervisorAlive -and $ProcessSupervisionAuthorityRecorded
+    process_restart_authority_recorded = $ProcessRestartAuthorityRecorded
+    process_restart_authority = $SupervisorAlive -and $ProcessRestartAuthorityRecorded
+    process_restart_authority_scope = Get-StringProperty -Payload $RecoveryGovernance -Name 'process_restart_authority_scope' -Default ''
+    status_path = 'data/runtime/lens-overlay/runtime-recovery-status.json'
+    pid_path = 'data/runtime/lens-overlay/runtime-recovery-supervisor.pid'
+    manifest_path = 'data/runtime/lens-overlay/runtime-recovery-manifest.json'
+    stop_request_path = 'data/runtime/lens-overlay/runtime-recovery-stop-request.json'
+  }
+}
+
+function Write-OverlayRuntimeRecoveryStopRequest {
+  param([string]$Root)
+
+  $RuntimeRoot = Get-OverlayRuntimeRecoveryRoot -Root $Root
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  $Path = Get-OverlayRuntimeRecoveryStopRequestPath -Root $Root
+  $TempPath = Join-Path $RuntimeRoot ("runtime-recovery-stop-request.{0}.tmp" -f ([guid]::NewGuid().ToString('N')))
+  try {
+    [ordered]@{
+      kind = 'lens.overlay.runtime_recovery_stop_request'
+      status = 'operator_stop_requested'
+      requested_at = [DateTimeOffset]::UtcNow.ToString('o')
+      governance = [ordered]@{
+        explicit_operator_action = $true
+        process_restart_authority_revoked = $true
+      }
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+    Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $Path
+  } finally {
+    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+  }
+  return $Path
+}
+
+function Write-OverlayRuntimeRecoveryManifest {
+  param(
+    [string]$Root,
+    [string]$PowerShellPath,
+    [string]$OverlayScriptPath,
+    [string]$ArgumentText,
+    [int]$MaxRestarts,
+    [int]$RestartWindowSeconds,
+    [int]$BackoffSeconds
+  )
+
+  $RuntimeRoot = Get-OverlayRuntimeRecoveryRoot -Root $Root
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  $Path = Get-OverlayRuntimeRecoveryManifestPath -Root $Root
+  $TempPath = Join-Path $RuntimeRoot ("runtime-recovery-manifest.{0}.tmp" -f ([guid]::NewGuid().ToString('N')))
+  try {
+    [ordered]@{
+      kind = 'lens.overlay.runtime_recovery_manifest'
+      data_root = [System.IO.Path]::GetFullPath($Root)
+      powershell_path = [System.IO.Path]::GetFullPath($PowerShellPath)
+      overlay_script_path = [System.IO.Path]::GetFullPath($OverlayScriptPath)
+      argument_text = $ArgumentText
+      requested_at = [DateTimeOffset]::UtcNow.ToString('o')
+      max_restarts = $MaxRestarts
+      restart_window_seconds = $RestartWindowSeconds
+      backoff_seconds = $BackoffSeconds
+      authority_source = 'explicit_operator_start_switch'
+      operator_authorized = $true
+      process_restart_authority_scope = 'overlay_runtime_child_only'
+      credential_values_redacted = $true
+      arbitrary_process_launch = $false
+      input_control_authority = $false
+      learning_authority = $false
+      generalization_authority = $false
+    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+    Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $Path
+  } finally {
+    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+  }
+  return $Path
 }
 
 function Get-OverlayConfig {
@@ -7830,6 +8023,7 @@ function New-StatusPayload {
 
   $Config = Get-OverlayConfig
   $Readback = Get-OverlayRuntimeReadback -Root $Root
+  $RuntimeRecovery = Get-OverlayRuntimeRecoveryReadback -Root $Root
   $Ready = [bool]$Readback.ready
   $VoiceInputReady = [bool]$Readback.voice_input_ready
   $VoiceInputBlocker = [string]$Readback.voice_input_blocker
@@ -7872,6 +8066,7 @@ function New-StatusPayload {
     overlay_position = $Readback.overlay_position
     orb_controls = $Readback.orb_controls
     overlay_runtime = $Readback
+    runtime_recovery = $RuntimeRecovery
     next_smallest_truthful_gap = $NextSmallestTruthfulGap
     governance = [ordered]@{
       read_only_contract = ($ModeName -eq 'status')
@@ -7887,6 +8082,8 @@ function New-StatusPayload {
       microphone_capture_active = (Get-BoolProperty -Payload $Readback.overlay_voice -Name 'microphone_capture' -Default $false)
       microphone_capture_authority = $false
       local_process_launch_authority = ($ModeName -eq 'start')
+      process_supervision_authority = [bool]$RuntimeRecovery.process_supervision_authority
+      process_restart_authority = [bool]$RuntimeRecovery.process_restart_authority
       tray_registration_authority = $false
       service_control_authority = $false
       mutation_authority_granted = ($ModeName -eq 'start' -or $ModeName -eq 'stop')
@@ -8015,6 +8212,7 @@ function New-StoppedStatusPayload {
   $VoiceInputReadiness = New-OverlayStoppedVoiceInputReadiness
   $VoiceProviderReadiness = New-OverlayStoppedVoiceProviderReadiness
   $OverlayPosition = New-OverlayWindowPositionProjection -Window $null -MotionState $null -OverlayWindowVisible $false
+  $RuntimeRecovery = Get-OverlayRuntimeRecoveryReadback -Root $Root
   $RuntimeReadback = [ordered]@{
     ready = $false
     process_alive = $false
@@ -8083,6 +8281,7 @@ function New-StoppedStatusPayload {
     voice_provider_readiness = $VoiceProviderReadiness
     overlay_position = $OverlayPosition
     overlay_runtime = $RuntimeReadback
+    runtime_recovery = $RuntimeRecovery
     next_smallest_truthful_gap = 'overlay_window_runtime'
     governance = [ordered]@{
       read_only_contract = $false
@@ -8098,6 +8297,8 @@ function New-StoppedStatusPayload {
       microphone_capture_active = $false
       microphone_capture_authority = $false
       local_process_launch_authority = $false
+      process_supervision_authority = [bool]$RuntimeRecovery.process_supervision_authority
+      process_restart_authority = [bool]$RuntimeRecovery.process_restart_authority
       tray_registration_authority = $false
       service_control_authority = $false
       mutation_authority_granted = $true
@@ -8191,6 +8392,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayOrbLiveExplorationEnabled = $OrbLiveExplorationEnabled
   $script:LensOverlayOrbLiveExploration = New-OrbLiveExplorationState -Enabled $OrbLiveExplorationEnabled -BodyState $null -MotionState $null
   $script:LensOverlayApplication = $null
+  $script:LensOverlayWakeRecognizer = $null
   $script:LensOverlayNativeRenderer = $null
   $script:LensOverlayNativeRendererOwnership = 'not_started'
   $script:LensOverlayOrbPanelPopup = $null
@@ -8514,13 +8716,29 @@ if ($Mode -eq 'Status') {
 }
 
 if ($Mode -eq 'Stop') {
+  $RecoveryPidToStop = Get-OverlayRuntimeRecoveryPid -Root $DataRoot
+  if ($RecoveryPidToStop -gt 0) {
+    [void](Write-OverlayRuntimeRecoveryStopRequest -Root $DataRoot)
+  }
   $RuntimePidToStop = Get-OverlayRuntimePidFromFile -Root $DataRoot
   if ($RuntimePidToStop -gt 0) {
     Stop-OverlayRuntimeProcess -ProcessId $RuntimePidToStop | Out-Null
   }
+  if ($RecoveryPidToStop -gt 0) {
+    $RecoveryStopDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+    while ((Test-OverlayRuntimeRecoverySupervisorProcess -ProcessId $RecoveryPidToStop) -and [DateTimeOffset]::UtcNow -lt $RecoveryStopDeadline) {
+      Start-Sleep -Milliseconds 100
+    }
+    if (Test-OverlayRuntimeRecoverySupervisorProcess -ProcessId $RecoveryPidToStop) {
+      Stop-OverlayRuntimeRecoverySupervisorProcess -ProcessId $RecoveryPidToStop | Out-Null
+    }
+  }
   [void](Stop-NativeOrbRenderer -Root $DataRoot)
   Write-OverlayStoppedState -Root $DataRoot -Message 'Francis Lens overlay window stopped by operator command.'
   Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryPidPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryManifestPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryStopRequestPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
   New-StoppedStatusPayload -Root $DataRoot -ModeName $ModeName | ConvertTo-Json -Depth 8
   exit 0
 }
@@ -8534,10 +8752,37 @@ if (-not $RunningOnWindows) {
   exit 2
 }
 
+if ($EnableRuntimeRecovery -and $RunSeconds -gt 0) {
+  $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'refused'
+  $Payload.ok = $false
+  $Payload.error = 'lens_overlay_runtime_recovery_requires_explicit_stop_lease'
+  $Payload.message = 'Runtime recovery requires RunSeconds 0 so expected bounded exits are never misclassified as crashes.'
+  $Payload | ConvertTo-Json -Depth 8
+  exit 2
+}
+
 $Existing = Get-OverlayRuntimeReadback -Root $DataRoot
 if ([bool]$Existing.ready) {
   New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'already_running' | ConvertTo-Json -Depth 8
   exit 0
+}
+$ExistingRecovery = Get-OverlayRuntimeRecoveryReadback -Root $DataRoot
+if ([bool]$ExistingRecovery.supervisor_process_alive) {
+  $RecoveryDeadline = [DateTimeOffset]::UtcNow.AddSeconds($StartupTimeoutSeconds)
+  do {
+    Start-Sleep -Milliseconds 200
+    $RecoveredReadback = Get-OverlayRuntimeReadback -Root $DataRoot
+    if ([bool]$RecoveredReadback.ready) {
+      New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'already_running' | ConvertTo-Json -Depth 8
+      exit 0
+    }
+  } while ([DateTimeOffset]::UtcNow -lt $RecoveryDeadline)
+  $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'recovery_pending'
+  $Payload.ok = $false
+  $Payload.error = 'lens_overlay_runtime_recovery_pending'
+  $Payload.message = 'An authorized overlay recovery supervisor is live, but the child has not returned to ready state.'
+  $Payload | ConvertTo-Json -Depth 8
+  exit 1
 }
 if ([bool]$Existing.runtime_process_alive -and [int]$Existing.pid -gt 0) {
   Stop-OverlayRuntimeProcess -ProcessId ([int]$Existing.pid) | Out-Null
@@ -8625,7 +8870,53 @@ if ($ElevenLabsUseSpeakerBoost) {
   $ArgumentList += '-ElevenLabsUseSpeakerBoost'
 }
 $ArgumentText = Join-OverlayProcessArguments -Arguments $ArgumentList
-Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Normal | Out-Null
+if ($EnableRuntimeRecovery) {
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryStopRequestPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
+  $ManifestPath = Write-OverlayRuntimeRecoveryManifest `
+    -Root $DataRoot `
+    -PowerShellPath $PowerShell.Source `
+    -OverlayScriptPath $PSCommandPath `
+    -ArgumentText $ArgumentText `
+    -MaxRestarts $RuntimeRecoveryMaxRestarts `
+    -RestartWindowSeconds $RuntimeRecoveryWindowSeconds `
+    -BackoffSeconds $RuntimeRecoveryBackoffSeconds
+  $SupervisorScriptPath = Join-Path $PSScriptRoot 'lens-overlay-runtime-supervisor.ps1'
+  $SupervisorArgumentList = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    $SupervisorScriptPath,
+    '-Mode',
+    'Run',
+    '-DataDir',
+    $DataRoot,
+    '-ManifestPath',
+    $ManifestPath,
+    '-MaxRestarts',
+    ([string]$RuntimeRecoveryMaxRestarts),
+    '-RestartWindowSeconds',
+    ([string]$RuntimeRecoveryWindowSeconds),
+    '-BackoffSeconds',
+    ([string]$RuntimeRecoveryBackoffSeconds)
+  )
+  $SupervisorArgumentText = Join-OverlayProcessArguments -Arguments $SupervisorArgumentList
+  $RecoveryRoot = Get-OverlayRuntimeRecoveryRoot -Root $DataRoot
+  $SupervisorStdoutPath = Join-Path $RecoveryRoot 'runtime-recovery-supervisor-stdout.log'
+  $SupervisorStderrPath = Join-Path $RecoveryRoot 'runtime-recovery-supervisor-stderr.log'
+  Remove-Item -LiteralPath $SupervisorStdoutPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $SupervisorStderrPath -Force -ErrorAction SilentlyContinue
+  Start-Process `
+    -FilePath $PowerShell.Source `
+    -ArgumentList $SupervisorArgumentText `
+    -WorkingDirectory $RepoRoot `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $SupervisorStdoutPath `
+    -RedirectStandardError $SupervisorStderrPath `
+    -PassThru | Out-Null
+} else {
+  Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Normal | Out-Null
+}
 
 $Deadline = [DateTimeOffset]::UtcNow.AddSeconds($StartupTimeoutSeconds)
 do {
@@ -8639,9 +8930,25 @@ do {
 
 $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'start_timeout'
 $TimedOut = Get-OverlayRuntimeReadback -Root $DataRoot
+if ($EnableRuntimeRecovery) {
+  [void](Write-OverlayRuntimeRecoveryStopRequest -Root $DataRoot)
+}
 if ([bool]$TimedOut.runtime_process_alive -and [int]$TimedOut.pid -gt 0) {
   Stop-OverlayRuntimeProcess -ProcessId ([int]$TimedOut.pid) | Out-Null
   Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
+}
+if ($EnableRuntimeRecovery) {
+  $TimedOutRecoveryPid = Get-OverlayRuntimeRecoveryPid -Root $DataRoot
+  if ($TimedOutRecoveryPid -gt 0) {
+    Start-Sleep -Milliseconds 250
+    if (Test-OverlayRuntimeRecoverySupervisorProcess -ProcessId $TimedOutRecoveryPid) {
+      Stop-OverlayRuntimeRecoverySupervisorProcess -ProcessId $TimedOutRecoveryPid | Out-Null
+    }
+  }
+  [void](Stop-NativeOrbRenderer -Root $DataRoot)
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryPidPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryManifestPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Get-OverlayRuntimeRecoveryStopRequestPath -Root $DataRoot) -Force -ErrorAction SilentlyContinue
 }
 $Payload.ok = $false
 $Payload.error = 'lens_overlay_window_start_timeout'

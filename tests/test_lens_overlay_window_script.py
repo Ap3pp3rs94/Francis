@@ -86,6 +86,14 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["overlay_runtime"]["expected_overlay_scope"] == "user_session"
     assert payload["overlay_runtime"]["mcp_status_route"] == "/lens/mcp/status"
     assert payload["overlay_runtime"]["orb_mcp_status_route"] == "/lens/orb/mcp-status"
+    recovery = payload["runtime_recovery"]
+    assert recovery["kind"] == "lens.overlay.runtime_recovery_readback"
+    assert recovery["status"] == "disabled_or_stopped"
+    assert recovery["enabled"] is False
+    assert recovery["lease_active"] is False
+    assert recovery["supervisor_process_alive"] is False
+    assert recovery["process_supervision_authority"] is False
+    assert recovery["process_restart_authority"] is False
     assert payload["orb_visual"]["autonomous_motion"] is False
     assert payload["orb_visual"]["right_corner_locked"] is True
     assert payload["orb_visual"]["default_anchor"] == "bottom_right"
@@ -733,6 +741,69 @@ def test_lens_overlay_window_start_launcher_allows_visible_overlay_child() -> No
     )
 
 
+def test_lens_overlay_runtime_recovery_is_explicit_bounded_and_receipted() -> None:
+    launcher = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+    supervisor = (_repo_root() / "scripts" / "lens-overlay-runtime-supervisor.ps1").read_text(encoding="utf-8")
+
+    assert "[switch]$EnableRuntimeRecovery" in launcher
+    assert "[int]$RuntimeRecoveryMaxRestarts = 3" in launcher
+    assert "lens-overlay-runtime-supervisor.ps1" in launcher
+    assert "runtime-recovery-stop-request.json" in launcher
+    assert "process_restart_authority_scope = 'overlay_runtime_child_only'" in launcher
+    assert "lens_overlay_runtime_recovery_requires_explicit_stop_lease" in launcher
+    assert "Write-OverlayRuntimeRecoveryStopRequest -Root $DataRoot" in launcher
+    assert "Stop-OverlayRuntimeRecoverySupervisorProcess" in launcher
+
+    assert "[ValidateSet('Status', 'Run')]" in supervisor
+    assert "overlay_runtime_recovery_manifest_invalid_or_unauthorized" in supervisor
+    assert "$ArgumentText -match $OverlayInvocationPattern" in supervisor
+    assert "$ArgumentText -notmatch '(?i)(^|\\s)-Command(?:\\s|$)'" in supervisor
+    assert "$ManifestMaxRestarts -eq $MaxRestarts" in supervisor
+    assert "$ManifestRestartWindowSeconds -eq $RestartWindowSeconds" in supervisor
+    assert "[int]$Candidate.ParentProcessId -ne $ExitedChildPid" in supervisor
+    assert "$RestartTimestamps.Count -ge $MaxRestarts" in supervisor
+    assert "recovery_budget_exhausted" in supervisor
+    assert "child_exited_restarting" in supervisor
+    assert "child_stopped_by_operator" in supervisor
+    assert "orphan_renderer_pids_stopped" in supervisor
+    assert "process_restart_authority_scope = 'overlay_runtime_child_only'" in supervisor
+    assert "arbitrary_process_launch = $false" in supervisor
+    assert "input_control_authority = $false" in supervisor
+    assert "learning_authority = $false" in supervisor
+    assert "generalization_authority = $false" in supervisor
+
+
+def test_lens_overlay_runtime_recovery_status_reports_missing_supervisor(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(_repo_root() / "scripts" / "lens-overlay-runtime-supervisor.ps1"),
+            "-Mode",
+            "Status",
+            "-DataDir",
+            str(tmp_path / "data"),
+        ],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.overlay.runtime_recovery_readback"
+    assert payload["status"] == "disabled_or_stopped"
+    assert payload["enabled"] is False
+    assert payload["supervisor_pid"] == 0
+    assert payload["supervisor_process_alive"] is False
+    assert payload["child_process_alive"] is False
+
+
 def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
 
@@ -1324,6 +1395,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "return $ExistingRenderer" in script
     assert "$script:LensOverlayNativeRendererOwnership = 'launched'" in script
     assert "if ($script:LensOverlayNativeRendererOwnership -eq 'launched')" in script
+    assert script.index("$script:LensOverlayWakeRecognizer = $null") < script.index(
+        "try {", script.index("if ($Mode -eq 'Run')")
+    )
     assert "$OwnsRuntimeState = Test-OverlayRuntimeStateOwner -Root $DataRoot -OwnerPid $PID" in script
     assert "if (-not $Failed -and $OwnsRuntimeState)" in script
     assert "FindRendererWindow" in script
