@@ -178,3 +178,24 @@
 - ADR required: no; this is an operating constraint
 - Operator involvement: no gated product/authority action; push and stage closure
   remain operator-only
+
+## CR-DEC-0012 - Reassign the safe-delta path guard to its canonical owner
+
+- Date: 2026-07-14
+- Issue: FORGE cycle one duplicated containment and junction checks inside
+  `managed_copy_safe_delta.py` instead of reusing structural-isolation ownership
+- Agents involved: ATLAS, FORGE, MERIDIAN, HARBOR, VERA
+- Evidence considered: exact candidate `cd9cd50422115761a2340e3d322b449516f85b0d`;
+  `CR-FORGE-001`; MERIDIAN, HARBOR, and VERA exact-diff reviews
+- Decision: authorize one final regression-only cycle in the existing front to
+  expose a narrow isolation-owned guarded-subpath API from
+  `managed_copy_isolation.py`, consume it from safe-delta, remove the duplicate
+  guard, and close the exact fingerprint and direct-evidence gaps
+- Affected fronts: `CR-FORGE-001`
+- Affected task cards: `managed-copy-safe-delta.md`
+- Affected contracts: structural-isolation path ownership and
+  `stage18_managed_copy_safe_delta_review_v1`
+- ADR required: no, provided existing trust and tenancy assumptions remain
+  unchanged
+- Operator involvement: none; no production request, approval, authority,
+  export, learning, push, or stage-closure action is authorized

@@ -294,6 +294,37 @@ When a gate is reached: stop that action, preserve work, stage exact evidence,
 name the decision, present options, recommend one, state risks/consequences, and
 ask the operator. Other isolated work may continue.
 
+## ATLAS Context Reset
+
+ATLAS is a durable seat; its conversational session is disposable. A reset is
+justified only by a repository-truth contradiction, loss of a precise critical
+path, context dominated by completed or superseded work, materially degraded
+clarity after compaction, a clean campaign or promotion boundary, or an operator
+request. Elapsed time and sync count alone are not reset triggers.
+
+Truth order is operator instruction, `AGENTS.md`, completion-ledger shipped
+posture, live Git/agent/process/validation/lease/runtime evidence, Control Room
+campaign state, roadmap/architecture intent, then old conversation. Goal-
+controller labels do not define Francis build state.
+
+Before reset, ATLAS briefly stops new assignments, reconciles exact heads, dirty
+ownership, sessions, validations, leases, blockers, reviews, and gates, and
+ensures every active worker has a seat, card, branch/worktree, verified head,
+assignment, next action, and lease. Existing Control Room files are updated and
+committed only when material state already requires a normal sync. Routine
+resets do not create parallel handoffs or stop workers.
+
+A fresh ATLAS reads only `AGENTS.md`, current/latest ledger sections,
+`SESSION_BRIEF.md`, `BOARD.md`, `INTEGRATION_QUEUE.md`, `RUNTIME_LEASES.md`, and
+active task cards before verifying local/remote heads, worktrees, controllable
+sessions, validation exits, and protected runtime boundaries. It loads deeper
+history only when the next action requires it and must dispatch or resume useful
+work in the same turn.
+
+Reset success means the fresh seat can state shipped posture, active fronts,
+exact heads, validation state, critical path, cheapest promotion candidate,
+protected boundaries, and next executable action without conversational memory.
+
 ## Handoff Minimum
 
 A handoff names the seat, front, card, branch, worktree, runtime lease, latest

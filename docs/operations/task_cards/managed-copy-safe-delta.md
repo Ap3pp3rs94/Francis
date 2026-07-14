@@ -4,7 +4,7 @@ Task ID: `CR-FORGE-001`
 
 Assigned seat: FORGE
 
-Status: `REMEDIATION_REQUIRED` at `90c4dbe0` after ATLAS and SENTINEL pre-review
+Status: `REMEDIATION_REQUIRED` at `cd9cd504` after cycle-one review
 
 ## Objective
 
@@ -37,6 +37,8 @@ without approving, exporting, importing, or learning from tenant data.
 ## Files In Scope
 
 - `src/francis/managed_copy_safe_delta.py`
+- `src/francis/managed_copy_isolation.py` only to expose and test the existing
+  isolation-owned guarded-subpath contract authorized by `CR-DEC-0012`
 - `src/francis/managed_copies.py`
 - `src/francis/api/routes/managed_copies.py`
 - `tests/test_api_managed_copies.py`
@@ -128,6 +130,26 @@ git diff --check main...HEAD
 Evidence: `MSG-20260714-012`, `MSG-20260714-015`,
 `docs/operations/control_room/reviews/SENTINEL/CR-20260714-forge-preflight.md`,
 and `docs/operations/control_room/reviews/MERIDIAN/CR-20260714-forge-preflight.md`.
+
+## Cycle-Two Scope Revision
+
+`CR-DEC-0012` authorizes one final regression-only remediation cycle at parent
+`cd9cd50422115761a2340e3d322b449516f85b0d`:
+
+- expose the existing isolation-owned containment/link guard through a narrow
+  guarded-subpath API in `managed_copy_isolation.py`;
+- remove the competing guard implementation from `managed_copy_safe_delta.py`
+  and consume the isolation-owned API;
+- require an exact requested full review fingerprint to equal the stored full
+  fingerprint before readback accepts a shortened-path receipt;
+- add separate regressions for exact governance-schema rejection, malformed
+  candidate JSON types, production-empty source-loaded readback, and a real
+  symlink or Windows-junction redirect where the platform permits it;
+- preserve every existing trust, tenancy, authority, and no-production-action
+  assumption. Changing any of those assumptions is outside this revision.
+
+No third remediation cycle is authorized. A remaining independent blocker must
+park or split the front under `CR-DEC-0011`.
 
 ## Worker Receipt
 

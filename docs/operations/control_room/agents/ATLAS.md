@@ -3,7 +3,7 @@
 - Role: Build Manager and Francis Control Room chair
 - Classification: internal manager/integrator
 - Staffing: active local session
-- Liveness: current sync cycle `CR-20260714-003`
+- Liveness: current sync cycle `CR-20260714-004`
 - Current assignment: keep Stage 18 critical path moving through worker
   remediation, exact validation, specialist review, and local integration
 - Current task card: none; ATLAS owns management/integration, not a feature front

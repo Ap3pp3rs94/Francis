@@ -2,10 +2,10 @@
 
 Updated: 2026-07-14
 
-Sync cycle: `CR-20260714-003`
+Sync cycle: `CR-20260714-004`
 
 Cycle-start local main:
-`d5516a54e9b939b2ae076f3be7b338b6cd2ed762`.
+`8a5ca378a854b29eb0ca7adcad591e2a57f1a653`.
 
 Remote `origin/main` observed during this sync:
 `8c84dc4e972b7921e9204e62f7cd655bd3ede037`.
@@ -38,18 +38,17 @@ GitHub baseline:
 - Task card: `docs/operations/task_cards/managed-copy-safe-delta.md`
 - Branch: `codex/forge-managed-copies-safe-delta`
 - Worktree: `D:\Francis-worktrees\forge-managed-copies-safe-delta`
-- State: `REMEDIATION_REQUIRED`; worker remains active
-- Latest verified worker commit: `90c4dbe0287c1f169cefad47debab85067dd4fd8`
+- State: `REMEDIATION_REQUIRED`; final cycle-two reassignment authorized
+- Latest verified worker commit: `cd9cd50422115761a2340e3d322b449516f85b0d`
 - Validation: `VAL-20260714-006` diff-check passed; full pytest
   `VAL-20260714-002` was `INTERRUPTED_KNOWN_REMEDIATION`; no pass/fail claim
 - Dependencies: provision receipt, live structural-isolation receipt, tenant
   safe-delta policy, API actor-scope contract
-- Blocker: ATLAS/SENTINEL/MERIDIAN found unbound receipt/governance fields, persisted
-  candidate checks not recomputed, unbound ID/time/file/tenant lineage, blocked
-  enum echo, cross-tenant latest-state coupling, competing path ownership/path
-  claims, and unproven nested junction confinement
-- Next action: FORGE is executing remediation cycle one against the routed
-  ATLAS/SENTINEL/MERIDIAN findings; report a scope blocker before path-owner edits
+- Blocker: cycle one duplicated structural-isolation path ownership and exact-
+  fingerprint readback accepts a colliding shortened path; four direct evidence
+  gaps remain
+- Next action: FORGE executes the final `CR-DEC-0012` cycle using the isolation-
+  owned guarded-subpath API; no third remediation cycle is authorized
 - Runtime lease: `LEASE-FORGE-001`; no service or live Orb access permitted
 
 ### CR-ARGUS-001 - Lens game observer
@@ -59,17 +58,17 @@ GitHub baseline:
 - Task card: `docs/operations/task_cards/lens-game-observer.md`
 - Branch: `codex/argus-game-observer`
 - Worktree: `D:\Francis-worktrees\argus-game-observer`
-- State: `REMEDIATION_REQUIRED`; worker remains active
-- Latest verified worker commit: `2e454ba5bc4a9e5f629da463be5696350703fcb2`
+- State: `BLOCKED`; promotion rejected pending task-card scope reassignment
+- Latest verified worker commit: `683134a7cccd6b4dd1b1cd1604d2641615f07307`
 - Validation: `VAL-20260714-007` diff-check passed; full pytest
   `VAL-20260714-003` was `INTERRUPTED_KNOWN_REMEDIATION`; no pass/fail claim
 - Dependencies: game-observer runtime config, foreground-process readback,
   situation-model source contract, portable Windows typing
-- Blocker: v2 blocked observations can bypass foreground/scene/classification
-  validation, and teaching payload status/IDs/timestamps/counts/text/blockers/
-  review semantics are insufficiently validated before projection
-- Next action: ARGUS is executing remediation cycle one for malformed blocked-
-  state and teaching-lineage projection; it is first in the integration queue
+- Blocker: the v2 producer is incompatible with the v1-only apprenticeship
+  recorder; legacy heartbeat redaction and stale receipt-lineage readiness also
+  fail review
+- Next action: park until scope is reassigned to the teaching consumer and direct
+  composition tests; no further validation on `683134a7`
 - Runtime lease: `LEASE-ARGUS-001`; no watcher/service/live Orb access permitted
 
 ### CR-LUMEN-001 - Orb right-click delivery / visual-lock alignment
@@ -78,19 +77,18 @@ GitHub baseline:
 - Roadmap: Phase 2 cross-stage Orb interaction-fidelity hardening
 - Task card: `docs/operations/task_cards/orb-visual-choreography.md`
 - Branch: `codex/lumen-orb-choreography`
-- Worktree: `D:\Francis-worktrees\lumen-orb-choreography`
-- State: `REMEDIATION_REQUIRED`; worker remains active
-- Latest verified worker commit: `a1b2c60bced10506cfd53bdfb97aa8b491656cea`
+- Worktree: `D:\FWT\lumen`
+- State: `BLOCKED`; final cycle stopped before edits on ownership expansion
+- Latest verified worker commit: `600704383d71c072b29a29e4061c86977f38a245`
 - Validation: `VAL-20260714-008` diff-check passed; full pytest
   `VAL-20260714-004` was `INTERRUPTED_KNOWN_REMEDIATION`; no native compile or
   live visual proof claimed
 - Dependencies: native renderer status, right-click request sequence/queue
   contract, visual lock, no-input/no-authority invariants
-- Blocker: native publication uses replacing move semantics, one physical gesture
-  can publish more than once, and overlay discovery/drain/marker projection work
-  is unbounded despite the advertised 32-request queue limit
-- Next action: LUMEN is executing remediation cycle one for occupied destination,
-  gesture cardinality, bounded discovery/drain, and truthful readback
+- Blocker: restart-safe global numeric sequencing and producer failure readback
+  require a new durable allocator/outcome schema outside the card
+- Next action: park pending durable sequence/outcome ownership reassignment; do
+  not launch or modify the live Orb
 - Runtime lease: `LEASE-LUMEN-001`; compile-only native build, no launch
 
 ## Review State
@@ -98,17 +96,19 @@ GitHub baseline:
 - VERA state: `RESPONDED`
 - Evidence: `MSG-20260714-008` and
   `reviews/VERA/CR-20260714-preflight.md`
-- Disposition: all three fronts are actively progressing in
-  `REMEDIATION_REQUIRED`; no worker commit is review-ready
-- SENTINEL disposition for FORGE: `REMEDIATION_REQUIRED` at `90c4dbe0`, review
-  `reviews/SENTINEL/CR-20260714-forge-preflight.md`
-- MERIDIAN disposition for FORGE: `REMEDIATION_REQUIRED` at `90c4dbe0`, review
-  `reviews/MERIDIAN/CR-20260714-forge-preflight.md`; no ADR for the narrow path
-- HARBOR disposition for LUMEN: `REMEDIATION_REQUIRED` at `a1b2c60b`, review
-  `reviews/HARBOR/CR-20260714-lumen-preflight.md`
-- ARCHIVIST disposition for CR-003: `CHANGES_REQUIRED`, review
-  `reviews/ARCHIVIST/CR-20260714-003-precommit.md`
-- Next action: review exact post-remediation worker commits only
+- Disposition: ARGUS and LUMEN are parked on explicit contract-ownership scope;
+  FORGE alone is assigned one final bounded remediation cycle
+- SENTINEL disposition: exact ARGUS/LUMEN remediation reviews reject promotion;
+  see `reviews/SENTINEL/CR-20260714-exact-remediation.md`
+- MERIDIAN disposition: FORGE requires canonical path-owner reuse under
+  `CR-DEC-0012`; no ADR; see
+  `reviews/MERIDIAN/CR-20260714-exact-remediation.md`
+- HARBOR disposition: LUMEN and FORGE exact remediation candidates remain
+  blocked; see `reviews/HARBOR/CR-20260714-exact-remediation.md`
+- ARCHIVIST disposition: LUMEN receipt/readback truth remains blocked; see
+  `reviews/ARCHIVIST/CR-20260714-lumen-remediation.md`
+- Next action: review only the next FORGE cycle-two hash; do not repeat unchanged
+  findings or start a full gate before focused acceptance passes
 
 Specialist sessions used in this cycle are completed/released. Their concrete
 reports are stored above. CLAUDE is `UNVERIFIED`; no external audit is simulated.

@@ -7,9 +7,9 @@ operator-gated.
 
 | Front | Branch | Worker commit | Worker evidence | Specialist reviews | VERA | ATLAS exact-head validation | Operator gate | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CR-ARGUS-001 | `codex/argus-game-observer` | `2e454ba5` | `VAL-003` interrupted known remediation; cycle one active | ATLAS blocked/teaching projection findings; affected reviews only after new hash | preflight only | first integration priority after focused-green hash | push gated | `REMEDIATION_REQUIRED` |
-| CR-FORGE-001 | `codex/forge-managed-copies-safe-delta` | `90c4dbe0` | `VAL-002` interrupted known remediation; cycle one active | SENTINEL/MERIDIAN remediation archived; affected reviews only after new hash | preflight only | pending new hash/rebase | no production action; push gated | `REMEDIATION_REQUIRED` |
-| CR-LUMEN-001 | `codex/lumen-orb-choreography` | `a1b2c60b` | `VAL-004` interrupted known remediation; cycle one active | HARBOR publication/cardinality/bounds remediation archived | preflight only | pending new hash/rebase | live proof separate; push gated | `REMEDIATION_REQUIRED` |
+| CR-FORGE-001 | `codex/forge-managed-copies-safe-delta` | `cd9cd504` | focused suites/Ruff/format/mypy/diff-check passed; pre-rebase only | MERIDIAN path-owner and HARBOR exact-fingerprint blockers routed | VERA remediation required | final `CR-DEC-0012` hash, rebase, then exact-head acceptance | no production action; push gated | `REMEDIATION_REQUIRED` |
+| CR-ARGUS-001 | `codex/argus-game-observer` | `683134a7` | focused suite/Ruff/format/mypy/diff-check passed | MERIDIAN/HARBOR static pass; SENTINEL blocks teaching/readback composition | VERA rejected | no further validation until scope reassignment | push gated | `BLOCKED` |
+| CR-LUMEN-001 | `codex/lumen-orb-choreography` | `60070438` | focused suite/Ruff/format/native build/diff-check passed | HARBOR/SENTINEL/ARCHIVIST reject durable sequence/outcome truth | VERA rejected | no further validation until durable contract reassignment | live proof separate; push gated | `BLOCKED` |
 
 Promotion requires an exact worker commit, task-card evidence, required concrete
 specialist reviews, independent VERA acceptance, ARCHIVIST traceability where

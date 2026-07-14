@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-14, sync cycle `CR-20260714-003` (America/Chicago)
+Updated: 2026-07-14, sync cycle `CR-20260714-004` (America/Chicago)
 
 ## Manager Role
 
@@ -27,7 +27,7 @@ Cold-start order:
 
 ## Canonical Posture
 
-- Canonical local `main`: `d5516a54e9b939b2ae076f3be7b338b6cd2ed762`;
+- Canonical local `main`: `8a5ca378a854b29eb0ca7adcad591e2a57f1a653`;
   remote `origin/main`: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`.
   The local docs-only Control Room commit has not been pushed.
 - Canonical phase: Phase 2.
@@ -56,17 +56,14 @@ hash-only safe-delta candidate-review receipt while approval, export, import,
 learning writes, and cross-tenant flow remain disabled. Readback must detect live
 source-boundary drift and must not echo or persist raw customer data.
 
-Current state: clean worker commit `90c4dbe0` is isolated. Full pytest
-`VAL-20260714-002` is `INTERRUPTED_KNOWN_REMEDIATION`; cycle one is active.
-ATLAS, SENTINEL, and MERIDIAN require remediation: strict
-schema/projection, recomputed semantics, bound ID/time/file/tenant lineage,
-lineage-scoped latest/invalidity, invalid-enum redaction, canonical nested path
-confinement, and one truthful receipt-path claim.
+Current state: clean cycle-one commit `cd9cd504` passed focused worker validation
+but failed exact-diff review. `CR-DEC-0012` authorizes the final cycle to expose
+the existing isolation-owned guarded-subpath API, remove safe-delta's duplicate
+guard, bind exact full-fingerprint readback, and add four direct regressions.
 
-Next smallest truthful gap: add failing tests for the routed
-ATLAS/SENTINEL/MERIDIAN findings, then complete remediation cycle one.
-Request a card scope revision before changing the isolation owner. This is not an
-approval or export slice.
+Next smallest truthful gap: FORGE produces one cycle-two commit and focused
+evidence. A third independent issue set parks or splits the front. This remains a
+hash-only review slice, not an approval or export slice.
 
 ### Lens game observer
 
@@ -77,16 +74,14 @@ Proof target: local, read-only, foreground-bound semantic game observations
 compose with the Lens situation model through strict versioned contracts and do
 not acquire input or execution authority.
 
-Current state: clean worker commit `2e454ba5` is isolated. Full pytest
-`VAL-20260714-003` is `INTERRUPTED_KNOWN_REMEDIATION`; cycle one is active and
-first in the integration queue. Versioning, model-boundary, and ready-state
-lineage work is present, but blocked v2 observations and teaching payloads can
-project insufficiently validated identity/status/lineage fields. No watcher or
-live runtime was used.
+Current state: rebased commit `683134a7` passed its focused suite but VERA and
+SENTINEL rejected promotion. The v2 producer is incompatible with the v1-only
+apprenticeship recorder; strict legacy-heartbeat projection and receipt rotation
+also remain open. No watcher or live runtime was used.
 
-Next smallest truthful gap: add the crafted blocked-state and teaching-lineage
-regressions from `MSG-20260714-013`/`016`, then reject or strictly project
-malformed payloads. Do not activate a watcher or touch the live Lens runtime.
+Next smallest truthful gap: parked pending a revised card that owns the teaching
+consumer and direct observer-to-recorder composition tests. Do not validate or
+expand the branch until that ownership is assigned.
 
 ### Orb right-click delivery / visual-lock alignment
 
@@ -97,17 +92,13 @@ Proof target: native Orb right-click requests are queued and drained without
 loss or optimistic completion claims, while the visual-lock ring count remains
 aligned with renderer truth and shell/authority invariants remain unchanged.
 
-Current state: clean worker commit `a1b2c60b` is isolated. Full pytest
-`VAL-20260714-004` is `INTERRUPTED_KNOWN_REMEDIATION`; cycle one is active. It
-adds numeric queue order, TTL, deduplication, readback,
-and 8-ring alignment. ATLAS/HARBOR found replacing native publication, duplicate
-publication from one gesture, and unbounded discovery/drain/marker projection
-despite a 32-request limit. No live visual validation is claimed.
+Current state: rebased commit `60070438` passed focused tests and compile-only
+build, but all exact-diff reviewers rejected promotion. Cycle two stopped before
+edits because restart-safe sequence allocation and producer-failure readback need
+a durable schema owner outside the card. No live visual validation is claimed.
 
-Next smallest truthful gap: add occupied-destination, gesture-cardinality,
-oversized-marker, and bounded-backlog tests from `MSG-20260714-014`/`017` plus
-the HARBOR review; remediate cycle one and obtain compile-only C++ evidence. Do
-not launch or touch the live Orb.
+Next smallest truthful gap: parked pending ownership of a durable sequence high-
+water mark and producer outcome surface. Do not launch or touch the live Orb.
 
 ## Contracts In Play
 

@@ -1,6 +1,6 @@
 # Francis Control Room Evidence Index
 
-Updated: 2026-07-14, sync cycle `CR-20260714-003`
+Updated: 2026-07-14, sync cycle `CR-20260714-004`
 
 This index points to bounded evidence. Large logs and archives remain outside Git
 when appropriate, but their path, hash, applicable commit, and claim must be
@@ -16,10 +16,10 @@ recorded here. An index entry does not upgrade unverified evidence.
 | `EVD-20260714-006` | CLAUDE historical candidate | `D:\Francis\FRANCIS_SUBSTRATE_INVENTORY.csv` | unknown | possible historical substrate inventory | unverified provenance and applicable head |
 | `EVD-20260714-007` | local exact-head gate | `scripts/check.ps1`; direct mypy reproduction; `MSG-20260714-010` | `d5516a54e9b939b2ae076f3be7b338b6cd2ed762` | branch/Ruff/format pass but mypy optional-import failure | verified exit 1 before environment repair |
 | `EVD-20260714-008` | local environment | HARBOR review; locked Typer reinstall; import probe | `d5516a54e9b939b2ae076f3be7b338b6cd2ed762` | local Typer metadata/payload drift repaired | import repair verified; later static-pass record is incomplete and not reusable gate evidence |
-| `EVD-20260714-009` | clean exact snapshot | short detached worktree `D:\fv`; `VAL-20260714-001` | `d5516a54e9b939b2ae076f3be7b338b6cd2ed762` | exact-source pytest after long-path/editable-source harness invalidation | running; no verdict claimed |
-| `EVD-20260714-010` | CR-FORGE-001 | commit `90c4dbe0`; findings/reviews; `VAL-002`/`006` | `90c4dbe0287c1f169cefad47debab85067dd4fd8` | bounded five-file candidate and exact security/architecture remediation findings | diff-check exit 0; full pytest interrupted known remediation; cycle one active |
-| `EVD-20260714-011` | CR-ARGUS-001 | commit `2e454ba5`; `MSG-20260714-013`/`016`; `VAL-003`/`007` | `2e454ba5bc4a9e5f629da463be5696350703fcb2` | bounded five-file candidate and blocked/teaching projection findings | diff-check exit 0; full pytest interrupted known remediation; first integration priority |
-| `EVD-20260714-012` | CR-LUMEN-001 | commit `a1b2c60b`; findings/review; `VAL-004`/`008` | `a1b2c60bced10506cfd53bdfb97aa8b491656cea` | bounded seven-file candidate and publication/gesture/discovery/drain findings | diff-check exit 0; full pytest interrupted known remediation; cycle one active |
+| `EVD-20260714-009` | clean exact snapshot | short detached worktree `D:\fv`; `VAL-20260714-001` | `d5516a54e9b939b2ae076f3be7b338b6cd2ed762` | exact-source pytest after long-path/editable-source harness invalidation | interrupted for integration priority; no verdict claimed |
+| `EVD-20260714-010` | CR-FORGE-001 | commits `90c4dbe0`/`cd9cd504`; exact specialist reviews; `VAL-014`; `CR-DEC-0012` | `cd9cd50422115761a2340e3d322b449516f85b0d` | cycle-one focused evidence and exact path-owner/fingerprint blockers | focused pass; final cycle-two reassignment authorized; not promotion-ready |
+| `EVD-20260714-011` | CR-ARGUS-001 | commit `683134a7`; exact specialist reviews; `VAL-009`/`010` | `683134a7cccd6b4dd1b1cd1604d2641615f07307` | focused pass plus teaching/readback scope blockers | parked; no promotion claim |
+| `EVD-20260714-012` | CR-LUMEN-001 | commit `60070438`; exact specialist reviews; `VAL-011`/`013` | `600704383d71c072b29a29e4061c86977f38a245` | focused/build pass plus durable sequence/outcome ownership blockers | parked; no promotion or live claim |
 | `EVD-20260714-013` | CR-003 integrity | `reviews/ARCHIVIST/CR-20260714-003-precommit.md` | open sync over `d5516a54` | precommit consistency and evidence gaps | changes required; reviewed snapshot must not be committed unchanged |
 
 Future entries must identify the exact tested commit. Pre-rebase worker evidence

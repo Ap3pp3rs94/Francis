@@ -1,6 +1,6 @@
 # Francis Control Room Roster
 
-Updated: 2026-07-14, sync cycle `CR-20260714-003`
+Updated: 2026-07-14, sync cycle `CR-20260714-004`
 
 Call signs are durable seats, not proof of active agents. A replacement inherits
 the seat file, task card, branch/worktree, messages, contracts, evidence,
@@ -9,9 +9,9 @@ runtime lease, blocker, and next action.
 | Seat | Role | Classification | Mutation mode | Staffed | Availability | Assignment | Liveness | Activity evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ATLAS | Build Manager and integrator | internal | local-main operations/docs; bounded integration only | yes | `ACTIVE` | Control Room sync/integration | current cycle | local session; local Control Room head `d5516a54`; `VAL-20260714-001` running |
-| FORGE | systems and capability worker | internal | mutating slot 1 | yes | `REMEDIATION_REQUIRED` | CR-FORGE-001 cycle one | live/controllable | agent `019f6100-96ab-7631-98b0-5b92909186e0`; `90c4dbe0`; `VAL-002` interrupted; remediation directive accepted |
-| ARGUS | observation and instrumentation worker | internal | mutating slot 2 | yes | `REMEDIATION_REQUIRED` | CR-ARGUS-001 cycle one; first integration priority | live/controllable | agent `019f6100-97e3-7e23-a5c7-255ec738fd9b`; `2e454ba5`; `VAL-003` interrupted; remediation directive accepted |
-| LUMEN | interaction and choreography worker | internal | mutating slot 3 | yes | `REMEDIATION_REQUIRED` | CR-LUMEN-001 cycle one | live/controllable | agent `019f6100-9898-7353-9359-ed4727e2a4cb`; `a1b2c60b`; `VAL-004` interrupted; remediation directive accepted |
+| FORGE | systems and capability worker | internal | mutating slot 1 | no | `REMEDIATION_REQUIRED` | CR-FORGE-001 final cycle prepared | completed/released | resumable agent `019f6100-96ab-7631-98b0-5b92909186e0`; `cd9cd504`; `VAL-014` focused pass; `CR-DEC-0012` |
+| ARGUS | observation and instrumentation worker | internal | mutating slot 2 | no | `BLOCKED` | CR-ARGUS-001 parked on teaching-consumer scope | completed/released | resumable agent `019f6100-97e3-7e23-a5c7-255ec738fd9b`; `683134a7`; VERA/SENTINEL rejected |
+| LUMEN | interaction and choreography worker | internal | mutating slot 3 | no | `BLOCKED` | CR-LUMEN-001 parked on durable sequence/outcome ownership | completed/released | resumable agent `019f6100-9898-7353-9359-ed4727e2a4cb`; `60070438`; exact reviewers rejected |
 | VERA | internal verification and contract reviewer | internal | read-only | no | `RESPONDED` | preflight archived; await worker commits | last cycle | `MSG-20260714-008`; `reviews/VERA/CR-20260714-preflight.md`; prior agent `019f6100-9955-78f0-abda-5abd175b953a` |
 | CLAUDE | external auditor and substrate verifier | external | read-only | no | `UNVERIFIED` | no active audit | not applicable | no verified bridge or audit; inventory candidate unverified |
 | MERIDIAN | architecture and contract steward | internal | read-only/advisory | no | `RESPONDED` | FORGE preflight archived; await remediation | CR-003 | `reviews/MERIDIAN/CR-20260714-forge-preflight.md`; prior agent `019f613f-ae1a-7643-ba3d-b3793cc79233` |
