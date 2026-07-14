@@ -760,6 +760,8 @@ def test_lens_overlay_runtime_recovery_is_explicit_bounded_and_receipted() -> No
     assert "$ArgumentText -notmatch '(?i)(^|\\s)-Command(?:\\s|$)'" in supervisor
     assert "$ManifestMaxRestarts -eq $MaxRestarts" in supervisor
     assert "$ManifestRestartWindowSeconds -eq $RestartWindowSeconds" in supervisor
+    assert "-WindowStyle Hidden `" in supervisor
+    assert "-WindowStyle Normal `" not in supervisor
     assert "[int]$Candidate.ParentProcessId -ne $ExitedChildPid" in supervisor
     assert "$RestartTimestamps.Count -ge $MaxRestarts" in supervisor
     assert "recovery_budget_exhausted" in supervisor

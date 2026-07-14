@@ -378,7 +378,7 @@ try {
         -FilePath $PowerShellPath `
         -ArgumentList $ArgumentText `
         -WorkingDirectory $RepoRoot `
-        -WindowStyle Normal `
+        -WindowStyle Hidden `
         -RedirectStandardOutput $StdoutPath `
         -RedirectStandardError $StderrPath `
         -PassThru `
