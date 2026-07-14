@@ -491,6 +491,10 @@ def test_managed_copy_preflight_records_redacted_request_aligned_receipt(
             "tenant_data": "isolated",
             "tenant_memory": "isolated",
             "tenant_receipts": "isolated",
+            "tenant_connectors": "isolated",
+            "tenant_capability_packs": "isolated",
+            "tenant_policy": "isolated",
+            "support_operator_authority": "isolated",
         },
         "capability_lineage": {"base_pack": "francis-core", "customization_layer": "tenant"},
         "safe_delta_policy": {"raw_private_pooling_allowed": False, "operator_review_required": True},
@@ -524,6 +528,11 @@ def test_managed_copy_preflight_records_redacted_request_aligned_receipt(
     assert planned["request_receipt_aligned"] is True
     assert planned["request_payload_fingerprints_matched"] is True
     assert planned["preflight_contract_ready"] is True
+    assert planned["managed_copy_law_ready"] is True
+    assert planned["managed_copy_law_ready_count"] == planned["managed_copy_law_required_count"]
+    assert planned["managed_copy_law_required_count"] == 19
+    assert all(check["ready"] is True for check in planned["managed_copy_law_checks"])
+    assert all(check["blocker"] == "" for check in planned["managed_copy_law_checks"])
     assert len(planned["preflight_fingerprint"]) == 64
     assert planned["copy_preflight_recorded"] is False
     assert planned["copy_plan_created"] is False
@@ -549,8 +558,116 @@ def test_managed_copy_preflight_records_redacted_request_aligned_receipt(
     assert mismatched["ok"] is False
     assert mismatched["error"] == "copy_preflight_contract_not_ready"
     assert "tenant_policy_fingerprint_mismatch" in mismatched["blockers"]
+    assert "core_surrender_must_remain_blocked" in mismatched["blockers"]
+    assert mismatched["managed_copy_law_ready"] is False
+    unsafe_check_by_id = {check["id"]: check for check in mismatched["managed_copy_law_checks"]}
+    assert unsafe_check_by_id["core_surrender_blocked"]["status"] == "blocked"
     assert mismatched["writes_receipts"] is False
     assert not preflight_path.exists()
+
+    law_violation_cases = (
+        ("tenant_identity", "tenant_name", "", "tenant_identity_named", "tenant_identity_name_required"),
+        (
+            "tenant_identity",
+            "tenant_admin_actor",
+            "",
+            "tenant_admin_declared",
+            "tenant_admin_actor_required",
+        ),
+        (
+            "tenant_policy",
+            "privacy_weak_pooling_allowed",
+            True,
+            "privacy_weak_pooling_blocked",
+            "privacy_weak_pooling_must_remain_blocked",
+        ),
+        *(
+            (
+                "isolation_profile",
+                domain,
+                "shared",
+                f"{domain}_isolated",
+                f"{domain}_must_be_isolated",
+            )
+            for domain in (
+                "tenant_data",
+                "tenant_memory",
+                "tenant_receipts",
+                "tenant_connectors",
+                "tenant_capability_packs",
+                "tenant_policy",
+                "support_operator_authority",
+            )
+        ),
+        (
+            "capability_lineage",
+            "base_pack",
+            "",
+            "capability_base_lineage_declared",
+            "capability_base_lineage_required",
+        ),
+        (
+            "capability_lineage",
+            "customization_layer",
+            "fork",
+            "customization_layer_tenant_scoped",
+            "customization_layer_must_be_tenant_scoped",
+        ),
+        (
+            "safe_delta_policy",
+            "raw_private_pooling_allowed",
+            True,
+            "raw_private_pooling_blocked",
+            "raw_private_pooling_must_remain_blocked",
+        ),
+        (
+            "safe_delta_policy",
+            "operator_review_required",
+            False,
+            "safe_delta_operator_review_required",
+            "safe_delta_operator_review_required",
+        ),
+        (
+            "support_boundary",
+            "support_access_default",
+            "allowed",
+            "support_default_denied",
+            "support_access_default_must_be_denied",
+        ),
+        (
+            "support_boundary",
+            "time_bound",
+            False,
+            "support_time_bounded",
+            "support_access_must_be_time_bounded",
+        ),
+        (
+            "decommission_policy",
+            "export_required",
+            False,
+            "decommission_export_required",
+            "decommission_export_must_be_required",
+        ),
+        (
+            "decommission_policy",
+            "proof_receipts_required",
+            False,
+            "decommission_proof_receipts_required",
+            "decommission_proof_receipts_must_be_required",
+        ),
+    )
+    for section, field, unsafe_value, check_id, blocker in law_violation_cases:
+        unsafe_payload = json.loads(json.dumps(preflight_payload))
+        unsafe_payload[section][field] = unsafe_value
+        unsafe = client.post("/managed-copies/copy-creation-preflight", json=unsafe_payload).json()
+        unsafe_check_by_id = {check["id"]: check for check in unsafe["managed_copy_law_checks"]}
+        assert unsafe["ok"] is False
+        assert unsafe["error"] == "copy_preflight_contract_not_ready"
+        assert blocker in unsafe["blockers"]
+        assert unsafe["managed_copy_law_ready"] is False
+        assert unsafe_check_by_id[check_id]["status"] == "blocked"
+        assert unsafe["writes_receipts"] is False
+        assert not preflight_path.exists()
 
     wrong_fingerprint = client.post(
         "/managed-copies/copy-creation-preflight",
@@ -587,7 +704,11 @@ def test_managed_copy_preflight_records_redacted_request_aligned_receipt(
     assert recorded["grants_execution_authority"] is False
     assert recorded["grants_mutation_authority"] is False
     assert recorded["receipt"]["request_receipt_id"] == request_record["receipt_id"]
+    assert recorded["receipt"]["managed_copy_law_ready"] is True
+    assert recorded["receipt"]["managed_copy_law_ready_count"] == 19
     assert recorded["receipt"]["governance"]["request_payload_fingerprints_matched"] is True
+    assert recorded["receipt"]["governance"]["managed_copy_law_checked"] is True
+    assert recorded["receipt"]["governance"]["managed_copy_law_ready"] is True
     assert recorded["receipt"]["governance"]["contains_raw_tenant_payload"] is False
     assert recorded["next_smallest_truthful_gap"] == "stage18_copy_creation_plan_process"
 
@@ -704,6 +825,10 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
             "tenant_data": "isolated",
             "tenant_memory": "isolated",
             "tenant_receipts": "isolated",
+            "tenant_connectors": "isolated",
+            "tenant_capability_packs": "isolated",
+            "tenant_policy": "isolated",
+            "support_operator_authority": "isolated",
         },
         "capability_lineage": {"base_pack": "francis-core", "customization_layer": "tenant"},
         "safe_delta_policy": {"raw_private_pooling_allowed": False, "operator_review_required": True},

@@ -17,7 +17,7 @@ from francis.telemetry.audit import record as audit_record
 MANAGED_COPY_REQUEST_CONTRACT = "stage18_managed_copy_request_v1"
 MANAGED_COPY_REQUEST_RECEIPT_KIND = "francis.stage18.managed_copies.copy_request_receipt"
 MANAGED_COPY_REQUEST_RECEIPTS_KIND = "francis.stage18.managed_copies.copy_request_receipts"
-MANAGED_COPY_PREFLIGHT_CONTRACT = "stage18_managed_copy_preflight_v1"
+MANAGED_COPY_PREFLIGHT_CONTRACT = "stage18_managed_copy_preflight_v2"
 MANAGED_COPY_PREFLIGHT_RECEIPT_KIND = "francis.stage18.managed_copies.copy_preflight_receipt"
 MANAGED_COPY_PREFLIGHT_RECEIPTS_KIND = "francis.stage18.managed_copies.copy_preflight_receipts"
 MANAGED_COPY_CREATION_PLAN_CONTRACT = "stage18_managed_copy_creation_plan_v1"
@@ -32,6 +32,30 @@ _REQUEST_MAPPING_FIELDS = (
     "safe_delta_policy",
     "support_boundary",
     "decommission_policy",
+)
+_ISOLATION_DOMAINS = (
+    "tenant_data",
+    "tenant_memory",
+    "tenant_receipts",
+    "tenant_connectors",
+    "tenant_capability_packs",
+    "tenant_policy",
+    "support_operator_authority",
+)
+_MANAGED_COPY_LAW_CHECK_IDS = (
+    "tenant_identity_named",
+    "tenant_admin_declared",
+    "core_surrender_blocked",
+    "privacy_weak_pooling_blocked",
+    *(f"{domain}_isolated" for domain in _ISOLATION_DOMAINS),
+    "capability_base_lineage_declared",
+    "customization_layer_tenant_scoped",
+    "raw_private_pooling_blocked",
+    "safe_delta_operator_review_required",
+    "support_default_denied",
+    "support_time_bounded",
+    "decommission_export_required",
+    "decommission_proof_receipts_required",
 )
 _REQUEST_WRITE_LOCK = threading.Lock()
 _PREFLIGHT_WRITE_LOCK = threading.Lock()
@@ -246,6 +270,8 @@ def managed_copy_preflight_plan(
     provided_request_receipt_id = _safe_text(payload.get("request_receipt_id"))
     expected_request_receipt_id = _safe_text(request_receipt.get("receipt_id"))
     tenant_id, field_presence, field_fingerprints = _request_field_evidence(payload)
+    managed_copy_law_checks = _managed_copy_law_checks(payload)
+    managed_copy_law_ready = all(bool(check["ready"]) for check in managed_copy_law_checks)
     tenant_key = hashlib.sha256(tenant_id.encode("utf-8")).hexdigest() if tenant_id else ""
     expected_field_fingerprints = request_receipt.get("request_field_fingerprints")
     expected_field_fingerprints = expected_field_fingerprints if isinstance(expected_field_fingerprints, dict) else {}
@@ -262,6 +288,7 @@ def managed_copy_preflight_plan(
     if not tenant_id:
         blockers.append("tenant_id_missing")
     blockers.extend(f"{field}_missing_or_invalid" for field in _REQUEST_MAPPING_FIELDS if not field_presence[field])
+    blockers.extend(_safe_text(check.get("blocker")) for check in managed_copy_law_checks if not check["ready"])
 
     expected_tenant_key = _safe_text(request_receipt.get("tenant_key"))
     if tenant_key and expected_tenant_key and tenant_key != expected_tenant_key:
@@ -298,6 +325,7 @@ def managed_copy_preflight_plan(
         "stage17_closure_receipt_id": stage17_receipt_id,
         "request_field_presence": field_presence,
         "request_field_fingerprints": field_fingerprints,
+        "managed_copy_law_checks": managed_copy_law_checks,
     }
     preflight_fingerprint = _fingerprint(fingerprint_evidence) if not blockers else ""
     return {
@@ -314,6 +342,10 @@ def managed_copy_preflight_plan(
         "request_payload_fingerprints_matched": request_receipt_aligned,
         "request_field_presence": field_presence,
         "request_field_fingerprints": field_fingerprints,
+        "managed_copy_law_ready": managed_copy_law_ready,
+        "managed_copy_law_checks": managed_copy_law_checks,
+        "managed_copy_law_ready_count": sum(1 for check in managed_copy_law_checks if check["ready"]),
+        "managed_copy_law_required_count": len(managed_copy_law_checks),
         "stage17_closure_receipt_id": stage17_receipt_id,
         "preflight_contract_ready": not blockers,
         "blockers": blockers,
@@ -397,6 +429,10 @@ def record_managed_copy_preflight(
             "request_fingerprint": _safe_text(plan.get("request_fingerprint")),
             "request_field_presence": dict(plan.get("request_field_presence") or {}),
             "request_field_fingerprints": dict(plan.get("request_field_fingerprints") or {}),
+            "managed_copy_law_ready": bool(plan.get("managed_copy_law_ready")),
+            "managed_copy_law_checks": list(plan.get("managed_copy_law_checks") or []),
+            "managed_copy_law_ready_count": int(plan.get("managed_copy_law_ready_count") or 0),
+            "managed_copy_law_required_count": int(plan.get("managed_copy_law_required_count") or 0),
             "stage17_closure_receipt_id": _safe_text(plan.get("stage17_closure_receipt_id")),
             "request_receipt_aligned": True,
             "request_payload_fingerprints_matched": True,
@@ -414,6 +450,8 @@ def record_managed_copy_preflight(
                 "copy_request_receipt_required": True,
                 "copy_request_receipt_aligned": True,
                 "request_payload_fingerprints_matched": True,
+                "managed_copy_law_checked": True,
+                "managed_copy_law_ready": True,
                 "contains_raw_tenant_payload": False,
                 "does_not_create_copy_plan": True,
                 "does_not_create_copy": True,
@@ -907,6 +945,21 @@ def _valid_preflight_receipt(item: dict[str, Any]) -> bool:
     field_presence: dict[str, Any] = raw_field_presence if isinstance(raw_field_presence, dict) else {}
     raw_field_fingerprints = item.get("request_field_fingerprints")
     field_fingerprints: dict[str, Any] = raw_field_fingerprints if isinstance(raw_field_fingerprints, dict) else {}
+    managed_copy_law_checks = item.get("managed_copy_law_checks")
+    preflight_fingerprint = _safe_text(item.get("preflight_fingerprint"))
+    expected_preflight_fingerprint = _fingerprint(
+        {
+            "contract": _safe_text(item.get("contract")),
+            "actor": _safe_text(item.get("actor")),
+            "tenant_key": _safe_text(item.get("tenant_key")),
+            "request_receipt_id": _safe_text(item.get("request_receipt_id")),
+            "request_fingerprint": _safe_text(item.get("request_fingerprint")),
+            "stage17_closure_receipt_id": _safe_text(item.get("stage17_closure_receipt_id")),
+            "request_field_presence": field_presence,
+            "request_field_fingerprints": field_fingerprints,
+            "managed_copy_law_checks": managed_copy_law_checks,
+        }
+    )
     return (
         _safe_text(item.get("kind")) == MANAGED_COPY_PREFLIGHT_RECEIPT_KIND
         and _safe_text(item.get("receipt_id")).startswith("managed_copy_preflight_")
@@ -914,13 +967,18 @@ def _valid_preflight_receipt(item: dict[str, Any]) -> bool:
         and _safe_text(item.get("status")) == "preflight_passed"
         and bool(_safe_text(item.get("actor")))
         and _is_sha256(item.get("tenant_key"))
-        and _is_sha256(item.get("preflight_fingerprint"))
+        and _is_sha256(preflight_fingerprint)
+        and preflight_fingerprint == expected_preflight_fingerprint
         and _safe_text(item.get("request_receipt_id")).startswith("managed_copy_request_")
         and _is_sha256(item.get("request_fingerprint"))
         and _safe_text(item.get("stage17_closure_receipt_id")).startswith("stage17_capability_economy_closure_")
         and bool(field_presence.get("tenant_id"))
         and all(bool(field_presence.get(field)) for field in _REQUEST_MAPPING_FIELDS)
         and all(_is_sha256(field_fingerprints.get(field)) for field in _REQUEST_MAPPING_FIELDS)
+        and bool(item.get("managed_copy_law_ready"))
+        and _valid_managed_copy_law_checks(managed_copy_law_checks)
+        and _safe_int(item.get("managed_copy_law_ready_count")) == len(_MANAGED_COPY_LAW_CHECK_IDS)
+        and _safe_int(item.get("managed_copy_law_required_count")) == len(_MANAGED_COPY_LAW_CHECK_IDS)
         and bool(item.get("request_receipt_aligned"))
         and bool(item.get("request_payload_fingerprints_matched"))
         and bool(item.get("preflight_passed"))
@@ -936,6 +994,8 @@ def _valid_preflight_receipt(item: dict[str, Any]) -> bool:
         and bool(governance.get("copy_request_receipt_required"))
         and bool(governance.get("copy_request_receipt_aligned"))
         and bool(governance.get("request_payload_fingerprints_matched"))
+        and bool(governance.get("managed_copy_law_checked"))
+        and bool(governance.get("managed_copy_law_ready"))
         and not bool(governance.get("contains_raw_tenant_payload"))
         and bool(governance.get("does_not_create_copy_plan"))
         and bool(governance.get("does_not_create_copy"))
@@ -1127,6 +1187,113 @@ def _request_field_evidence(payload: dict[str, Any]) -> tuple[str, dict[str, boo
     return tenant_id, field_presence, field_fingerprints
 
 
+def _managed_copy_law_checks(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    tenant_identity = _mapping(payload.get("tenant_identity"))
+    tenant_policy = _mapping(payload.get("tenant_policy"))
+    isolation_profile = _mapping(payload.get("isolation_profile"))
+    capability_lineage = _mapping(payload.get("capability_lineage"))
+    safe_delta_policy = _mapping(payload.get("safe_delta_policy"))
+    support_boundary = _mapping(payload.get("support_boundary"))
+    decommission_policy = _mapping(payload.get("decommission_policy"))
+    checks = [
+        _managed_copy_law_check(
+            "tenant_identity_named",
+            bool(_safe_text(tenant_identity.get("tenant_name"))),
+            "tenant_identity_name_required",
+        ),
+        _managed_copy_law_check(
+            "tenant_admin_declared",
+            bool(_safe_text(tenant_identity.get("tenant_admin_actor"))),
+            "tenant_admin_actor_required",
+        ),
+        _managed_copy_law_check(
+            "core_surrender_blocked",
+            tenant_policy.get("core_surrender_allowed") is False,
+            "core_surrender_must_remain_blocked",
+        ),
+        _managed_copy_law_check(
+            "privacy_weak_pooling_blocked",
+            tenant_policy.get("privacy_weak_pooling_allowed") is False,
+            "privacy_weak_pooling_must_remain_blocked",
+        ),
+    ]
+    checks.extend(
+        _managed_copy_law_check(
+            f"{domain}_isolated",
+            _safe_text(isolation_profile.get(domain)).casefold() == "isolated",
+            f"{domain}_must_be_isolated",
+        )
+        for domain in _ISOLATION_DOMAINS
+    )
+    checks.extend(
+        [
+            _managed_copy_law_check(
+                "capability_base_lineage_declared",
+                bool(_safe_text(capability_lineage.get("base_pack"))),
+                "capability_base_lineage_required",
+            ),
+            _managed_copy_law_check(
+                "customization_layer_tenant_scoped",
+                _safe_text(capability_lineage.get("customization_layer")).casefold() == "tenant",
+                "customization_layer_must_be_tenant_scoped",
+            ),
+            _managed_copy_law_check(
+                "raw_private_pooling_blocked",
+                safe_delta_policy.get("raw_private_pooling_allowed") is False,
+                "raw_private_pooling_must_remain_blocked",
+            ),
+            _managed_copy_law_check(
+                "safe_delta_operator_review_required",
+                safe_delta_policy.get("operator_review_required") is True,
+                "safe_delta_operator_review_required",
+            ),
+            _managed_copy_law_check(
+                "support_default_denied",
+                _safe_text(support_boundary.get("support_access_default")).casefold() == "denied",
+                "support_access_default_must_be_denied",
+            ),
+            _managed_copy_law_check(
+                "support_time_bounded",
+                support_boundary.get("time_bound") is True,
+                "support_access_must_be_time_bounded",
+            ),
+            _managed_copy_law_check(
+                "decommission_export_required",
+                decommission_policy.get("export_required") is True,
+                "decommission_export_must_be_required",
+            ),
+            _managed_copy_law_check(
+                "decommission_proof_receipts_required",
+                decommission_policy.get("proof_receipts_required") is True,
+                "decommission_proof_receipts_must_be_required",
+            ),
+        ]
+    )
+    return checks
+
+
+def _managed_copy_law_check(check_id: str, ready: bool, blocker: str) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "ready": ready,
+        "status": "ready" if ready else "blocked",
+        "blocker": "" if ready else blocker,
+    }
+
+
+def _valid_managed_copy_law_checks(value: Any) -> bool:
+    if not isinstance(value, list) or len(value) != len(_MANAGED_COPY_LAW_CHECK_IDS):
+        return False
+    return all(
+        isinstance(item, dict)
+        and _safe_text(item.get("id")) == expected_id
+        and item.get("ready") is True
+        and _safe_text(item.get("status")) == "ready"
+        and not _safe_text(item.get("blocker"))
+        for item, expected_id in zip(value, _MANAGED_COPY_LAW_CHECK_IDS, strict=True)
+    )
+
+
 def _creation_plan_steps(field_fingerprints: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -1183,6 +1350,10 @@ def _safe_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _redacted_text(value: Any) -> str:
