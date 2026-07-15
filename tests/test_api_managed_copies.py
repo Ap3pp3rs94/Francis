@@ -1665,6 +1665,16 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert active_evidence_readback["latest_finding_count"] == drifted_integrity["finding_count"]
     assert active_evidence_readback["incident_opened"] is False
     assert active_evidence_readback["incident_resolved"] is False
+    active_integrity_status = client.get("/managed-copies/status").json()
+    active_rogue_deliverable = next(
+        item for item in active_integrity_status["deliverables"] if item["id"] == "rogue_recovery"
+    )
+    assert active_integrity_status["copy_integrity_evidence_recorded"] is True
+    assert active_integrity_status["copy_integrity_triage_required"] is True
+    assert active_integrity_status["copy_integrity_incident_state"] == "active_drift"
+    assert active_rogue_deliverable["status"] == "integrity_triage_required"
+    assert active_rogue_deliverable["ready"] is False
+    assert active_rogue_deliverable["next_gap"] == "stage18_integrity_evidence_operator_triage"
     drifted_access = client.post(
         "/managed-copies/tenant-access-check",
         json={**access_payload, "domain": "tenant_policy"},
@@ -1676,6 +1686,9 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     restored_status = client.get("/managed-copies/status").json()
     assert restored_status["copy_structural_isolation_verified"] is True
     assert restored_status["copy_isolation_drift_detected"] is False
+    assert restored_status["copy_integrity_evidence_recorded"] is True
+    assert restored_status["copy_integrity_triage_required"] is False
+    assert restored_status["copy_integrity_incident_state"] == "historical_or_changed"
     evidence_readback = client.get(
         "/managed-copies/integrity-evidence-readback",
         params={

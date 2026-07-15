@@ -522,6 +522,15 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     copy_structural_isolation_verified = bool(latest_aligned_isolation.get("live_state_aligned"))
     copy_isolation_drift_detected = bool(latest_aligned_isolation.get("live_drift_detected"))
     copy_isolation_receipt_id = _safe_str(latest_aligned_isolation.get("receipt_id")).strip()
+    integrity_evidence = managed_copy_integrity_evidence_readback(
+        copy_id=provisioned_copy_id,
+        provisioning_receipt_id=copy_provision_receipt_id,
+        isolation_verification_receipt_id=copy_isolation_receipt_id,
+    )
+    copy_integrity_evidence_recorded = integrity_evidence.get("status") == "integrity_evidence_recorded"
+    copy_integrity_incident_state = _safe_str(integrity_evidence.get("integrity_incident_state")).strip()
+    copy_integrity_triage_required = integrity_evidence.get("triage_required") is True
+    copy_integrity_evidence_receipt_id = _safe_str(integrity_evidence.get("latest_receipt_id")).strip()
     safe_delta_reviews = managed_copy_safe_delta_review_receipts_readback(
         copy_id=provisioned_copy_id,
         provisioning_receipt_id=copy_provision_receipt_id,
@@ -697,10 +706,26 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "rogue_recovery",
             "Rogue kill/replace flows",
             ready=False,
-            status="contract_readback_ready",
-            next_gap="stage18_rogue_kill_replace_flows",
+            status=(
+                "integrity_triage_required"
+                if copy_integrity_triage_required
+                else "integrity_evidence_recorded"
+                if copy_integrity_evidence_recorded
+                else "contract_readback_ready"
+            ),
+            next_gap=(
+                "stage18_integrity_evidence_operator_triage"
+                if copy_integrity_triage_required
+                else "stage18_rogue_kill_replace_flows"
+            ),
             evidence=[
-                "GET /managed-copies/rogue-recovery-contract exposes detect/halt/quarantine/replace gates without acting.",
+                (
+                    f"Live integrity triage requires operator review: {copy_integrity_evidence_receipt_id}."
+                    if copy_integrity_triage_required
+                    else f"Historical or changed integrity evidence: {copy_integrity_evidence_receipt_id}."
+                    if copy_integrity_evidence_recorded
+                    else "GET /managed-copies/rogue-recovery-contract exposes detect/halt/quarantine/replace gates without acting."
+                ),
             ],
         ),
         _deliverable(
@@ -849,6 +874,10 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "copy_isolation_drift_detected": copy_isolation_drift_detected,
         "copy_isolation_receipt_id": copy_isolation_receipt_id,
         "copy_full_customer_isolation_verified": False,
+        "copy_integrity_evidence_recorded": copy_integrity_evidence_recorded,
+        "copy_integrity_evidence_receipt_id": copy_integrity_evidence_receipt_id,
+        "copy_integrity_incident_state": copy_integrity_incident_state,
+        "copy_integrity_triage_required": copy_integrity_triage_required,
         "safe_delta_review_recorded": safe_delta_review_recorded,
         "safe_delta_review_receipt_id": safe_delta_review_receipt_id,
         "safe_delta_exported": False,
