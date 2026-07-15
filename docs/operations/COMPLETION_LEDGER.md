@@ -60,11 +60,11 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is a permission-gated safe-delta export authorization-request
-contract bound to a freshly validated export preflight and current live
-lineage/policy. It may create only a pending request receipt; it cannot approve
-or perform export. Production copy creation still requires real
-operator-supplied tenant and policy facts; those facts are not inferred or
+The current goal is a separately scoped safe-delta export-authorization decision
+contract bound to one exact, live-valid pending request. The software may record
+only an immutable approved/rejected decision receipt; fixture validation is not
+a real approval and no export may occur. Production copy creation still requires
+real operator-supplied tenant and policy facts; those facts are not inferred or
 fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
@@ -126,6 +126,37 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 11:14Z - Stage 18 export-authorization request promoted
+
+Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now
+includes a separately scoped, immutable pending authorization-request receipt
+bound to an exact freshly recomputed safe-delta export preflight and bounded
+action classifications. Request creation does not approve or perform export.
+
+Evidence:
+
+- Exact candidate `44048d85` passed 6 focused request tests, the complete
+  85-test managed-copy card suite, changed-path Ruff, format, mypy, and
+  diff-check.
+- SENTINEL, VERA, and HARBOR passed the final affected delta after the recorder
+  moved its decisive live replan inside the write lock following guarded path
+  resolution and required original, supplied, and final fingerprints to agree.
+- Exact candidate `44048d85` passed `scripts/check.ps1` through repository-wide
+  Ruff, format, mypy over 669 source files, and pytest at 100%, exit `0`.
+- Post-promotion focused validation on `D:\Francis` exposed one Windows-long
+  fixture root; test-only commit `f3cc8c7c` adopts the existing compact fixture
+  pattern, after which all 6 request tests passed. No live service, Orb process,
+  production request, approval, artifact, network operation, or tenant mutation
+  occurred.
+
+Remaining truthful gap:
+
+- Implement a separately scoped approval/rejection decision receipt bound to
+  one exact live-valid pending authorization request. Fixture-backed decisions
+  validate software only and must never be represented as production approval.
+- Actual approval, export, import, global learning, production tenant creation,
+  Stage 18 closure, FR-018 clearance, and physical validation remain unclaimed.
 
 ### 2026-07-15 09:25Z - Stage 18 safe-delta export preflight promoted
 
