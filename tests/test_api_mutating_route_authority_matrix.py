@@ -380,6 +380,14 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert managed_copy["governance_maturity"] == "permission_gated"
     assert "no-copy/no-delete" in managed_copy["notes"]
 
+    safe_delta_export_preflight = entries["/managed-copies/safe-delta-export-preflight"]
+    assert safe_delta_export_preflight["family"] == "managed_copies_safe_delta_export_preflight"
+    assert safe_delta_export_preflight["required_scope"] == "managed_copies.safe_delta.export.preflight"
+    assert safe_delta_export_preflight["governance_maturity"] == "permission_gated_dry_run_preflight"
+    assert safe_delta_export_preflight["receipt_behavior"] == "none_dry_run_preflight_projection"
+    assert "writes no receipt, artifact, manifest" in safe_delta_export_preflight["notes"]
+    assert "grants no export, execution, or mutation authority" in safe_delta_export_preflight["notes"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

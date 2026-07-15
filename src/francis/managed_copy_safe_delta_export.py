@@ -54,6 +54,19 @@ def managed_copy_safe_delta_export_preflight(payload: dict[str, Any], *, actor: 
     blockers: list[str] = []
 
     actor_fields = [field for field in ("request_actor", "api_actor", "actor") if field in payload]
+    payload_actor = _redacted_text(payload.get(actor_fields[0]))[:240] if len(actor_fields) == 1 else ""
+    if not safe_actor or not payload_actor or payload_actor != safe_actor:
+        return _actor_lineage_blocked(
+            safe_actor=safe_actor,
+            copy_id=copy_id,
+            provision_id=provision_id,
+            isolation_id=isolation_id,
+            review_fingerprint=review_fingerprint,
+            decision_receipt_id=decision_receipt_id,
+            dry_run=dry_run,
+            unknown_fields=unknown_fields,
+            actor_field_count=len(actor_fields),
+        )
     if unknown_fields:
         blockers.append("safe_delta_export_preflight_unknown_fields")
     if len(actor_fields) != 1 or not safe_actor:
@@ -158,6 +171,48 @@ def managed_copy_safe_delta_export_preflight(payload: dict[str, Any], *, actor: 
 
 def _without_live_fields(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if not key.startswith("live_")}
+
+
+def _actor_lineage_blocked(
+    *,
+    safe_actor: str,
+    copy_id: str,
+    provision_id: str,
+    isolation_id: str,
+    review_fingerprint: str,
+    decision_receipt_id: str,
+    dry_run: Any,
+    unknown_fields: list[str],
+    actor_field_count: int,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "kind": MANAGED_COPY_SAFE_DELTA_EXPORT_PREFLIGHT_KIND,
+        "contract": MANAGED_COPY_SAFE_DELTA_EXPORT_PREFLIGHT_CONTRACT,
+        "status": "blocked",
+        "error": "safe_delta_export_preflight_not_ready",
+        "actor": safe_actor,
+        "copy_id": copy_id,
+        "provisioning_receipt_id": provision_id,
+        "isolation_verification_receipt_id": isolation_id,
+        "review_fingerprint": review_fingerprint,
+        "review_receipt_id": "",
+        "decision_receipt_id": decision_receipt_id,
+        "decision": "",
+        "signal_class": "",
+        "direction": "",
+        "dry_run": dry_run is True,
+        "request_schema_exact": not unknown_fields and actor_field_count == 1,
+        "unknown_fields": unknown_fields,
+        "blockers": ["safe_delta_export_preflight_actor_lineage_mismatch"],
+        "export_preflight_fingerprint": "",
+        "approved_for_future_export_preflight": False,
+        "safe_delta_exported": False,
+        "safe_delta_flow_active": False,
+        "contains_raw_candidate_material": False,
+        "contains_raw_tenant_identity": False,
+        **_NO_EFFECTS,
+    }
 
 
 def _fingerprint(value: Any) -> str:

@@ -4135,7 +4135,10 @@ def test_managed_copy_safe_delta_export_preflight_approved_is_deterministic_and_
     monkeypatch, tmp_path
 ) -> None:
     source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "export-ready")
-    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    raw_review_marker = "distinctive-review-marker-must-not-project"
+    review = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor=f"safe-delta.{raw_review_marker}")
+    )
     decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
     decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
         decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
@@ -4150,7 +4153,7 @@ def test_managed_copy_safe_delta_export_preflight_approved_is_deterministic_and_
     assert first["status"] == "export_preflight_ready"
     assert first["contract"] == "stage18_managed_copy_safe_delta_export_preflight_v1"
     assert len(first["export_preflight_fingerprint"]) == 64
-    assert second["export_preflight_fingerprint"] == first["export_preflight_fingerprint"]
+    assert second == first
     assert first["decision"] == "approved"
     assert first["approved_for_future_export_preflight"] is True
     assert first["contains_raw_candidate_material"] is False
@@ -4179,6 +4182,65 @@ def test_managed_copy_safe_delta_export_preflight_approved_is_deterministic_and_
     assert after == before
     assert "candidate" not in first
     assert "source_record_count" not in json.dumps(first)
+    assert raw_review_marker not in json.dumps(first)
+
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({payload["request_actor"]: ["managed_copies.safe_delta.export.preflight"]}),
+    )
+    api_body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/safe-delta-export-preflight",
+            json=payload,
+        )
+        .json()
+    )
+    assert api_body["status"] == "export_preflight_ready"
+    assert api_body["safe_delta_exported"] is False
+    assert api_body["safe_delta_flow_active"] is False
+    assert api_body["grants_export_authority"] is False
+
+
+def test_managed_copy_safe_delta_export_preflight_rejects_direct_actor_substitution_before_readback(
+    monkeypatch,
+) -> None:
+    calls = {"review": 0, "decision": 0}
+
+    def review_readback(**kwargs: Any) -> dict[str, Any]:
+        calls["review"] += 1
+        return {}
+
+    def decision_readback(**kwargs: Any) -> dict[str, Any]:
+        calls["decision"] += 1
+        return {}
+
+    monkeypatch.setattr(safe_delta_export, "managed_copy_safe_delta_review_receipts_readback", review_readback)
+    monkeypatch.setattr(safe_delta_export, "managed_copy_safe_delta_decisions_readback", decision_readback)
+    payload = {
+        "request_actor": "safe-delta.payload-actor",
+        "copy_id": "managed_copy_actor_lineage",
+        "provisioning_receipt_id": "managed_copy_provision_actor_lineage",
+        "isolation_verification_receipt_id": "managed_copy_isolation_actor_lineage",
+        "review_fingerprint": "a" * 64,
+        "decision_receipt_id": "managed_copy_safe_delta_decision_actor_lineage",
+        "dry_run": True,
+    }
+
+    result = safe_delta_export.managed_copy_safe_delta_export_preflight(
+        payload,
+        actor="safe-delta.authoritative-actor",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked"
+    assert result["blockers"] == ["safe_delta_export_preflight_actor_lineage_mismatch"]
+    assert result["export_preflight_fingerprint"] == ""
+    assert result["approved_for_future_export_preflight"] is False
+    assert result["writes_receipt"] is False
+    assert result["exports_delta"] is False
+    assert result["grants_export_authority"] is False
+    assert calls == {"review": 0, "decision": 0}
 
 
 def test_managed_copy_safe_delta_export_preflight_rejection_and_schema_fail_closed(monkeypatch, tmp_path) -> None:
@@ -4194,19 +4256,76 @@ def test_managed_copy_safe_delta_export_preflight_rejection_and_schema_fail_clos
     assert "safe_delta_export_preflight_decision_rejected" in rejected["blockers"]
     assert rejected["grants_export_authority"] is False
 
-    for changes, blocker in (
-        ({"dry_run": 1}, "safe_delta_export_preflight_dry_run_true_required"),
-        ({"dry_run": False}, "safe_delta_export_preflight_dry_run_true_required"),
-        ({"unexpected": True}, "safe_delta_export_preflight_unknown_fields"),
-        ({"decision_receipt_id": "foreign"}, "safe_delta_export_preflight_decision_receipt_id_invalid"),
-    ):
-        result = safe_delta_export.managed_copy_safe_delta_export_preflight(
-            {**payload, **changes}, actor=payload["request_actor"]
-        )
+    schema_cases = (
+        (
+            {key: value for key, value in payload.items() if key != "dry_run"},
+            "safe_delta_export_preflight_dry_run_true_required",
+        ),
+        ({**payload, "dry_run": None}, "safe_delta_export_preflight_dry_run_true_required"),
+        ({**payload, "dry_run": "true"}, "safe_delta_export_preflight_dry_run_true_required"),
+        ({**payload, "dry_run": 0}, "safe_delta_export_preflight_dry_run_true_required"),
+        ({**payload, "actor": payload["request_actor"]}, "safe_delta_export_preflight_actor_lineage_mismatch"),
+        ({**payload, "copy_id": ""}, "safe_delta_export_preflight_copy_id_required"),
+        ({**payload, "provisioning_receipt_id": ""}, "safe_delta_export_preflight_provisioning_receipt_id_required"),
+        (
+            {**payload, "isolation_verification_receipt_id": ""},
+            "safe_delta_export_preflight_isolation_receipt_id_required",
+        ),
+        ({**payload, "review_fingerprint": "not-sha256"}, "safe_delta_export_preflight_review_fingerprint_invalid"),
+        ({**payload, "unexpected": True}, "safe_delta_export_preflight_unknown_fields"),
+        ({**payload, "decision_receipt_id": "foreign"}, "safe_delta_export_preflight_decision_receipt_id_invalid"),
+    )
+    for changes, blocker in schema_cases:
+        result = safe_delta_export.managed_copy_safe_delta_export_preflight(changes, actor=payload["request_actor"])
         assert result["ok"] is False
         assert blocker in result["blockers"]
         assert result["writes_receipt"] is False
         assert result["exports_delta"] is False
+
+
+def test_managed_copy_safe_delta_export_preflight_rejects_cross_review_decision_and_tampering(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "export-cross-review")
+    review_a = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor="safe-delta.export-review-a", summary_fingerprint="a" * 64)
+    )
+    review_b = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor="safe-delta.export-review-b", summary_fingerprint="b" * 64)
+    )
+    plan_a = _safe_delta_decision_test_plan(monkeypatch, source_state, review_a, decision="approved")
+    plan_b = _safe_delta_decision_test_plan(monkeypatch, source_state, review_b, decision="approved")
+    decision_b = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan_b, provided_fingerprint=plan_b["decision_fingerprint"], confirmed=True
+    )
+    cross_review_payload = _safe_delta_export_preflight_payload(plan_a, decision_b)
+    cross_review = safe_delta_export.managed_copy_safe_delta_export_preflight(
+        cross_review_payload, actor=cross_review_payload["request_actor"]
+    )
+    assert cross_review["ok"] is False
+    assert "safe_delta_export_preflight_decision_receipt_missing_or_mismatch" in cross_review["blockers"]
+    assert cross_review["export_preflight_fingerprint"] == ""
+
+    valid_payload = _safe_delta_export_preflight_payload(plan_b, decision_b)
+    assert (
+        safe_delta_export.managed_copy_safe_delta_export_preflight(valid_payload, actor=valid_payload["request_actor"])[
+            "ok"
+        ]
+        is True
+    )
+    decision_directory = safe_delta_approval._decision_directory(plan_b, create=False)
+    assert decision_directory is not None
+    decision_path = next(decision_directory.glob(f"{plan_b['review_fingerprint'][:16]}.json"))
+    tampered = json.loads(decision_path.read_text(encoding="utf-8"))
+    tampered["unexpected"] = True
+    decision_path.write_text(json.dumps(tampered), encoding="utf-8")
+    blocked = safe_delta_export.managed_copy_safe_delta_export_preflight(
+        valid_payload, actor=valid_payload["request_actor"]
+    )
+    assert blocked["ok"] is False
+    assert "safe_delta_export_preflight_decision_receipt_missing_or_mismatch" in blocked["blockers"]
+    assert blocked["writes_receipt"] is False
+    assert blocked["exports_delta"] is False
 
 
 def test_managed_copy_safe_delta_export_preflight_blocks_policy_drift_and_real_empty_sources(
