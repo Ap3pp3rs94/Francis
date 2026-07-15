@@ -3609,7 +3609,7 @@ def _rogue_assessment_fixture(monkeypatch, tmp_path):
 
 
 def test_managed_copy_rogue_detection_assessment_plan_record_readback_is_assessment_only(monkeypatch, tmp_path) -> None:
-    _, _, payload = _rogue_assessment_fixture(monkeypatch, tmp_path.parent / "rz-ready")
+    source_state, _, payload = _rogue_assessment_fixture(monkeypatch, tmp_path.parent / "rz-ready")
     plan = rogue_detection_assessment.managed_copy_rogue_detection_assessment_plan(
         payload, actor=payload["request_actor"]
     )
@@ -3634,6 +3634,9 @@ def test_managed_copy_rogue_detection_assessment_plan_record_readback_is_assessm
         isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
     )
     assert readback["valid_count"] == 1
+    assert readback["status"] == "rogue_signal_assessed"
+    assert readback["rogue_signal_assessed"] is True
+    assert readback["rogue_detected"] is False
     for flag in (
         "rogue_detected",
         "halts_copy",
@@ -3647,6 +3650,69 @@ def test_managed_copy_rogue_detection_assessment_plan_record_readback_is_assessm
         "grants_mutation_authority",
     ):
         assert recorded[flag] is False
+    source_state["isolation"]["live_state_aligned"] = False
+    drifted_readback = rogue_detection_assessment.managed_copy_rogue_detection_assessments_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert drifted_readback["status"] in {"empty", "invalid_or_drifted"}
+    assert drifted_readback["valid_count"] == 0
+    assert drifted_readback["rogue_detected"] is False
+
+
+@pytest.mark.parametrize("field", ["tenant_key", "provision_fingerprint", "isolation_fingerprint"])
+def test_managed_copy_rogue_detection_assessment_readback_rejects_rehashed_lineage_substitution(
+    monkeypatch, tmp_path, field
+) -> None:
+    _, _, payload = _rogue_assessment_fixture(monkeypatch, tmp_path.parent / f"rz-sub-{field[:2]}")
+    plan = rogue_detection_assessment.managed_copy_rogue_detection_assessment_plan(
+        payload, actor=payload["request_actor"]
+    )
+    recorded = rogue_detection_assessment.record_managed_copy_rogue_detection_assessment(
+        plan, provided_fingerprint=plan["assessment_fingerprint"], confirmed=True
+    )
+    directory = rogue_detection_assessment._directory(plan["assessment"], create=False)
+    assert directory is not None
+    path = directory / f"{plan['assessment_fingerprint'][:16]}.json"
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    receipt[field] = "0" * 64
+    receipt["receipt_fingerprint"] = rogue_detection_assessment._receipt_fp(receipt)
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert recorded["writes_receipt"] is True
+    readback = rogue_detection_assessment.managed_copy_rogue_detection_assessments_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert readback["valid_count"] == 0
+    assert readback["items"] == []
+    assert readback["rogue_detected"] is False
+
+
+def test_managed_copy_rogue_detection_assessment_wrong_fingerprint_and_malformed_conflict(
+    monkeypatch, tmp_path
+) -> None:
+    _, _, payload = _rogue_assessment_fixture(monkeypatch, tmp_path.parent / "rz-conflict")
+    plan = rogue_detection_assessment.managed_copy_rogue_detection_assessment_plan(
+        payload, actor=payload["request_actor"]
+    )
+    wrong = rogue_detection_assessment.record_managed_copy_rogue_detection_assessment(
+        plan, provided_fingerprint="0" * 64, confirmed=True
+    )
+    assert wrong["error"] == "rogue_detection_assessment_fingerprint_mismatch"
+    assert wrong["writes_receipt"] is False
+    directory = rogue_detection_assessment._directory(plan["assessment"], create=True)
+    assert directory is not None
+    path = directory / f"{plan['assessment_fingerprint'][:16]}.json"
+    malformed = '{"raw_incident":"must-not-overwrite"'
+    path.write_text(malformed, encoding="utf-8")
+    conflict = rogue_detection_assessment.record_managed_copy_rogue_detection_assessment(
+        plan, provided_fingerprint=plan["assessment_fingerprint"], confirmed=True
+    )
+    assert conflict["error"] == "rogue_detection_assessment_receipt_conflict"
+    assert conflict["writes_receipt"] is False
+    assert path.read_text(encoding="utf-8") == malformed
 
 
 def test_managed_copy_rogue_detection_assessment_schema_and_drift_fail_closed(monkeypatch, tmp_path) -> None:

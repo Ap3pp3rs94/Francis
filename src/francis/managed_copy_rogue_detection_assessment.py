@@ -235,7 +235,13 @@ def managed_copy_rogue_detection_assessments_readback(
         payload = {key: item.get(key) for key in _FIELDS if key in item}
         payload.update(request_actor=item.get("actor"), dry_run=True)
         live = managed_copy_rogue_detection_assessment_plan(payload, actor=_text(item.get("actor")))
-        if _valid(item, path, directory) and live.get("assessment_fingerprint") == item.get("assessment_fingerprint"):
+        if (
+            _valid(item, path, directory)
+            and live.get("assessment_fingerprint") == item.get("assessment_fingerprint")
+            and live.get("tenant_key") == item.get("tenant_key")
+            and live.get("provision_fingerprint") == item.get("provision_fingerprint")
+            and live.get("isolation_fingerprint") == item.get("isolation_fingerprint")
+        ):
             valid.append(item)
     valid.sort(key=lambda item: (int(item["recorded_ts"]), _text(item.get("receipt_id"))))
     return _readback(valid[-max(1, min(int(limit), 500)) :], "rogue_signal_assessed" if valid else "invalid_or_drifted")
