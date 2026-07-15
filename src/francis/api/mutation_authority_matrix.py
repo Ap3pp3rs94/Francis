@@ -1522,6 +1522,20 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="managed_copies_isolation_policy_decision",
+        prefixes=("/managed-copies/isolation-policy-decision",),
+        required_actor="none",
+        required_scope="none_read_only_isolation_policy_classification",
+        approval_requirement="not_required_read_projection",
+        receipt_behavior="none_read_projection",
+        denial_behavior="exact schema and isolation policy rules return deterministic policy_denied classification",
+        governance_maturity="read_projection_using_post",
+        notes=(
+            "POST carries a bounded policy-classification payload; it resolves no lineage or path, reads or writes "
+            "no tenant state, and grants no access, execution, mutation, or other authority."
+        ),
+    ),
+    AuthorityRule(
         family="managed_copies",
         prefixes=("/managed-copies",),
         required_actor="payload.request_actor, payload.api_actor, or payload.actor",

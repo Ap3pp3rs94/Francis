@@ -4499,24 +4499,88 @@ def test_managed_copy_isolation_policy_decision_is_deterministic_and_unauthorize
     assert not data_root.exists()
 
 
-def test_managed_copy_isolation_policy_decision_denies_cross_tenant_and_support_access() -> None:
+@pytest.mark.parametrize(
+    ("domain", "compatible"),
+    [
+        ("tenant_data", True),
+        ("tenant_memory", True),
+        ("tenant_receipts", True),
+        ("tenant_connectors", True),
+        ("tenant_capability_packs", True),
+        ("tenant_policy", True),
+        ("support_operator_authority", False),
+    ],
+)
+def test_managed_copy_isolation_policy_decision_covers_all_domains(domain, compatible) -> None:
     client = TestClient(create_app())
+    payload = {
+        "source_tenant_key": "tenant-a",
+        "target_tenant_key": "tenant-a",
+        "domain": domain,
+        "operation": "read",
+    }
+    body = client.post("/managed-copies/isolation-policy-decision", json=payload).json()
+
+    assert body["policy_compatible"] is compatible
+    assert body["status"] == ("policy_compatible" if compatible else "policy_denied")
+    assert body["decision_is_authorization"] is False
+    if domain == "support_operator_authority":
+        assert "isolation_policy_support_authority_requires_separate_governed_path" in body["blockers"]
+
+
+def test_managed_copy_isolation_policy_decision_denies_cross_tenant_flow() -> None:
     payload = {
         "source_tenant_key": "tenant-a",
         "target_tenant_key": "tenant-b",
         "domain": "tenant_memory",
         "operation": "write",
     }
-    cross_tenant = client.post("/managed-copies/isolation-policy-decision", json=payload).json()
-    support = client.post(
-        "/managed-copies/isolation-policy-decision",
-        json={**payload, "target_tenant_key": "tenant-a", "domain": "support_operator_authority"},
-    ).json()
+    body = TestClient(create_app()).post("/managed-copies/isolation-policy-decision", json=payload).json()
 
-    assert cross_tenant["status"] == "policy_denied"
-    assert "isolation_policy_cross_tenant_flow_denied" in cross_tenant["blockers"]
-    assert support["status"] == "policy_denied"
-    assert "isolation_policy_support_authority_requires_separate_governed_path" in support["blockers"]
+    assert body["status"] == "policy_denied"
+    assert body["policy_compatible"] is False
+    assert "isolation_policy_cross_tenant_flow_denied" in body["blockers"]
+
+
+@pytest.mark.parametrize("operation", ["invoke", "read", "write"])
+def test_managed_copy_isolation_policy_decision_covers_all_allowed_operations(operation) -> None:
+    payload = {
+        "source_tenant_key": "tenant-a",
+        "target_tenant_key": "tenant-a",
+        "domain": "tenant_data",
+        "operation": operation,
+    }
+    body = TestClient(create_app()).post("/managed-copies/isolation-policy-decision", json=payload).json()
+
+    assert body["status"] == "policy_compatible"
+    assert body["policy_compatible"] is True
+    assert body["decision_is_authorization"] is False
+
+
+def test_managed_copy_isolation_policy_decision_fingerprint_binds_every_input() -> None:
+    client = TestClient(create_app())
+    base = {
+        "source_tenant_key": "tenant-a",
+        "target_tenant_key": "tenant-a",
+        "domain": "tenant_data",
+        "operation": "read",
+    }
+    baseline = client.post("/managed-copies/isolation-policy-decision", json=base).json()["decision_fingerprint"]
+    replay = client.post("/managed-copies/isolation-policy-decision", json=base).json()["decision_fingerprint"]
+    mutations = {
+        "source_tenant_key": "tenant-b",
+        "target_tenant_key": "tenant-b",
+        "domain": "tenant_memory",
+        "operation": "write",
+    }
+
+    assert replay == baseline
+    for field, value in mutations.items():
+        changed = client.post(
+            "/managed-copies/isolation-policy-decision",
+            json={**base, field: value},
+        ).json()["decision_fingerprint"]
+        assert changed != baseline, field
 
 
 def test_managed_copy_isolation_policy_decision_rejects_invalid_exact_schema() -> None:

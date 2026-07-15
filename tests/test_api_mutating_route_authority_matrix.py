@@ -429,6 +429,22 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert tenant_access["required_scope"] == "managed_copies.isolation_verification.write"
     assert "deterministic read-only" in tenant_access["receipt_behavior"]
 
+    isolation_policy = entries["/managed-copies/isolation-policy-decision"]
+    assert isolation_policy["family"] == "managed_copies_isolation_policy_decision"
+    assert isolation_policy["required_actor"] == "none"
+    assert isolation_policy["required_scope"] == "none_read_only_isolation_policy_classification"
+    assert isolation_policy["approval_requirement"] == "not_required_read_projection"
+    assert isolation_policy["receipt_behavior"] == "none_read_projection"
+    assert (
+        isolation_policy["denial_behavior"]
+        == "exact schema and isolation policy rules return deterministic policy_denied classification"
+    )
+    assert isolation_policy["governance_maturity"] == "read_projection_using_post"
+    assert isolation_policy["notes"] == (
+        "POST carries a bounded policy-classification payload; it resolves no lineage or path, reads or writes "
+        "no tenant state, and grants no access, execution, mutation, or other authority."
+    )
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"
