@@ -193,10 +193,27 @@ def record_managed_copy_safe_delta_decision(
     actor = _text(plan.get("actor"))
     if not actor or actor != _redacted_text(actor)[:240]:
         return _blocked("blocked_safe_delta_decision_actor", "safe_delta_decision_actor_not_canonical")
+    replanned = managed_copy_safe_delta_decision_plan(
+        {
+            "copy_id": plan.get("copy_id"),
+            "provisioning_receipt_id": plan.get("provisioning_receipt_id"),
+            "isolation_verification_receipt_id": plan.get("isolation_verification_receipt_id"),
+            "review_fingerprint": plan.get("review_fingerprint"),
+            "decision": plan.get("decision"),
+        },
+        actor=actor,
+    )
+    recomputed = _text(replanned.get("decision_fingerprint"))
+    if (
+        not replanned.get("decision_contract_ready")
+        or not recomputed
+        or recomputed != expected
+        or recomputed != _text(provided_fingerprint)
+    ):
+        return _blocked("blocked_safe_delta_decision_fingerprint", "safe_delta_decision_fingerprint_mismatch")
     if not confirmed:
         return _blocked("blocked_safe_delta_decision_confirmation", "safe_delta_decision_confirmation_required")
-    if not expected or _text(provided_fingerprint) != expected:
-        return _blocked("blocked_safe_delta_decision_fingerprint", "safe_delta_decision_fingerprint_mismatch")
+    plan = replanned
     directory = _decision_directory(plan, create=True)
     if directory is None:
         return _blocked("blocked_safe_delta_decision_path", "safe_delta_decision_path_invalid")
