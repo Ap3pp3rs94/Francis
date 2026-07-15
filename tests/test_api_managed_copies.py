@@ -17,6 +17,7 @@ import francis.managed_copy_safe_delta_export_authorization_decision as safe_del
 import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export_artifact_plan
 import francis.managed_copy_rogue_detection_assessment as rogue_detection_assessment
 import francis.managed_copy_integrity_scan as integrity_scan
+import francis.managed_copy_tenant_access as tenant_access
 from francis.api.app import create_app
 
 
@@ -73,6 +74,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
         "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
         "integrity_scan": "/managed-copies/integrity-scan",
+        "tenant_access_check": "/managed-copies/tenant-access-check",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "sla_commitment_review": "/managed-copies/sla-commitment-review",
         "roles_contract": "/managed-copies/roles-contract",
@@ -1574,6 +1576,29 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert aligned_integrity["writes_receipts"] is False
     assert aligned_integrity["rogue_detected"] is False
 
+    access_payload = {
+        "request_actor": actor,
+        "copy_id": provisioned["copy_id"],
+        "tenant_key": tenant_root.name,
+        "provisioning_receipt_id": provisioned["receipt_id"],
+        "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+        "domain": "tenant_data",
+    }
+    allowed_access = client.post("/managed-copies/tenant-access-check", json=access_payload).json()
+    assert allowed_access["status"] == "tenant_access_allowed"
+    assert allowed_access["access_allowed"] is True
+    assert allowed_access["application_access_boundary_enforced"] is True
+    assert allowed_access["resolved_path_exposed"] is False
+    assert allowed_access["reads_tenant_content"] is False
+
+    cross_tenant_access = client.post(
+        "/managed-copies/tenant-access-check",
+        json={**access_payload, "tenant_key": "0" * 64},
+    ).json()
+    assert cross_tenant_access["status"] == "tenant_access_denied"
+    assert cross_tenant_access["access_allowed"] is False
+    assert "tenant_access_cross_tenant_denied" in cross_tenant_access["blockers"]
+
     policy_path = tenant_root / "policy"
     displaced_policy_path = tenant_root / "policy-displaced"
     policy_path.rename(displaced_policy_path)
@@ -1590,6 +1615,12 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert drifted_integrity["finding_count"] >= 1
     assert any(item["blocker"] == "tenant_policy_directory_missing" for item in drifted_integrity["findings"])
     assert drifted_integrity["rogue_detected"] is False
+    drifted_access = client.post(
+        "/managed-copies/tenant-access-check",
+        json={**access_payload, "domain": "tenant_policy"},
+    ).json()
+    assert drifted_access["status"] == "tenant_access_denied"
+    assert "tenant_access_isolation_drift_detected" in drifted_access["blockers"]
     displaced_policy_path.rename(policy_path)
 
     restored_status = client.get("/managed-copies/status").json()
@@ -3847,6 +3878,75 @@ def test_managed_copy_integrity_scan_route_denies_unscoped_actor(monkeypatch, tm
     assert body["error"] == "api_permission_denied"
     assert body["required_scope"] == "managed_copies.rogue_recovery.write"
     assert not (tmp_path / "empty").exists()
+
+
+def test_managed_copy_tenant_access_check_is_exact_and_path_opaque(monkeypatch, tmp_path) -> None:
+    provision = {
+        "copy_id": "copy-1",
+        "tenant_key": "a" * 64,
+        "receipt_id": "provision-1",
+        "provision_fingerprint": "b" * 64,
+    }
+    isolation = {"receipt_id": "isolation-1", "live_state_aligned": True}
+    monkeypatch.setattr(tenant_access, "managed_copy_provision_for_copy", lambda *args, **kwargs: provision)
+    monkeypatch.setattr(
+        tenant_access, "latest_managed_copy_isolation_verification_for_provision", lambda *args, **kwargs: isolation
+    )
+    monkeypatch.setattr(
+        tenant_access,
+        "managed_copy_isolation_guarded_subpath",
+        lambda *args, **kwargs: tmp_path / "managed_copies" / "tenants" / ("a" * 64) / "data",
+    )
+    payload = {
+        "request_actor": "tenant.boundary",
+        "copy_id": "copy-1",
+        "tenant_key": "a" * 64,
+        "provisioning_receipt_id": "provision-1",
+        "isolation_verification_receipt_id": "isolation-1",
+        "domain": "tenant_data",
+    }
+    allowed = tenant_access.managed_copy_tenant_access_check(payload, actor="tenant.boundary")
+    assert allowed["status"] == "tenant_access_allowed"
+    assert allowed["access_allowed"] is True
+    assert allowed["resolved_path_exposed"] is False
+    assert str(tmp_path) not in json.dumps(allowed)
+
+    cross_tenant = tenant_access.managed_copy_tenant_access_check(
+        {**payload, "tenant_key": "c" * 64}, actor="tenant.boundary"
+    )
+    assert cross_tenant["access_allowed"] is False
+    assert "tenant_access_cross_tenant_denied" in cross_tenant["blockers"]
+
+    unknown_domain = tenant_access.managed_copy_tenant_access_check(
+        {**payload, "domain": "tenant_secrets"}, actor="tenant.boundary"
+    )
+    assert unknown_domain["access_allowed"] is False
+    assert unknown_domain["domain"] == "unknown"
+    assert "tenant_access_domain_not_allowed" in unknown_domain["blockers"]
+
+
+def test_managed_copy_tenant_access_check_denies_unscoped_actor_without_readback(monkeypatch, tmp_path) -> None:
+    data_root = tmp_path / "tenant-access-denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/tenant-access-check",
+            json={
+                "request_actor": "unscoped",
+                "copy_id": "copy-1",
+                "tenant_key": "a" * 64,
+                "provisioning_receipt_id": "provision-1",
+                "isolation_verification_receipt_id": "isolation-1",
+                "domain": "tenant_data",
+            },
+        )
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.isolation_verification.write"
+    assert not data_root.exists()
 
 
 def _configure_safe_delta_receipt_test_sources(

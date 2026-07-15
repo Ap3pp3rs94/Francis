@@ -42,6 +42,7 @@ from francis.managed_copies import (
     managed_copy_rogue_detection_assessment_snapshot,
     managed_copy_rogue_detection_assessments_snapshot,
     managed_copy_integrity_scan_snapshot,
+    managed_copy_tenant_access_check_snapshot,
     managed_copy_rogue_recovery_review_blocked_snapshot,
     managed_copy_role_authority_review_blocked_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
@@ -603,6 +604,24 @@ def integrity_scan(payload: dict[str, Any], request: Request) -> dict[str, Any]:
             next_step="configure_actor_scope_before_scanning_managed_copy_integrity",
         )
     return managed_copy_integrity_scan_snapshot(payload, actor=actor)
+
+
+@router.post("/tenant-access-check")
+def tenant_access_check(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_checking_managed_copy_tenant_access",
+        )
+    return managed_copy_tenant_access_check_snapshot(payload, actor=actor)
 
 
 @router.post("/rogue-recovery-review")

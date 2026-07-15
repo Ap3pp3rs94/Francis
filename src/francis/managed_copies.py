@@ -70,6 +70,7 @@ from francis.managed_copy_rogue_detection_assessment import (
     record_managed_copy_rogue_detection_assessment,
 )
 from francis.managed_copy_integrity_scan import managed_copy_integrity_scan
+from francis.managed_copy_tenant_access import managed_copy_tenant_access_check
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -779,6 +780,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
             "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
             "integrity_scan": "/managed-copies/integrity-scan",
+            "tenant_access_check": "/managed-copies/tenant-access-check",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "sla_commitment_review": "/managed-copies/sla-commitment-review",
             "roles_contract": "/managed-copies/roles-contract",
@@ -3474,6 +3476,10 @@ def managed_copy_rogue_detection_assessments_snapshot(**kwargs: Any) -> dict[str
 
 def managed_copy_integrity_scan_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
     return managed_copy_integrity_scan(payload, actor=actor)
+
+
+def managed_copy_tenant_access_check_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    return managed_copy_tenant_access_check(payload, actor=actor)
 
 
 def managed_copy_rogue_recovery_review_blocked_snapshot(

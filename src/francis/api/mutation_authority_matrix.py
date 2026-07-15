@@ -1420,6 +1420,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Event actor remains provenance; request_actor/api_actor can carry the API caller identity for scoped writes.",
     ),
     AuthorityRule(
+        family="managed_copies_tenant_access_check",
+        prefixes=("/managed-copies/tenant-access-check",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.isolation_verification.write",
+        approval_requirement="exact live provision and structural-isolation lineage",
+        receipt_behavior="none; deterministic read-only allow or deny decision",
+        denial_behavior="api_permission_denied before provision or isolation resolution",
+        governance_maturity="permission_gated_application_access_boundary",
+        notes="Returns no resolved path and proves no filesystem ACL, process, network, or full customer isolation.",
+    ),
+    AuthorityRule(
         family="managed_copies_integrity_scan",
         prefixes=("/managed-copies/integrity-scan",),
         required_actor="payload.request_actor",
