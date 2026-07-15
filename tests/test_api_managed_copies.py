@@ -4451,6 +4451,17 @@ def test_managed_copy_safe_delta_export_authorization_request_plan_record_readba
         decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
     )
     payload, plan = _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision)
+    files_before_repeat = {
+        path: path.read_bytes() for path in (tmp_path / "export-request").rglob("*") if path.is_file()
+    }
+    repeated_plan = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_request_plan(
+        payload, actor=payload["request_actor"]
+    )
+    files_after_repeat = {
+        path: path.read_bytes() for path in (tmp_path / "export-request").rglob("*") if path.is_file()
+    }
+    assert repeated_plan == plan
+    assert files_after_repeat == files_before_repeat
     assert plan["ok"] is True
     assert plan["status"] == "export_authorization_request_ready"
     assert len(plan["request_fingerprint"]) == 64
@@ -4517,16 +4528,32 @@ def test_managed_copy_safe_delta_export_authorization_request_schema_and_record_
         decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
     )
     payload, plan = _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision)
-    for changes in (
-        {"unexpected": True},
-        {"export_class": "raw_payload"},
-        {"retention_class": "forever"},
-        {"destination_class": "https://example.invalid"},
-        {"purpose_fingerprint": "bad"},
-        {"dry_run": 1},
-    ):
+    schema_cases = (
+        {key: value for key, value in payload.items() if key != "dry_run"},
+        {**payload, "dry_run": None},
+        {**payload, "dry_run": "true"},
+        {**payload, "dry_run": 0},
+        {key: value for key, value in payload.items() if key != "copy_id"},
+        {key: value for key, value in payload.items() if key != "provisioning_receipt_id"},
+        {key: value for key, value in payload.items() if key != "isolation_verification_receipt_id"},
+        {key: value for key, value in payload.items() if key != "review_fingerprint"},
+        {key: value for key, value in payload.items() if key != "decision_receipt_id"},
+        {key: value for key, value in payload.items() if key != "preflight_fingerprint"},
+        {**payload, "review_fingerprint": "not-sha256"},
+        {**payload, "preflight_fingerprint": "not-sha256"},
+        {**payload, "export_class": "raw_payload"},
+        {**payload, "retention_class": "forever"},
+        {**payload, "destination_class": "https://example.invalid"},
+        {**payload, "purpose_fingerprint": "bad"},
+        {**payload, "raw_candidate": "forbidden"},
+        {**payload, "tenant_identity": "forbidden"},
+        {**payload, "credential": "forbidden"},
+        {**payload, "concrete_destination": "forbidden"},
+        {**payload, "action": "export"},
+    )
+    for changes in schema_cases:
         blocked = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_request_plan(
-            {**payload, **changes}, actor=payload["request_actor"]
+            changes, actor=payload["request_actor"]
         )
         assert blocked["ok"] is False
         assert blocked["request_fingerprint"] == ""
@@ -4540,6 +4567,108 @@ def test_managed_copy_safe_delta_export_authorization_request_schema_and_record_
     assert drifted["ok"] is False
     assert drifted["error"] == "safe_delta_export_authorization_request_plan_drift"
     assert drifted["writes_receipt"] is False
+
+
+def test_managed_copy_safe_delta_export_authorization_request_write_boundary_replans_after_resolution(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(
+        monkeypatch, tmp_path.parent / "sx-resolution-drift"
+    )
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    _, plan = _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision)
+    original_directory = safe_delta_export_authorization._request_directory
+
+    def drift_during_resolution(request, *, create):
+        directory = original_directory(request, create=create)
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["safe_delta_policy"]["operator_review_required"] = False
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        return directory
+
+    monkeypatch.setattr(safe_delta_export_authorization, "_request_directory", drift_during_resolution)
+    blocked = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=True
+    )
+    assert blocked["error"] == "safe_delta_export_authorization_request_plan_drift"
+    assert blocked["writes_receipt"] is False
+    request_directory = original_directory(plan["request"], create=False)
+    assert request_directory is not None
+    assert list(request_directory.glob("*.json")) == []
+
+
+def test_managed_copy_safe_delta_export_authorization_request_fingerprint_conflict_and_live_readback(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(
+        monkeypatch, tmp_path / "export-request-conflict"
+    )
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    payload, plan = _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision)
+    wrong = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint="f" * 64, confirmed=True
+    )
+    assert wrong["error"] == "safe_delta_export_authorization_request_fingerprint_mismatch"
+    directory = safe_delta_export_authorization._request_directory(plan["request"], create=True)
+    assert directory is not None
+    receipt_path = directory / f"{plan['request_fingerprint'][:16]}.json"
+    malformed = '{"forbidden":"must-not-overwrite"'
+    receipt_path.write_text(malformed, encoding="utf-8")
+    conflict = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=True
+    )
+    assert conflict["error"] == "safe_delta_export_authorization_request_receipt_conflict"
+    assert conflict["writes_receipt"] is False
+    assert receipt_path.read_text(encoding="utf-8") == malformed
+    receipt_path.unlink()
+    recorded = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=True
+    )
+    assert recorded["writes_receipt"] is True
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["safe_delta_policy"]["operator_review_required"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    readback = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_requests_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert readback["status"] == "invalid_or_drifted"
+    assert readback["valid_count"] == 0
+    assert readback["items"] == []
+
+
+def test_managed_copy_safe_delta_export_authorization_request_rejects_cross_review_preflight(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "sx-cross-review")
+    review_a = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor="export-request-review-a", summary_fingerprint="a" * 64)
+    )
+    review_b = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor="export-request-review-b", summary_fingerprint="b" * 64)
+    )
+    plan_a = _safe_delta_decision_test_plan(monkeypatch, source_state, review_a, decision="approved")
+    plan_b = _safe_delta_decision_test_plan(monkeypatch, source_state, review_b, decision="approved")
+    decision_b = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan_b, provided_fingerprint=plan_b["decision_fingerprint"], confirmed=True
+    )
+    payload_b, _ = _safe_delta_export_authorization_plan(monkeypatch, source_state, plan_b, decision_b)
+    cross_review = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_request_plan(
+        {**payload_b, "review_fingerprint": plan_a["review_fingerprint"]},
+        actor=payload_b["request_actor"],
+    )
+    assert cross_review["ok"] is False
+    assert cross_review["request_fingerprint"] == ""
+    assert cross_review["writes_receipt"] is False
 
 
 def test_managed_copy_safe_delta_export_authorization_request_unscoped_and_production_empty(

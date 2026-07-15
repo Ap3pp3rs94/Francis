@@ -192,8 +192,19 @@ def record_managed_copy_safe_delta_export_authorization_request(
     directory = _request_directory(request, create=True)
     if directory is None:
         return _blocked("safe_delta_export_authorization_request_path_invalid")
-    path = directory / f"{expected[:16]}.json"
     with _LOCK:
+        final_plan = managed_copy_safe_delta_export_authorization_request_plan(
+            {**request, "dry_run": False}, actor=_text(plan.get("actor"))
+        )
+        final_fingerprint = _text(final_plan.get("request_fingerprint"))
+        if (
+            not final_plan.get("ok")
+            or not final_fingerprint
+            or final_fingerprint != _text(plan.get("request_fingerprint"))
+            or final_fingerprint != _text(provided_fingerprint)
+        ):
+            return _blocked("safe_delta_export_authorization_request_plan_drift")
+        path = directory / f"{final_fingerprint[:16]}.json"
         present, existing = _read(path)
         if present:
             if _valid_receipt(existing, path=path, directory=directory):
@@ -207,22 +218,22 @@ def record_managed_copy_safe_delta_export_authorization_request(
             "ok": True,
             "kind": MANAGED_COPY_SAFE_DELTA_EXPORT_AUTHORIZATION_REQUEST_KIND,
             "contract": MANAGED_COPY_SAFE_DELTA_EXPORT_AUTHORIZATION_REQUEST_CONTRACT,
-            "receipt_id": f"managed_copy_safe_delta_export_authorization_request_{expected[:16]}",
+            "receipt_id": f"managed_copy_safe_delta_export_authorization_request_{final_fingerprint[:16]}",
             "receipt_fingerprint": "",
             "status": "export_authorization_pending",
-            "actor": _text(replanned.get("actor")),
+            "actor": _text(final_plan.get("actor")),
             "copy_id": _text(request.get("copy_id")),
             "tenant_key": _text(provision.get("tenant_key")),
             "provisioning_receipt_id": _text(request.get("provisioning_receipt_id")),
             "isolation_verification_receipt_id": _text(request.get("isolation_verification_receipt_id")),
             "review_fingerprint": _text(request.get("review_fingerprint")),
             "decision_receipt_id": _text(request.get("decision_receipt_id")),
-            "preflight_fingerprint": _text(replanned.get("preflight_fingerprint")),
+            "preflight_fingerprint": _text(final_plan.get("preflight_fingerprint")),
             "export_class": _text(request.get("export_class")),
             "retention_class": _text(request.get("retention_class")),
             "destination_class": _text(request.get("destination_class")),
             "purpose_fingerprint": _text(request.get("purpose_fingerprint")),
-            "request_fingerprint": expected,
+            "request_fingerprint": final_fingerprint,
             "recorded_ts": int(time.time()),
             "governance": dict(_GOVERNANCE),
         }
