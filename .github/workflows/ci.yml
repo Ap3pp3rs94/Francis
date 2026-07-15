@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   test:
+    name: test (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.suite }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 135
     env:
@@ -24,8 +25,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2025-vs2026]
-        python-version: ["3.12", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
+            suite: smoke
+          - os: ubuntu-latest
+            python-version: "3.13"
+            suite: full
+          - os: windows-2025-vs2026
+            python-version: "3.12"
+            suite: full
+          - os: windows-2025-vs2026
+            python-version: "3.13"
+            suite: smoke
 
     steps:
       - name: Checkout
@@ -57,6 +69,13 @@ jobs:
       - name: Mypy
         run: uv run -m mypy src
 
-      - name: Pytest
+      - name: Pytest (full)
+        if: matrix.suite == 'full'
         timeout-minutes: 120
         run: uv run -m pytest -vv --maxfail=1 --durations=25 --durations-min=1
+
+      - name: Pytest (compatibility smoke)
+        if: matrix.suite == 'smoke'
+        env:
+          FRANCIS_IMPORT_SMOKE_DEEP: "1"
+        run: uv run -m pytest tests/unit/test_imports.py -m smoke -vv --maxfail=1

@@ -57,10 +57,16 @@ def test_ci_workflow_uses_explicit_minimal_permissions() -> None:
 def test_ci_pytest_step_has_bounded_timeout_and_failure_receipts() -> None:
     workflow = _workflow()
     steps = workflow["jobs"]["test"]["steps"]
-    pytest_step = _step_by_name(steps, "Pytest")
+    pytest_step = _step_by_name(steps, "Pytest (full)")
 
     assert pytest_step["timeout-minutes"] == 120
+    assert pytest_step["if"] == "matrix.suite == 'full'"
     assert pytest_step["run"] == "uv run -m pytest -vv --maxfail=1 --durations=25 --durations-min=1"
+
+    smoke_step = _step_by_name(steps, "Pytest (compatibility smoke)")
+    assert smoke_step["if"] == "matrix.suite == 'smoke'"
+    assert smoke_step["env"]["FRANCIS_IMPORT_SMOKE_DEEP"] == "1"
+    assert smoke_step["run"] == "uv run -m pytest tests/unit/test_imports.py -m smoke -vv --maxfail=1"
 
 
 def test_ci_job_has_bounded_timeout() -> None:
@@ -77,9 +83,13 @@ def test_ci_matrix_keeps_exact_runners_and_python_versions() -> None:
     matrix = strategy["matrix"]
 
     assert strategy["fail-fast"] is False
-    assert matrix["os"] == ["ubuntu-latest", "windows-2025-vs2026"]
-    assert "windows-latest" not in matrix["os"]
-    assert matrix["python-version"] == ["3.12", "3.13"]
+    assert matrix["include"] == [
+        {"os": "ubuntu-latest", "python-version": "3.12", "suite": "smoke"},
+        {"os": "ubuntu-latest", "python-version": "3.13", "suite": "full"},
+        {"os": "windows-2025-vs2026", "python-version": "3.12", "suite": "full"},
+        {"os": "windows-2025-vs2026", "python-version": "3.13", "suite": "smoke"},
+    ]
+    assert job["name"] == "test (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.suite }})"
 
 
 def test_ci_matrix_interpreter_binding_is_verified() -> None:
