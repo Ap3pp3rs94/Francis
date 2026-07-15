@@ -80,7 +80,13 @@ from francis.managed_copy_integrity_triage_disposition import (
     managed_copy_integrity_triage_dispositions_readback,
     record_managed_copy_integrity_triage_disposition,
 )
-from francis.managed_copy_tenant_access import managed_copy_tenant_access_check
+from francis.managed_copy_tenant_access import (
+    ISOLATION_DOMAINS,
+    ISOLATION_POLICY_DECISION_CONTRACT,
+    ISOLATION_POLICY_OPERATIONS,
+    managed_copy_isolation_policy_decision,
+    managed_copy_tenant_access_check,
+)
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -819,6 +825,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "copy_creation_provision": "/managed-copies/copy-creation-provision",
             "copy_creation_provisions": "/managed-copies/copy-creation-provisions",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+            "isolation_policy_decision": "/managed-copies/isolation-policy-decision",
             "isolation_verification": "/managed-copies/isolation-verification",
             "isolation_verifications": "/managed-copies/isolation-verifications",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
@@ -2371,6 +2378,10 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "contract_readback_ready": True,
         "isolation_rules_ready": False,
         "isolation_enforcement_enabled": False,
+        "isolation_policy_decision_contract": ISOLATION_POLICY_DECISION_CONTRACT,
+        "isolation_policy_decision_ready": True,
+        "isolation_policy_domains": sorted(ISOLATION_DOMAINS),
+        "isolation_policy_operations": sorted(ISOLATION_POLICY_OPERATIONS),
         "structural_isolation_verified": structural_verified,
         "structural_isolation_drift_detected": structural_drift,
         "structural_isolation_receipt_id": status["copy_isolation_receipt_id"],
@@ -2414,6 +2425,7 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "routes": {
             **status["routes"],
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+            "isolation_policy_decision": "/managed-copies/isolation-policy-decision",
             "isolation_verification": "/managed-copies/isolation-verification",
             "isolation_verifications": "/managed-copies/isolation-verifications",
         },
@@ -3592,6 +3604,10 @@ def managed_copy_integrity_triage_dispositions_snapshot(**kwargs: Any) -> dict[s
 
 def managed_copy_tenant_access_check_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
     return managed_copy_tenant_access_check(payload, actor=actor)
+
+
+def managed_copy_isolation_policy_decision_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    return managed_copy_isolation_policy_decision(payload)
 
 
 def managed_copy_rogue_recovery_review_blocked_snapshot(

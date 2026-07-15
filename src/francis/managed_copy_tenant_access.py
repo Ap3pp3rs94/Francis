@@ -13,6 +13,8 @@ from francis.managed_copy_provisioning import managed_copy_provision_for_copy
 
 CONTRACT = "stage18_managed_copy_tenant_access_boundary_v1"
 KIND = "francis.stage18.managed_copies.tenant_access_check"
+ISOLATION_POLICY_DECISION_CONTRACT = "stage18_managed_copy_isolation_policy_decision_v1"
+ISOLATION_POLICY_DECISION_KIND = "francis.stage18.managed_copies.isolation_policy_decision"
 _FIELDS = {
     "request_actor",
     "copy_id",
@@ -21,7 +23,7 @@ _FIELDS = {
     "isolation_verification_receipt_id",
     "domain",
 }
-_DOMAINS = {
+ISOLATION_DOMAINS = {
     "tenant_data",
     "tenant_memory",
     "tenant_receipts",
@@ -29,6 +31,13 @@ _DOMAINS = {
     "tenant_capability_packs",
     "tenant_policy",
     "support_operator_authority",
+}
+ISOLATION_POLICY_OPERATIONS = {"invoke", "read", "write"}
+_ISOLATION_POLICY_FIELDS = {
+    "source_tenant_key",
+    "target_tenant_key",
+    "domain",
+    "operation",
 }
 _NO_AUTHORITY = {
     "filesystem_acl_isolation_verified": False,
@@ -61,7 +70,7 @@ def managed_copy_tenant_access_check(payload: dict[str, Any], *, actor: str) -> 
         blockers.append("tenant_access_actor_lineage_mismatch")
     if not copy_id or not tenant_key or not provision_id or not isolation_id:
         blockers.append("tenant_access_lineage_required")
-    if domain not in _DOMAINS:
+    if domain not in ISOLATION_DOMAINS:
         blockers.append("tenant_access_domain_not_allowed")
 
     provision = managed_copy_provision_for_copy(copy_id, provisioning_receipt_id=provision_id)
@@ -110,7 +119,7 @@ def managed_copy_tenant_access_check(payload: dict[str, Any], *, actor: str) -> 
         "tenant_key": tenant_key,
         "provisioning_receipt_id": provision_id,
         "isolation_verification_receipt_id": isolation_id,
-        "domain": domain if domain in _DOMAINS else "unknown",
+        "domain": domain if domain in ISOLATION_DOMAINS else "unknown",
         "access_allowed": access_allowed,
         "application_access_boundary_enforced": True,
         "resolved_path_exposed": False,
@@ -127,6 +136,66 @@ def managed_copy_tenant_access_check(payload: dict[str, Any], *, actor: str) -> 
     }
 
 
+def managed_copy_isolation_policy_decision(payload: dict[str, Any]) -> dict[str, Any]:
+    """Classify a proposed tenant flow without authorizing or resolving access."""
+    source_tenant_key = _exact_text(payload.get("source_tenant_key"))
+    target_tenant_key = _exact_text(payload.get("target_tenant_key"))
+    domain = _exact_text(payload.get("domain"))
+    operation = _exact_text(payload.get("operation"))
+    blockers: list[str] = []
+    if set(payload) != _ISOLATION_POLICY_FIELDS:
+        blockers.append("isolation_policy_exact_schema_required")
+    for field in _ISOLATION_POLICY_FIELDS:
+        if not _exact_text(payload.get(field)):
+            blockers.append(f"isolation_policy_{field}_invalid")
+    if domain not in ISOLATION_DOMAINS:
+        blockers.append("isolation_policy_domain_not_allowed")
+    if operation not in ISOLATION_POLICY_OPERATIONS:
+        blockers.append("isolation_policy_operation_not_allowed")
+    if source_tenant_key and target_tenant_key and source_tenant_key != target_tenant_key:
+        blockers.append("isolation_policy_cross_tenant_flow_denied")
+    if domain == "support_operator_authority":
+        blockers.append("isolation_policy_support_authority_requires_separate_governed_path")
+
+    normalized_blockers = sorted(set(blockers))
+    policy_compatible = not normalized_blockers
+    binding = {
+        "contract": ISOLATION_POLICY_DECISION_CONTRACT,
+        "source_tenant_key": source_tenant_key,
+        "target_tenant_key": target_tenant_key,
+        "domain": domain,
+        "operation": operation,
+        "policy_compatible": policy_compatible,
+        "blockers": normalized_blockers,
+    }
+    return {
+        "ok": policy_compatible,
+        "kind": ISOLATION_POLICY_DECISION_KIND,
+        "contract": ISOLATION_POLICY_DECISION_CONTRACT,
+        "status": "policy_compatible" if policy_compatible else "policy_denied",
+        "policy_compatible": policy_compatible,
+        "decision_is_authorization": False,
+        "requires_live_lineage_validation": True,
+        "requires_guarded_access_boundary": True,
+        "domain": domain if domain in ISOLATION_DOMAINS else "unknown",
+        "operation": operation if operation in ISOLATION_POLICY_OPERATIONS else "unknown",
+        "same_tenant": bool(source_tenant_key and source_tenant_key == target_tenant_key),
+        "decision_fingerprint": _fingerprint(binding),
+        "blockers": normalized_blockers,
+        "reads_tenant_content": False,
+        "resolves_lineage": False,
+        "accesses_filesystem": False,
+        "resolved_path_exposed": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "uses_tools": False,
+        "uses_shell": False,
+        "uses_network": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
 def _fingerprint(value: dict[str, Any]) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -134,6 +203,10 @@ def _fingerprint(value: dict[str, Any]) -> str:
 
 def _redacted(value: Any) -> str:
     return _text(redact_secret_text(str(value) if value is not None else ""))[:240]
+
+
+def _exact_text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _text(value: Any) -> str:

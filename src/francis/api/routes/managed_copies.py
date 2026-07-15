@@ -36,6 +36,7 @@ from francis.managed_copies import (
     managed_copy_decommission_contract_snapshot,
     managed_copy_decommission_review_blocked_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
+    managed_copy_isolation_policy_decision_snapshot,
     managed_copy_isolation_verification_snapshot,
     managed_copy_isolation_verifications_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
@@ -360,6 +361,11 @@ def copy_creation_provisions(limit: int = 20) -> dict[str, Any]:
 @router.get("/isolation-rules-contract")
 def isolation_rules_contract() -> dict[str, Any]:
     return managed_copy_isolation_rules_contract_snapshot()
+
+
+@router.post("/isolation-policy-decision")
+def isolation_policy_decision(payload: dict[str, Any]) -> dict[str, Any]:
+    return managed_copy_isolation_policy_decision_snapshot(payload)
 
 
 @router.post("/isolation-verification")

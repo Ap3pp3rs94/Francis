@@ -59,6 +59,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "copy_creation_provision": "/managed-copies/copy-creation-provision",
         "copy_creation_provisions": "/managed-copies/copy-creation-provisions",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+        "isolation_policy_decision": "/managed-copies/isolation-policy-decision",
         "isolation_verification": "/managed-copies/isolation-verification",
         "isolation_verifications": "/managed-copies/isolation-verifications",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
@@ -4455,6 +4456,110 @@ def test_managed_copy_tenant_access_check_denies_unscoped_actor_without_readback
     assert not data_root.exists()
 
 
+def test_managed_copy_isolation_policy_decision_is_deterministic_and_unauthorized(monkeypatch, tmp_path) -> None:
+    data_root = tmp_path / "isolation-policy"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("policy classifier resolved live lineage")
+
+    monkeypatch.setattr(tenant_access, "managed_copy_provision_for_copy", unexpected_call)
+    monkeypatch.setattr(
+        tenant_access,
+        "latest_managed_copy_isolation_verification_for_provision",
+        unexpected_call,
+    )
+    monkeypatch.setattr(tenant_access, "managed_copy_isolation_guarded_subpath", unexpected_call)
+    client = TestClient(create_app())
+    payload = {
+        "source_tenant_key": " tenant-a ",
+        "target_tenant_key": "tenant-a",
+        "domain": "tenant_data",
+        "operation": "read",
+    }
+
+    first = client.post("/managed-copies/isolation-policy-decision", json=payload).json()
+    second = client.post("/managed-copies/isolation-policy-decision", json=payload).json()
+
+    assert first == second
+    assert first["status"] == "policy_compatible"
+    assert first["policy_compatible"] is True
+    assert first["decision_is_authorization"] is False
+    assert first["requires_live_lineage_validation"] is True
+    assert first["requires_guarded_access_boundary"] is True
+    assert len(first["decision_fingerprint"]) == 64
+    assert first["writes_receipts"] is False
+    assert first["writes_tenant_state"] is False
+    assert first["grants_execution_authority"] is False
+    assert first["grants_mutation_authority"] is False
+    assert "access_allowed" not in first
+    assert "authorized" not in first
+    assert "tenant-a" not in json.dumps(first)
+    assert str(tmp_path) not in json.dumps(first)
+    assert not data_root.exists()
+
+
+def test_managed_copy_isolation_policy_decision_denies_cross_tenant_and_support_access() -> None:
+    client = TestClient(create_app())
+    payload = {
+        "source_tenant_key": "tenant-a",
+        "target_tenant_key": "tenant-b",
+        "domain": "tenant_memory",
+        "operation": "write",
+    }
+    cross_tenant = client.post("/managed-copies/isolation-policy-decision", json=payload).json()
+    support = client.post(
+        "/managed-copies/isolation-policy-decision",
+        json={**payload, "target_tenant_key": "tenant-a", "domain": "support_operator_authority"},
+    ).json()
+
+    assert cross_tenant["status"] == "policy_denied"
+    assert "isolation_policy_cross_tenant_flow_denied" in cross_tenant["blockers"]
+    assert support["status"] == "policy_denied"
+    assert "isolation_policy_support_authority_requires_separate_governed_path" in support["blockers"]
+
+
+def test_managed_copy_isolation_policy_decision_rejects_invalid_exact_schema() -> None:
+    client = TestClient(create_app())
+    base = {
+        "source_tenant_key": "tenant-a",
+        "target_tenant_key": "tenant-a",
+        "domain": "tenant_data",
+        "operation": "invoke",
+    }
+    cases = [
+        {**base, "unexpected": "value"},
+        {**base, "domain": "tenant_secrets"},
+        {**base, "operation": "delete"},
+        {**base, "source_tenant_key": 123},
+        {**base, "target_tenant_key": ""},
+        {**base, "domain": ["tenant_data"]},
+        {**base, "operation": True},
+    ]
+
+    for payload in cases:
+        body = client.post("/managed-copies/isolation-policy-decision", json=payload).json()
+        assert body["status"] == "policy_denied"
+        assert body["policy_compatible"] is False
+        assert body["decision_is_authorization"] is False
+    assert (
+        "isolation_policy_exact_schema_required"
+        in client.post("/managed-copies/isolation-policy-decision", json=cases[0]).json()["blockers"]
+    )
+    assert (
+        "isolation_policy_domain_not_allowed"
+        in client.post("/managed-copies/isolation-policy-decision", json=cases[1]).json()["blockers"]
+    )
+    assert (
+        "isolation_policy_operation_not_allowed"
+        in client.post("/managed-copies/isolation-policy-decision", json=cases[2]).json()["blockers"]
+    )
+    assert (
+        "isolation_policy_source_tenant_key_invalid"
+        in client.post("/managed-copies/isolation-policy-decision", json=cases[3]).json()["blockers"]
+    )
+
+
 def _configure_safe_delta_receipt_test_sources(
     monkeypatch,
     data_root: Path,
@@ -6787,6 +6892,12 @@ def test_managed_copy_isolation_rules_contract_is_projection_only_and_unenforced
     assert body["contract_readback_ready"] is True
     assert body["isolation_rules_ready"] is False
     assert body["isolation_enforcement_enabled"] is False
+    assert body["isolation_policy_decision_ready"] is True
+    assert body["isolation_policy_decision_contract"] == "stage18_managed_copy_isolation_policy_decision_v1"
+    assert body["isolation_policy_operations"] == ["invoke", "read", "write"]
+    assert body["routes"]["isolation_policy_decision"] == "/managed-copies/isolation-policy-decision"
+    assert body["runtime_access_boundary_verified"] is False
+    assert body["full_customer_isolation_verified"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
