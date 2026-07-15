@@ -4,7 +4,12 @@ Task ID: `CR-FORGE-005`
 
 Assigned seat: FORGE
 
-Status: `READY`
+Status: `PROMOTED`
+
+Disposition: promoted to local `main` at `0a0cfd55` after focused/card
+validation and SENTINEL/VERA/HARBOR review. Repository static gates passed; the
+full local pytest was interrupted by operator-directed validation-policy change
+and is not claimed. Exact-head GitHub CI/CodeQL provide the repository-wide gate.
 
 ## Objective
 

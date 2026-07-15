@@ -2,11 +2,12 @@
 
 Updated: 2026-07-15
 
-CR-FORGE-004 is promoted locally and awaits the authorized integrated-main push
+CR-FORGE-005 is promoted locally and awaits the authorized integrated-main push
 plus exact remote CI/CodeQL verdict.
 
 | Front | Branch | Worker commit | Worker evidence | Specialist reviews | VERA | ATLAS exact-head validation | Operator gate | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CR-FORGE-005 | `codex/forge-safe-delta-export-authorization-decision` | `1a68de41`; remediations `17bccd28`, `0a0cfd55` | 6 focused tests and complete 91-test card suite | SENTINEL/HARBOR pass | VERA pass | static gates passed; full pytest interrupted without verdict; post-promotion focused-green | integrated-main push authorized; real decision/export operator-only | `PROMOTED` |
 | CR-FORGE-004 | `codex/forge-safe-delta-export-authorization-request` | `9c43bb45`; remediation `44048d85`; main fix `f3cc8c7c` | 6 focused tests and complete 85-test card suite | SENTINEL/HARBOR pass | VERA pass | exact `44048d85` full gate exit `0`; post-promotion focused-green | integrated-main push authorized; real approval/export operator-only | `PROMOTED` |
 | CR-FORGE-003 | `codex/forge-safe-delta-export-preflight` | `b5fbb3af`; remediation/main `287a27c8` | 6 focused tests, 2 matrix tests, complete 79-test card suite | SENTINEL/HARBOR pass | VERA pass | exact `287a27c8` full gate exit `0`; post-promotion focused-green | integrated-main push authorized; no production action | `PROMOTED` |
 | CR-FORGE-002 | `codex/forge-safe-delta-approval` | reviewed `49893be5`; rebased `e799c857`; main `ff58d6d9` | 18 decision tests and complete 77-test card suite passed | SENTINEL/HARBOR pass | VERA pass | exact `e799c857` full gate exit `0`; post-promotion path fix focused-green | integrated-main push authorized; no production action | `PROMOTED` |

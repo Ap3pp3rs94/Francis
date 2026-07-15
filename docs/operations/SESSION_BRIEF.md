@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-15, sync cycle `CR-20260715-011` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-012` (America/Chicago)
 
 ## Manager Role
 
@@ -45,6 +45,20 @@ Cold-start order:
   activate, or modify it while handling these branches.
 
 ## Active Fronts
+
+### Managed copies / safe-delta export artifact plan
+
+Task card: `docs/operations/task_cards/managed-copy-safe-delta-export-artifact-plan.md`
+Seat: FORGE. Branch: `codex/forge-safe-delta-export-artifact-plan`.
+
+Proof target: one exact approved decision can yield a deterministic bounded
+artifact plan while every persistence, payload, network, and export effect stays
+false. Fixture approval remains test evidence only.
+
+Current state: task card and test-only lease are ready on local main.
+
+Next smallest truthful gap: implement exact-schema no-write planning and
+fail-closed approval/lineage drift handling.
 
 ### Managed copies / safe-delta export authorization decision
 
