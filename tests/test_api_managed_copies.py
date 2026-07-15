@@ -4749,7 +4749,9 @@ def _safe_delta_export_authorization_decision_plan(monkeypatch, source_state, ou
 def test_managed_copy_safe_delta_export_authorization_decision_record_readback_and_conflict(
     monkeypatch, tmp_path, outcome
 ) -> None:
-    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / f"sy-{outcome}")
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(
+        monkeypatch, tmp_path.parent / f"sy-{outcome}"
+    )
     payload, plan = _safe_delta_export_authorization_decision_plan(monkeypatch, source_state, outcome)
     assert plan["ok"] is True
     assert (
@@ -4797,6 +4799,124 @@ def test_managed_copy_safe_delta_export_authorization_decision_record_readback_a
         "grants_export_authority",
     ):
         assert recorded[flag] is False
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["safe_delta_policy"]["operator_review_required"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    drifted_readback = (
+        safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decisions_readback(
+            copy_id=payload["copy_id"],
+            provisioning_receipt_id=payload["provisioning_receipt_id"],
+            isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+        )
+    )
+    assert drifted_readback["valid_count"] == 0
+    assert drifted_readback["items"] == []
+
+
+def test_managed_copy_safe_delta_export_authorization_decision_readback_rejects_rehashed_authority_injection(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "sy-injected")
+    payload, plan = _safe_delta_export_authorization_decision_plan(monkeypatch, source_state)
+    recorded = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        plan, provided_fingerprint=plan["authorization_decision_fingerprint"], confirmed=True
+    )
+    directory = safe_delta_export_authorization_decision._directory(plan["request"], create=False)
+    assert directory is not None
+    path = directory / f"{payload['request_fingerprint'][:16]}.json"
+    injected = json.loads(path.read_text(encoding="utf-8"))
+    injected["grants_export_authority"] = True
+    injected["receipt_fingerprint"] = safe_delta_export_authorization_decision._receipt_fp(injected)
+    path.write_text(json.dumps(injected), encoding="utf-8")
+    assert recorded["writes_receipt"] is True
+    readback = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decisions_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert readback["valid_count"] == 0
+    assert readback["items"] == []
+    assert readback["export_authorization_approved"] is False
+
+
+def test_managed_copy_safe_delta_export_authorization_decision_direct_boundaries(monkeypatch, tmp_path) -> None:
+    root = tmp_path.parent / "sy-boundaries"
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(monkeypatch, root)
+    payload, plan = _safe_delta_export_authorization_decision_plan(monkeypatch, source_state)
+    cases = (
+        {key: value for key, value in payload.items() if key != "dry_run"},
+        {key: value for key, value in payload.items() if key != "copy_id"},
+        {key: value for key, value in payload.items() if key != "request_receipt_id"},
+        {key: value for key, value in payload.items() if key != "request_fingerprint"},
+        {key: value for key, value in payload.items() if key != "preflight_fingerprint"},
+        {key: value for key, value in payload.items() if key != "review_fingerprint"},
+        {**payload, "dry_run": None},
+        {**payload, "dry_run": "false"},
+        {**payload, "dry_run": 0},
+        {**payload, "decision": True},
+        {**payload, "decision": "approve"},
+        {**payload, "unexpected": True},
+        {**payload, "credential": "secret"},
+        {**payload, "concrete_destination": "https://invalid"},
+        {**payload, "raw_candidate": "raw"},
+    )
+    for case in cases:
+        blocked = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decision_plan(
+            case, actor=payload["request_actor"]
+        )
+        assert blocked["ok"] is False
+        assert blocked["authorization_decision_fingerprint"] == ""
+    substituted = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decision_plan(
+        payload, actor="safe-delta.other-decider"
+    )
+    assert substituted["ok"] is False
+    assert substituted["authorization_decision_fingerprint"] == ""
+    wrong = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        plan, provided_fingerprint="f" * 64, confirmed=True
+    )
+    assert wrong["error"] == "safe_delta_export_authorization_decision_fingerprint_mismatch"
+
+    original_directory = safe_delta_export_authorization_decision._directory
+
+    def drift_during_resolution(request, *, create):
+        directory = original_directory(request, create=create)
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["safe_delta_policy"]["operator_review_required"] = False
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        return directory
+
+    monkeypatch.setattr(safe_delta_export_authorization_decision, "_directory", drift_during_resolution)
+    drifted = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        plan, provided_fingerprint=plan["authorization_decision_fingerprint"], confirmed=True
+    )
+    assert drifted["error"] == "safe_delta_export_authorization_decision_plan_drift"
+    directory = original_directory(plan["request"], create=False)
+    assert directory is not None
+    assert list(directory.glob("*.json")) == []
+
+
+def test_managed_copy_safe_delta_export_authorization_decision_unscoped_and_production_empty(
+    monkeypatch, tmp_path
+) -> None:
+    root = tmp_path / "sy-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/safe-delta-export-authorization-decision",
+            json={"request_actor": "unscoped", "dry_run": True},
+        )
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.safe_delta.export.authorization.decide"
+    assert not root.exists()
+    empty = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decisions_readback(
+        copy_id="missing", provisioning_receipt_id="missing", isolation_verification_receipt_id="missing"
+    )
+    assert empty["status"] == "empty"
+    assert empty["valid_count"] == 0
 
 
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(

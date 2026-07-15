@@ -57,6 +57,33 @@ _NO_EFFECT = {
     "grants_execution_authority": False,
     "grants_mutation_authority": False,
 }
+RECEIPT_FIELDS = {
+    "ok",
+    "kind",
+    "contract",
+    "receipt_id",
+    "receipt_fingerprint",
+    "status",
+    "actor",
+    "tenant_key",
+    "request_actor",
+    "copy_id",
+    "provisioning_receipt_id",
+    "isolation_verification_receipt_id",
+    "review_fingerprint",
+    "decision_receipt_id",
+    "preflight_fingerprint",
+    "request_receipt_id",
+    "request_fingerprint",
+    "export_class",
+    "retention_class",
+    "destination_class",
+    "purpose_fingerprint",
+    "decision",
+    "authorization_decision_fingerprint",
+    "recorded_ts",
+    "governance",
+}
 _LOCK = threading.Lock()
 
 
@@ -242,16 +269,44 @@ def _directory(request: dict[str, Any], *, create: bool) -> Path | None:
 
 def _valid(item: dict[str, Any], path: Path, directory: Path) -> bool:
     fp = _text(item.get("authorization_decision_fingerprint"))
+    actor = _text(item.get("actor"))
     return bool(
-        item.get("kind") == RECEIPT_KIND
+        set(item) == RECEIPT_FIELDS
+        and item.get("ok") is True
+        and item.get("kind") == RECEIPT_KIND
         and item.get("contract") == CONTRACT
+        and item.get("receipt_id") == f"managed_copy_safe_delta_export_authorization_decision_{fp[:16]}"
         and item.get("decision") in _OUTCOMES
         and item.get("status") == f"export_authorization_{item.get('decision')}"
         and _sha(fp)
+        and _sha(item.get("receipt_fingerprint"))
+        and _sha(item.get("tenant_key"))
+        and _sha(item.get("request_fingerprint"))
+        and _sha(item.get("preflight_fingerprint"))
+        and _sha(item.get("review_fingerprint"))
+        and _sha(item.get("purpose_fingerprint"))
+        and actor
+        and len(actor) <= 240
+        and actor == _redacted(actor)[:240]
+        and item.get("request_actor") == actor
+        and all(
+            _text(item.get(key))
+            for key in (
+                "copy_id",
+                "provisioning_receipt_id",
+                "isolation_verification_receipt_id",
+                "decision_receipt_id",
+                "request_receipt_id",
+                "export_class",
+                "retention_class",
+                "destination_class",
+            )
+        )
         and item.get("receipt_fingerprint") == _receipt_fp(item)
         and item.get("governance") == {"decision_receipt_only": True, **_NO_EFFECT}
         and isinstance(item.get("recorded_ts"), int)
         and not isinstance(item.get("recorded_ts"), bool)
+        and item["recorded_ts"] > 0
         and path == directory / f"{_text(item.get('request_fingerprint'))[:16]}.json"
     )
 
