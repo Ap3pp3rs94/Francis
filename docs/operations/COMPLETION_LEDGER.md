@@ -60,9 +60,10 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is the governed safe-delta approval/rejection
-decision receipt. Production copy creation still requires real operator-supplied
-tenant and policy facts; those facts are not inferred or fabricated.
+The current goal is a permission-gated, dry-run-only safe-delta export preflight
+bound to an approved decision and current live lineage/policy. Production copy
+creation still requires real operator-supplied tenant and policy facts; those
+facts are not inferred or fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -123,6 +124,38 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 07:37Z - Stage 18 safe-delta decision contract promoted
+
+Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now
+includes a separately scoped, immutable approval/rejection decision receipt
+bound to the exact live candidate review, actor, provision, isolation, and
+current tenant policy. Approval creates eligibility only for a future export
+preflight; it does not export, import, learn, execute, use the network, or mutate
+tenant state.
+
+Evidence:
+
+- Exact rebased candidate `e799c857` passed the complete managed-copy card suite,
+  Ruff, format, mypy, diff-check, and `scripts/check.ps1` through 100% with exit
+  `0`.
+- SENTINEL and VERA passed the final affected delta after the write boundary was
+  changed to replan against live sources and require the recomputed actor-bound
+  fingerprint to match both the planned and supplied fingerprints.
+- Local main source head `ff58d6d9` adds a compact tenant-local `receipts/sda`
+  namespace after post-promotion validation exposed the longer path exceeding
+  Windows `MAX_PATH`. The discriminating long-root regression, all 18 decision
+  tests, and the complete 77-test card suite passed on `D:\Francis`.
+- Production source-loaded readback remains empty. No production customer,
+  tenant, approval decision, export artifact, or runtime action was created.
+
+Remaining truthful gap:
+
+- Implement a permission-gated, dry-run-only safe-delta export preflight that
+  consumes only validated tenant-local review and approval receipts, revalidates
+  current lineage/policy, writes nothing, and grants no export authority.
+- Actual export, import, global learning, production tenant creation, Stage 18
+  closure, FR-018 clearance, and physical validation remain unclaimed.
 
 ### 2026-07-15 05:19Z - Stage 18 safe-delta review and Lens v2 observation promoted
 
