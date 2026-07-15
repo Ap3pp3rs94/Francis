@@ -414,6 +414,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert integrity_scan["required_scope"] == "managed_copies.rogue_recovery.write"
     assert integrity_scan["receipt_behavior"] == "none; read-only derived integrity findings"
 
+    integrity_evidence = entries["/managed-copies/integrity-evidence"]
+    assert integrity_evidence["family"] == "managed_copies_integrity_evidence"
+    assert integrity_evidence["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert "tenant-local" in integrity_evidence["receipt_behavior"]
+
     tenant_access = entries["/managed-copies/tenant-access-check"]
     assert tenant_access["family"] == "managed_copies_tenant_access_check"
     assert tenant_access["required_scope"] == "managed_copies.isolation_verification.write"

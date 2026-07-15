@@ -17,6 +17,7 @@ import francis.managed_copy_safe_delta_export_authorization_decision as safe_del
 import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export_artifact_plan
 import francis.managed_copy_rogue_detection_assessment as rogue_detection_assessment
 import francis.managed_copy_integrity_scan as integrity_scan
+import francis.managed_copy_integrity_evidence as integrity_evidence
 import francis.managed_copy_tenant_access as tenant_access
 from francis.api.app import create_app
 
@@ -74,6 +75,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
         "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
         "integrity_scan": "/managed-copies/integrity-scan",
+        "integrity_evidence": "/managed-copies/integrity-evidence",
+        "integrity_evidence_readback": "/managed-copies/integrity-evidence-readback",
         "tenant_access_check": "/managed-copies/tenant-access-check",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "sla_commitment_review": "/managed-copies/sla-commitment-review",
@@ -1615,6 +1618,39 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert drifted_integrity["finding_count"] >= 1
     assert any(item["blocker"] == "tenant_policy_directory_missing" for item in drifted_integrity["findings"])
     assert drifted_integrity["rogue_detected"] is False
+    evidence_plan = client.post(
+        "/managed-copies/integrity-evidence",
+        json={**integrity_payload, "dry_run": True},
+    ).json()
+    assert evidence_plan["status"] == "integrity_evidence_ready"
+    assert len(evidence_plan["evidence_fingerprint"]) == 64
+    assert evidence_plan["writes_receipt"] is False
+    assert evidence_plan["rogue_detected"] is False
+    assert evidence_plan["quarantines_copy"] is False
+    evidence_recorded = client.post(
+        "/managed-copies/integrity-evidence",
+        json={
+            **integrity_payload,
+            "dry_run": False,
+            "evidence_fingerprint": evidence_plan["evidence_fingerprint"],
+            "confirm_integrity_evidence": True,
+        },
+    ).json()
+    assert evidence_recorded["status"] == "integrity_evidence_recorded"
+    assert evidence_recorded["writes_receipt"] is True
+    assert evidence_recorded["receipt"]["scan_fingerprint"] == drifted_integrity["scan_fingerprint"]
+    assert evidence_recorded["receipt"]["governance"]["grants_mutation_authority"] is False
+    evidence_replayed = client.post(
+        "/managed-copies/integrity-evidence",
+        json={
+            **integrity_payload,
+            "dry_run": False,
+            "evidence_fingerprint": evidence_plan["evidence_fingerprint"],
+            "confirm_integrity_evidence": True,
+        },
+    ).json()
+    assert evidence_replayed["status"] == "integrity_evidence_recorded"
+    assert evidence_replayed["writes_receipt"] is False
     drifted_access = client.post(
         "/managed-copies/tenant-access-check",
         json={**access_payload, "domain": "tenant_policy"},
@@ -1626,6 +1662,20 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     restored_status = client.get("/managed-copies/status").json()
     assert restored_status["copy_structural_isolation_verified"] is True
     assert restored_status["copy_isolation_drift_detected"] is False
+    evidence_readback = client.get(
+        "/managed-copies/integrity-evidence-readback",
+        params={
+            "copy_id": provisioned["copy_id"],
+            "provisioning_receipt_id": provisioned["receipt_id"],
+            "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+        },
+    ).json()
+    assert evidence_readback["status"] == "integrity_evidence_recorded"
+    assert evidence_readback["valid_count"] == 1
+    assert evidence_readback["latest_receipt_id"] == evidence_recorded["receipt_id"]
+    assert evidence_readback["live_drift_matches_latest"] is False
+    assert evidence_readback["writes_receipts"] is False
+    assert "findings" not in evidence_readback["items"][0]
 
     safe_delta_payload = {
         "request_actor": actor,
@@ -3878,6 +3928,170 @@ def test_managed_copy_integrity_scan_route_denies_unscoped_actor(monkeypatch, tm
     assert body["error"] == "api_permission_denied"
     assert body["required_scope"] == "managed_copies.rogue_recovery.write"
     assert not (tmp_path / "empty").exists()
+
+
+def test_managed_copy_integrity_evidence_requires_exact_confirmation_and_valid_receipt(monkeypatch, tmp_path) -> None:
+    tenant_key = "a" * 64
+    provision = {
+        "copy_id": "copy-1",
+        "tenant_key": tenant_key,
+        "receipt_id": "provision-1",
+        "provision_fingerprint": "b" * 64,
+    }
+    isolation = {
+        "receipt_id": "isolation-1",
+        "copy_id": "copy-1",
+        "tenant_key": tenant_key,
+        "provisioning_receipt_id": "provision-1",
+        "verification_fingerprint": "e" * 64,
+        "live_state_aligned": False,
+    }
+    finding = {
+        "id": "managed_copy_integrity:tenant_policy",
+        "severity": "high",
+        "source_contract": "stage18_managed_copy_structural_isolation_verification_v1",
+        "blocker": "tenant_policy_directory_missing",
+    }
+    state = {"drift": True}
+    receipts = tmp_path / "managed_copies" / "tenants" / tenant_key / "receipts" / "ri"
+
+    def scan(payload, *, actor):
+        findings = [finding] if state["drift"] else []
+        return {
+            "ok": True,
+            "status": "integrity_drift_detected" if findings else "integrity_aligned",
+            "actor": actor,
+            "copy_id": "copy-1",
+            "provisioning_receipt_id": "provision-1",
+            "isolation_verification_receipt_id": "isolation-1",
+            "scan_fingerprint": "c" * 64 if findings else "d" * 64,
+            "findings": findings,
+            "finding_count": len(findings),
+        }
+
+    monkeypatch.setattr(integrity_evidence, "managed_copy_integrity_scan", scan)
+    monkeypatch.setattr(integrity_evidence, "managed_copy_provision_for_copy", lambda *args, **kwargs: provision)
+    monkeypatch.setattr(
+        integrity_evidence,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda *args, **kwargs: isolation,
+    )
+
+    def guarded_subpath(*args, create_leaf_directory=False, **kwargs):
+        if create_leaf_directory:
+            receipts.mkdir(parents=True, exist_ok=True)
+        return receipts
+
+    monkeypatch.setattr(integrity_evidence, "managed_copy_isolation_guarded_subpath", guarded_subpath)
+    payload = {
+        "request_actor": "integrity.recorder",
+        "copy_id": "copy-1",
+        "provisioning_receipt_id": "provision-1",
+        "isolation_verification_receipt_id": "isolation-1",
+        "dry_run": True,
+    }
+    invalid_boolean = integrity_evidence.managed_copy_integrity_evidence_plan(
+        {**payload, "dry_run": 1}, actor="integrity.recorder"
+    )
+    assert "integrity_evidence_dry_run_boolean_required" in invalid_boolean["blockers"]
+
+    plan = integrity_evidence.managed_copy_integrity_evidence_plan(payload, actor="integrity.recorder")
+    assert plan["status"] == "integrity_evidence_ready"
+    mismatch = integrity_evidence.record_managed_copy_integrity_evidence(
+        plan, provided_fingerprint="0" * 64, confirmed=True
+    )
+    assert mismatch["error"] == "integrity_evidence_fingerprint_mismatch"
+    unconfirmed = integrity_evidence.record_managed_copy_integrity_evidence(
+        plan, provided_fingerprint=plan["evidence_fingerprint"], confirmed=False
+    )
+    assert unconfirmed["error"] == "integrity_evidence_confirmation_required"
+
+    recorded = integrity_evidence.record_managed_copy_integrity_evidence(
+        plan, provided_fingerprint=plan["evidence_fingerprint"], confirmed=True
+    )
+    assert recorded["writes_receipt"] is True
+    assert recorded["rogue_detected"] is False
+    replayed = integrity_evidence.record_managed_copy_integrity_evidence(
+        plan, provided_fingerprint=plan["evidence_fingerprint"], confirmed=True
+    )
+    assert replayed["writes_receipt"] is False
+
+    receipt_path = next(receipts.glob("*.json"))
+    original = json.loads(receipt_path.read_text(encoding="utf-8"))
+    binding_fields = (
+        "contract",
+        "actor",
+        "tenant_key",
+        "copy_id",
+        "provisioning_receipt_id",
+        "provision_fingerprint",
+        "isolation_verification_receipt_id",
+        "isolation_verification_fingerprint",
+        "scan_fingerprint",
+        "findings",
+        "finding_count",
+    )
+    receipt_path.unlink()
+
+    for field, value in (
+        ("provision_fingerprint", "f" * 64),
+        ("tenant_key", "9" * 64),
+        ("copy_id", "substituted-copy"),
+    ):
+        substituted_lineage = json.loads(json.dumps(original))
+        substituted_lineage[field] = value
+        substituted_lineage["evidence_fingerprint"] = integrity_evidence._fingerprint(
+            {key: substituted_lineage[key] for key in binding_fields}
+        )
+        substituted_lineage["receipt_id"] = (
+            f"managed_copy_integrity_evidence_{substituted_lineage['evidence_fingerprint'][:16]}"
+        )
+        substituted_lineage["receipt_fingerprint"] = integrity_evidence._receipt_fingerprint(substituted_lineage)
+        substituted_path = receipts / f"{substituted_lineage['evidence_fingerprint'][:16]}.json"
+        substituted_path.write_text(json.dumps(substituted_lineage), encoding="utf-8")
+        lineage_readback = integrity_evidence.managed_copy_integrity_evidence_readback(
+            copy_id="copy-1",
+            provisioning_receipt_id="provision-1",
+            isolation_verification_receipt_id="isolation-1",
+        )
+        assert lineage_readback["status"] == "empty"
+        assert lineage_readback["valid_count"] == 0
+        substituted_path.unlink()
+
+    raw_finding = json.loads(json.dumps(original))
+    raw_finding["findings"][0]["blocker"] = "private customer payload"
+    raw_finding["evidence_fingerprint"] = integrity_evidence._fingerprint(
+        {key: raw_finding[key] for key in binding_fields}
+    )
+    raw_finding["receipt_id"] = f"managed_copy_integrity_evidence_{raw_finding['evidence_fingerprint'][:16]}"
+    raw_finding["receipt_fingerprint"] = integrity_evidence._receipt_fingerprint(raw_finding)
+    raw_path = receipts / f"{raw_finding['evidence_fingerprint'][:16]}.json"
+    raw_path.write_text(json.dumps(raw_finding), encoding="utf-8")
+    raw_readback = integrity_evidence.managed_copy_integrity_evidence_readback(
+        copy_id="copy-1",
+        provisioning_receipt_id="provision-1",
+        isolation_verification_receipt_id="isolation-1",
+    )
+    assert raw_readback["status"] == "empty"
+    assert raw_readback["valid_count"] == 0
+    assert "private customer payload" not in json.dumps(raw_readback)
+
+
+def test_managed_copy_integrity_evidence_route_denies_unscoped_actor(monkeypatch, tmp_path) -> None:
+    data_root = tmp_path / "integrity-evidence-denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/integrity-evidence",
+            json={"request_actor": "unscoped", "copy_id": "x", "dry_run": True},
+        )
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert not data_root.exists()
 
 
 def test_managed_copy_tenant_access_check_is_exact_and_path_opaque(monkeypatch, tmp_path) -> None:

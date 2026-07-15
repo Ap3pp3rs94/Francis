@@ -28,6 +28,30 @@ _NO_AUTHORITY = {
     "grants_execution_authority": False,
     "grants_mutation_authority": False,
 }
+_DOMAIN_CHECK_IDS = {
+    "tenant_data",
+    "tenant_memory",
+    "tenant_receipts",
+    "tenant_connectors",
+    "tenant_capability_packs",
+    "tenant_policy",
+    "support_operator_authority",
+}
+_ARTIFACT_BLOCKERS = {
+    "tenant_root_canonical": "tenant_root_not_canonical",
+    "tenant_root_not_linked": "tenant_root_link_boundary_not_allowed",
+    "tenant_layout_exact": "tenant_root_layout_mismatch",
+    "tenant_configuration_identity_aligned": "tenant_configuration_identity_mismatch",
+    "tenant_configuration_fingerprint_aligned": "tenant_configuration_fingerprint_mismatch",
+    "tenant_configuration_fields_aligned": "tenant_configuration_field_fingerprint_mismatch",
+    "tenant_manifest_identity_aligned": "tenant_manifest_identity_mismatch",
+    "tenant_manifest_lineage_aligned": "tenant_manifest_lineage_mismatch",
+    "provisioning_receipt_aligned": "tenant_provisioning_receipt_mismatch",
+    "approval_consumption_aligned": "tenant_approval_consumption_mismatch",
+    "registry_aligned": "managed_copy_registry_mismatch",
+    "copy_identity_unique": "copy_identity_not_unique",
+    "tenant_key_unique": "tenant_key_not_unique",
+}
 
 
 def managed_copy_integrity_scan(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
@@ -101,6 +125,31 @@ def managed_copy_integrity_scan(payload: dict[str, Any], *, actor: str) -> dict[
         },
         **_NO_AUTHORITY,
     }
+
+
+def managed_copy_integrity_finding_is_valid(value: Any) -> bool:
+    if not isinstance(value, dict) or set(value) != {"id", "severity", "source_contract", "blocker"}:
+        return False
+    finding_id = _text(value.get("id"))
+    prefix = "managed_copy_integrity:"
+    check_id = finding_id[len(prefix) :] if finding_id.startswith(prefix) else ""
+    blocker = _text(value.get("blocker"))
+    if check_id in _DOMAIN_CHECK_IDS:
+        allowed_blockers = {
+            f"{check_id}_path_contract_mismatch",
+            f"{check_id}_directory_missing",
+            f"{check_id}_link_boundary_not_allowed",
+            f"{check_id}_path_escapes_tenant_root",
+            "tenant_root_invalid",
+        }
+    else:
+        allowed_blockers = {_ARTIFACT_BLOCKERS[check_id]} if check_id in _ARTIFACT_BLOCKERS else set()
+    return bool(
+        allowed_blockers
+        and blocker in allowed_blockers
+        and value.get("severity") == "high"
+        and value.get("source_contract") == "stage18_managed_copy_structural_isolation_verification_v1"
+    )
 
 
 def _derived_findings(plan: dict[str, Any]) -> list[dict[str, str]]:

@@ -70,6 +70,11 @@ from francis.managed_copy_rogue_detection_assessment import (
     record_managed_copy_rogue_detection_assessment,
 )
 from francis.managed_copy_integrity_scan import managed_copy_integrity_scan
+from francis.managed_copy_integrity_evidence import (
+    managed_copy_integrity_evidence_plan,
+    managed_copy_integrity_evidence_readback,
+    record_managed_copy_integrity_evidence,
+)
 from francis.managed_copy_tenant_access import managed_copy_tenant_access_check
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
@@ -780,6 +785,8 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
             "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
             "integrity_scan": "/managed-copies/integrity-scan",
+            "integrity_evidence": "/managed-copies/integrity-evidence",
+            "integrity_evidence_readback": "/managed-copies/integrity-evidence-readback",
             "tenant_access_check": "/managed-copies/tenant-access-check",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "sla_commitment_review": "/managed-copies/sla-commitment-review",
@@ -3476,6 +3483,28 @@ def managed_copy_rogue_detection_assessments_snapshot(**kwargs: Any) -> dict[str
 
 def managed_copy_integrity_scan_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
     return managed_copy_integrity_scan(payload, actor=actor)
+
+
+def managed_copy_integrity_evidence_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    plan = managed_copy_integrity_evidence_plan(payload, actor=actor)
+    outcome: dict[str, Any] = plan
+    if payload.get("dry_run") is False:
+        outcome = record_managed_copy_integrity_evidence(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("evidence_fingerprint")).strip(),
+            confirmed=payload.get("confirm_integrity_evidence") is True,
+        )
+    return {
+        **plan,
+        **outcome,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+    }
+
+
+def managed_copy_integrity_evidence_readback_snapshot(**kwargs: Any) -> dict[str, Any]:
+    return managed_copy_integrity_evidence_readback(**kwargs)
 
 
 def managed_copy_tenant_access_check_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:

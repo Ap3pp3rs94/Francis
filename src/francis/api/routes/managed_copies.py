@@ -42,6 +42,8 @@ from francis.managed_copies import (
     managed_copy_rogue_detection_assessment_snapshot,
     managed_copy_rogue_detection_assessments_snapshot,
     managed_copy_integrity_scan_snapshot,
+    managed_copy_integrity_evidence_snapshot,
+    managed_copy_integrity_evidence_readback_snapshot,
     managed_copy_tenant_access_check_snapshot,
     managed_copy_rogue_recovery_review_blocked_snapshot,
     managed_copy_role_authority_review_blocked_snapshot,
@@ -604,6 +606,33 @@ def integrity_scan(payload: dict[str, Any], request: Request) -> dict[str, Any]:
             next_step="configure_actor_scope_before_scanning_managed_copy_integrity",
         )
     return managed_copy_integrity_scan_snapshot(payload, actor=actor)
+
+
+@router.post("/integrity-evidence")
+def integrity_evidence(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor, required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE, route=request.url.path, method=request.method
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_recording_managed_copy_integrity_evidence",
+        )
+    return managed_copy_integrity_evidence_snapshot(payload, actor=actor)
+
+
+@router.get("/integrity-evidence-readback")
+def integrity_evidence_readback(
+    copy_id: str = "", provisioning_receipt_id: str = "", isolation_verification_receipt_id: str = "", limit: int = 20
+) -> dict[str, Any]:
+    return managed_copy_integrity_evidence_readback_snapshot(
+        copy_id=copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+        isolation_verification_receipt_id=isolation_verification_receipt_id,
+        limit=limit,
+    )
 
 
 @router.post("/tenant-access-check")
