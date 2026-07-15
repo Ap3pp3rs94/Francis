@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import francis.managed_copy_safe_delta as managed_copy_safe_delta
 import francis.managed_copy_safe_delta_approval as safe_delta_approval
 import francis.managed_copy_safe_delta_export as safe_delta_export
+import francis.managed_copy_safe_delta_export_authorization as safe_delta_export_authorization
 from francis.api.app import create_app
 
 
@@ -58,6 +59,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_decision": "/managed-copies/safe-delta-decision",
         "safe_delta_decisions": "/managed-copies/safe-delta-decisions",
         "safe_delta_export_preflight": "/managed-copies/safe-delta-export-preflight",
+        "safe_delta_export_authorization_request": "/managed-copies/safe-delta-export-authorization-request",
+        "safe_delta_export_authorization_requests": "/managed-copies/safe-delta-export-authorization-requests",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -4402,6 +4405,167 @@ def test_managed_copy_safe_delta_export_preflight_denies_unscoped_before_lineage
     assert body["grants_export_authority"] is False
     assert body["grants_execution_authority"] is False
     assert not data_root.exists()
+
+
+def _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision):
+    monkeypatch.setattr(
+        safe_delta_export_authorization,
+        "managed_copy_provision_for_copy",
+        managed_copy_safe_delta.managed_copy_provision_for_copy,
+    )
+    monkeypatch.setattr(
+        safe_delta_export_authorization,
+        "latest_managed_copy_isolation_verification_for_provision",
+        managed_copy_safe_delta.latest_managed_copy_isolation_verification_for_provision,
+    )
+    actor = "safe-delta.export-requester"
+    preflight_payload = _safe_delta_export_preflight_payload(decision_plan, decision, actor=actor)
+    preflight = safe_delta_export.managed_copy_safe_delta_export_preflight(preflight_payload, actor=actor)
+    payload = {
+        "request_actor": actor,
+        "copy_id": decision_plan["copy_id"],
+        "provisioning_receipt_id": decision_plan["provisioning_receipt_id"],
+        "isolation_verification_receipt_id": decision_plan["isolation_verification_receipt_id"],
+        "review_fingerprint": decision_plan["review_fingerprint"],
+        "decision_receipt_id": decision["receipt_id"],
+        "preflight_fingerprint": preflight["export_preflight_fingerprint"],
+        "export_class": "safe_delta_signal",
+        "retention_class": "authorization_request_receipt_only",
+        "destination_class": "governed_export_boundary",
+        "purpose_fingerprint": "9" * 64,
+        "dry_run": True,
+    }
+    plan = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_request_plan(
+        payload, actor=actor
+    )
+    return payload, plan
+
+
+def test_managed_copy_safe_delta_export_authorization_request_plan_record_readback_is_pending_only(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "export-request")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    payload, plan = _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision)
+    assert plan["ok"] is True
+    assert plan["status"] == "export_authorization_request_ready"
+    assert len(plan["request_fingerprint"]) == 64
+    assert plan["writes_receipt"] is False
+
+    unconfirmed = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=False
+    )
+    assert unconfirmed["error"] == "safe_delta_export_authorization_request_confirmation_required"
+    recorded = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=True
+    )
+    assert recorded["status"] == "export_authorization_pending", recorded
+    assert recorded["writes_receipt"] is True
+    replay = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=True
+    )
+    assert replay["status"] == "already_requested"
+    assert replay["receipt_id"] == recorded["receipt_id"]
+    assert replay["writes_receipt"] is False
+    for flag in (
+        "export_approved",
+        "export_executed",
+        "safe_delta_exported",
+        "safe_delta_flow_active",
+        "writes_artifact",
+        "writes_manifest",
+        "writes_payload",
+        "writes_tenant_state",
+        "writes_memory",
+        "writes_registry",
+        "writes_learning",
+        "uses_network",
+        "grants_approval_authority",
+        "grants_export_authority",
+        "grants_execution_authority",
+        "grants_mutation_authority",
+    ):
+        assert recorded[flag] is False
+    readback = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_requests_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert readback["status"] == "export_authorization_pending"
+    assert readback["valid_count"] == 1
+    assert readback["latest_valid_receipt_id"] == recorded["receipt_id"]
+    serialized = json.dumps(recorded)
+    assert "https://export.example.invalid" not in serialized
+    assert "secret-export-credential" not in serialized
+    assert recorded["receipt"]["governance"]["contains_credentials"] is False
+    assert recorded["receipt"]["governance"]["contains_concrete_destination"] is False
+
+
+def test_managed_copy_safe_delta_export_authorization_request_schema_and_record_drift_fail_closed(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(
+        monkeypatch, tmp_path / "export-request-drift"
+    )
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    payload, plan = _safe_delta_export_authorization_plan(monkeypatch, source_state, decision_plan, decision)
+    for changes in (
+        {"unexpected": True},
+        {"export_class": "raw_payload"},
+        {"retention_class": "forever"},
+        {"destination_class": "https://example.invalid"},
+        {"purpose_fingerprint": "bad"},
+        {"dry_run": 1},
+    ):
+        blocked = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_request_plan(
+            {**payload, **changes}, actor=payload["request_actor"]
+        )
+        assert blocked["ok"] is False
+        assert blocked["request_fingerprint"] == ""
+        assert blocked["writes_receipt"] is False
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["safe_delta_policy"]["operator_review_required"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    drifted = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        plan, provided_fingerprint=plan["request_fingerprint"], confirmed=True
+    )
+    assert drifted["ok"] is False
+    assert drifted["error"] == "safe_delta_export_authorization_request_plan_drift"
+    assert drifted["writes_receipt"] is False
+
+
+def test_managed_copy_safe_delta_export_authorization_request_unscoped_and_production_empty(
+    monkeypatch, tmp_path
+) -> None:
+    root = tmp_path / "export-request-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/safe-delta-export-authorization-request",
+            json={"request_actor": "unscoped", "dry_run": True},
+        )
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.safe_delta.export.authorization.request"
+    assert not root.exists()
+    readback = safe_delta_export_authorization.managed_copy_safe_delta_export_authorization_requests_readback(
+        copy_id="managed_copy_missing",
+        provisioning_receipt_id="managed_copy_provision_missing",
+        isolation_verification_receipt_id="managed_copy_isolation_missing",
+    )
+    assert readback["status"] == "empty"
+    assert readback["count"] == 0
 
 
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(

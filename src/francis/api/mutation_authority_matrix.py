@@ -1420,6 +1420,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Event actor remains provenance; request_actor/api_actor can carry the API caller identity for scoped writes.",
     ),
     AuthorityRule(
+        family="managed_copies_safe_delta_export_authorization_request",
+        prefixes=("/managed-copies/safe-delta-export-authorization-request",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.safe_delta.export.authorization.request",
+        approval_requirement="fresh exact safe-delta export preflight and explicit confirmation",
+        receipt_behavior="immutable pending export authorization-request receipt only",
+        denial_behavior="api_permission_denied before lineage projection or request receipt write",
+        governance_maturity="permission_gated_confirmed_request_only",
+        notes="Creates no approval, export, artifact, manifest, payload, destination, credential, network, or learning effect.",
+    ),
+    AuthorityRule(
         family="managed_copies_safe_delta_export_preflight",
         prefixes=("/managed-copies/safe-delta-export-preflight",),
         required_actor="payload.request_actor, payload.api_actor, or payload.actor",
