@@ -193,15 +193,17 @@ def _cached_read_only_json_response(
         future = _READBACK_EXECUTOR.submit(_call_read_only, func, **kwargs)
         _READBACK_IN_FLIGHT[key] = future
 
-        def store_done(
-            done: Future[dict[str, object]],
-            *,
-            done_kind: str = kind,
-            done_key: str = key,
-        ) -> None:
-            _store_readback_future_result(done_kind, done_key, done)
+    def store_done(
+        done: Future[dict[str, object]],
+        *,
+        done_kind: str = kind,
+        done_key: str = key,
+    ) -> None:
+        _store_readback_future_result(done_kind, done_key, done)
 
-        future.add_done_callback(store_done)
+    # A completed Future invokes callbacks synchronously. Register only after
+    # releasing the cache lock so the callback can safely store its result.
+    future.add_done_callback(store_done)
 
     try:
         payload = future.result(timeout=_READBACK_REFRESH_TIMEOUT_SECONDS)

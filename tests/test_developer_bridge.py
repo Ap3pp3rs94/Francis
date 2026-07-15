@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable
+from concurrent.futures import Future
 
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -4619,6 +4620,35 @@ def test_readback_cache_returns_hit_after_read_through_refresh(tmp_path, monkeyp
     assert second_payload["items"][0]["id"] == "collab_read_through"
     assert second_payload["count"] == 1
     assert calls == 1
+
+
+def test_readback_cache_accepts_future_completed_before_callback_registration(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    import francis.api.routes.developer_bridge as route_module
+
+    route_module._READBACK_CACHE.clear()
+    route_module._READBACK_IN_FLIGHT.clear()
+
+    class CompletedFutureExecutor:
+        @staticmethod
+        def submit(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+            future = Future()
+            future.set_result(func(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr(route_module, "_READBACK_EXECUTOR", CompletedFutureExecutor())
+
+    response = route_module._cached_read_only_json_response(
+        "developer_bridge.completed_future",
+        lambda: {"kind": "developer_bridge.completed_future", "ok": True, "items": []},
+        lambda: {"kind": "developer_bridge.completed_future", "ok": True, "items": []},
+    )
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert payload["ok"] is True
+    assert payload["readback_cache"]["status"] == "refreshed"
+    assert route_module._READBACK_IN_FLIGHT == {}
 
 
 def test_readback_cache_refreshes_stale_entries_directly(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
