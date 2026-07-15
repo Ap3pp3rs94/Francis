@@ -18,6 +18,7 @@ from francis.managed_copies import (
     MANAGED_COPIES_SAFE_DELTA_EXPORT_PREFLIGHT_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_EXPORT_AUTHORIZATION_REQUEST_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_EXPORT_AUTHORIZATION_DECISION_SCOPE,
+    MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_PREFLIGHT_SCOPE,
     MANAGED_COPIES_SLA_WRITE_SCOPE,
     managed_copies_status_snapshot,
     managed_copy_completion_review_snapshot,
@@ -53,6 +54,7 @@ from francis.managed_copies import (
     managed_copy_safe_delta_export_authorization_requests_snapshot,
     managed_copy_safe_delta_export_authorization_decision_snapshot,
     managed_copy_safe_delta_export_authorization_decisions_snapshot,
+    managed_copy_safe_delta_export_artifact_plan_snapshot,
     managed_copy_sla_commitment_review_blocked_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
@@ -533,6 +535,24 @@ def safe_delta_export_authorization_decisions(
         isolation_verification_receipt_id=isolation_verification_receipt_id,
         limit=limit,
     )
+
+
+@router.post("/safe-delta-export-artifact-plan")
+def safe_delta_export_artifact_plan(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_PREFLIGHT_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_PREFLIGHT_SCOPE,
+            next_step="configure_actor_scope_before_planning_safe_delta_export_artifact",
+        )
+    return managed_copy_safe_delta_export_artifact_plan_snapshot(payload, actor=actor)
 
 
 @router.get("/rogue-recovery-contract")

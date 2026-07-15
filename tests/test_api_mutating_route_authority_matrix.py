@@ -399,6 +399,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert export_decision["required_scope"] == "managed_copies.safe_delta.export.authorization.decide"
     assert "immutable approved or rejected" in export_decision["receipt_behavior"]
 
+    artifact_plan = entries["/managed-copies/safe-delta-export-artifact-plan"]
+    assert artifact_plan["family"] == "managed_copies_safe_delta_export_artifact_plan"
+    assert artifact_plan["required_scope"] == "managed_copies.safe_delta.export.artifact.preflight"
+    assert "writes no plan, receipt, artifact" in artifact_plan["receipt_behavior"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

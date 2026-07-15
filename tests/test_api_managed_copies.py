@@ -14,6 +14,7 @@ import francis.managed_copy_safe_delta_approval as safe_delta_approval
 import francis.managed_copy_safe_delta_export as safe_delta_export
 import francis.managed_copy_safe_delta_export_authorization as safe_delta_export_authorization
 import francis.managed_copy_safe_delta_export_authorization_decision as safe_delta_export_authorization_decision
+import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export_artifact_plan
 from francis.api.app import create_app
 
 
@@ -64,6 +65,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_export_authorization_requests": "/managed-copies/safe-delta-export-authorization-requests",
         "safe_delta_export_authorization_decision": "/managed-copies/safe-delta-export-authorization-decision",
         "safe_delta_export_authorization_decisions": "/managed-copies/safe-delta-export-authorization-decisions",
+        "safe_delta_export_artifact_plan": "/managed-copies/safe-delta-export-artifact-plan",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -4923,6 +4925,124 @@ def test_managed_copy_safe_delta_export_authorization_decision_unscoped_and_prod
     )
     assert empty["status"] == "empty"
     assert empty["valid_count"] == 0
+
+
+def _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state, outcome="approved"):
+    _, decision_plan = _safe_delta_export_authorization_decision_plan(monkeypatch, source_state, outcome)
+    decision = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        decision_plan, provided_fingerprint=decision_plan["authorization_decision_fingerprint"], confirmed=True
+    )["receipt"]
+    monkeypatch.setattr(
+        safe_delta_export_artifact_plan,
+        "managed_copy_safe_delta_export_authorization_decisions_readback",
+        safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decisions_readback,
+    )
+    payload = {
+        "request_actor": "safe-delta.artifact-planner",
+        "copy_id": decision["copy_id"],
+        "provisioning_receipt_id": decision["provisioning_receipt_id"],
+        "isolation_verification_receipt_id": decision["isolation_verification_receipt_id"],
+        "review_fingerprint": decision["review_fingerprint"],
+        "preflight_fingerprint": decision["preflight_fingerprint"],
+        "request_fingerprint": decision["request_fingerprint"],
+        "authorization_decision_receipt_id": decision["receipt_id"],
+        "authorization_decision_fingerprint": decision["authorization_decision_fingerprint"],
+        "artifact_media_type": "application/vnd.francis.safe-delta+json",
+        "artifact_schema_class": "safe_delta_signal_v1",
+        "retention_class": "transient_operator_export",
+        "artifact_count": 1,
+        "dry_run": True,
+    }
+    return payload
+
+
+def test_managed_copy_safe_delta_export_artifact_plan_is_deterministic_and_no_write(monkeypatch, tmp_path) -> None:
+    root = tmp_path.parent / "sap-ready"
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, root)
+    payload = _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state)
+    before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    first = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        payload, actor=payload["request_actor"]
+    )
+    second = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        payload, actor=payload["request_actor"]
+    )
+    after = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    assert first == second
+    assert first["status"] == "export_artifact_plan_ready"
+    assert len(first["artifact_plan_fingerprint"]) == 64
+    assert after == before
+    for flag in (
+        "writes_file",
+        "writes_receipt",
+        "writes_plan",
+        "writes_artifact",
+        "writes_manifest",
+        "writes_payload",
+        "writes_tenant_state",
+        "writes_learning",
+        "uses_network",
+        "grants_export_authority",
+    ):
+        assert first[flag] is False
+
+
+def test_managed_copy_safe_delta_export_artifact_plan_rejects_source_schema_and_drift(monkeypatch, tmp_path) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "sap-reject")
+    rejected_payload = _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state, "rejected")
+    rejected = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        rejected_payload, actor=rejected_payload["request_actor"]
+    )
+    assert rejected["ok"] is False
+    assert rejected["artifact_plan_fingerprint"] == ""
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "sap-drift")
+    approved_payload = _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state)
+    assert (
+        safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+            approved_payload, actor=approved_payload["request_actor"]
+        )["ok"]
+        is True
+    )
+    for case in (
+        {**approved_payload, "dry_run": False},
+        {**approved_payload, "dry_run": 1},
+        {**approved_payload, "artifact_count": True},
+        {**approved_payload, "unexpected": "raw"},
+        {**approved_payload, "credential": "secret"},
+        {**approved_payload, "destination": "https://invalid"},
+    ):
+        assert (
+            safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+                case, actor=approved_payload["request_actor"]
+            )["ok"]
+            is False
+        )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["safe_delta_policy"]["operator_review_required"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    drifted = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        approved_payload, actor=approved_payload["request_actor"]
+    )
+    assert drifted["ok"] is False
+
+
+def test_managed_copy_safe_delta_export_artifact_plan_unscoped_and_production_blocked(monkeypatch, tmp_path) -> None:
+    root = tmp_path / "sap-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post("/managed-copies/safe-delta-export-artifact-plan", json={"request_actor": "unscoped", "dry_run": True})
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.safe_delta.export.artifact.preflight"
+    assert not root.exists()
+    blocked = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        {"request_actor": "fixture", "dry_run": True}, actor="fixture"
+    )
+    assert blocked["ok"] is False
+    assert blocked["artifact_plan_fingerprint"] == ""
 
 
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(
