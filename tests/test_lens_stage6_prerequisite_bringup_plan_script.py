@@ -102,6 +102,9 @@ def _xfail_ci_headless_overlay_execution(proc: subprocess.CompletedProcess[str])
     execute_result = payload.get("execute_result")
     if not isinstance(execute_result, dict):
         execute_result = {}
+    result = execute_result.get("result")
+    if isinstance(result, dict):
+        _xfail_ci_headless_tray_execution(result)
     if (
         os.environ.get("GITHUB_ACTIONS") == "true"
         and platform.system() == "Windows"
@@ -213,6 +216,32 @@ def test_lens_stage6_prerequisite_bringup_xfails_ci_headless_tray_start(
 
     with pytest.raises(pytest.xfail.Exception):
         _xfail_ci_headless_tray_execution(result)
+
+
+def test_lens_stage6_prerequisite_bringup_xfails_nested_ci_headless_tray_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    proc = subprocess.CompletedProcess(
+        args=["powershell"],
+        returncode=1,
+        stdout=json.dumps(
+            {
+                "status": "tray_presence_start_failed",
+                "execute_result": {
+                    "result": {
+                        "status": "tray_presence_start_failed",
+                        "runner": {"status": "start_timeout"},
+                    }
+                },
+            }
+        ),
+        stderr="",
+    )
+
+    with pytest.raises(pytest.xfail.Exception):
+        _xfail_ci_headless_overlay_execution(proc)
 
 
 def _run_lens_runtime_script(script_name: str, *args: str) -> None:
