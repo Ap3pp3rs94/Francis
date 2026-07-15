@@ -4605,7 +4605,7 @@ def test_managed_copy_safe_delta_export_authorization_request_fingerprint_confli
     monkeypatch, tmp_path
 ) -> None:
     source_state, config_path = _configure_safe_delta_receipt_test_sources(
-        monkeypatch, tmp_path / "export-request-conflict"
+        monkeypatch, tmp_path.parent / "sx-request-conflict"
     )
     review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
     decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
