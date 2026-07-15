@@ -24,12 +24,12 @@ from francis.apprenticeship_game_teaching import (
 def _observation(*, scene_id: str, frame_id: str, observed_at: float) -> dict[str, object]:
     return {
         "kind": "lens.game.observation",
-        "version": 1,
+        "version": 2,
         "ready": True,
         "semantic_scene_ready": True,
         "source_frame_id": f"frame-{scene_id}-{frame_id}",
         "target": {"id": "sand", "configured": True, "foreground": True},
-        "foreground": {"target_match": True},
+        "foreground": {"target_match": True, "process_id": 55, "process_name": "Sand.exe"},
         "scene": {
             "ready": True,
             "id": scene_id,
@@ -39,6 +39,12 @@ def _observation(*, scene_id: str, frame_id: str, observed_at: float) -> dict[st
         "classification": {
             "source_frame_id": f"classified-{scene_id}-{frame_id}",
             "classified_at": observed_at,
+            "target_id": "sand",
+            "process_id": 55,
+            "process_name": "Sand.exe",
+            "model_id": "test/siglip",
+            "scene_id": scene_id,
+            "authority_receipt_id": "capture-receipt",
         },
         "model": {"id": "test/siglip", "remote_inference": False},
         "runtime_identity": {"authority_receipt_id": "capture-receipt"},

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from francis.apprenticeship_game_teaching import (
     GameTeachingObservationRecorder,
     game_teaching_episode_receipts,
@@ -21,7 +23,7 @@ def _observation(
 ) -> dict[str, object]:
     return {
         "kind": "lens.game.observation",
-        "version": 1,
+        "version": 2,
         "status": "scene_classified",
         "ready": True,
         "semantic_scene_ready": True,
@@ -33,6 +35,7 @@ def _observation(
         },
         "foreground": {
             "target_match": True,
+            "process_id": 55,
             "process_name": "Sand.exe",
             "window_title": "must-not-persist",
         },
@@ -46,6 +49,12 @@ def _observation(
         "classification": {
             "source_frame_id": f"classified-{scene_id}-{frame_id}",
             "classified_at": classified_at,
+            "target_id": target_id,
+            "process_id": 55,
+            "process_name": "Sand.exe",
+            "model_id": "google/siglip-base-patch16-224",
+            "scene_id": scene_id,
+            "authority_receipt_id": "capture-receipt",
             "frame_bytes": "must-not-persist",
         },
         "model": {
@@ -219,6 +228,52 @@ def test_game_teaching_rejects_target_and_governance_mismatches(
     assert game_teaching_session_status(now=103.0)["event_count"] == 0
     event_path = tmp_path / "logs" / "apprenticeship" / "game-teaching-events" / f"{started['session_id']}.jsonl"
     assert not event_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("version", "blocker"),
+    [
+        (1, "game_teaching_observation_contract_v1_legacy"),
+        (3, "game_teaching_observation_contract_version_unsupported"),
+        (True, "game_teaching_observation_contract_version_unsupported"),
+        (False, "game_teaching_observation_contract_version_unsupported"),
+    ],
+)
+def test_game_teaching_fails_closed_for_non_v2_observation_versions(
+    monkeypatch,
+    tmp_path: Path,
+    version: object,
+    blocker: str,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    started = _start()
+    recorder = GameTeachingObservationRecorder(min_scene_confirmations=1)
+    observation = _observation()
+    observation["version"] = version
+
+    result = recorder.record(observation, observed_at=101.0)
+
+    assert result["capture_status"] == "observation_blocked"
+    assert result["blockers"] == [blocker]
+    event_path = tmp_path / "logs" / "apprenticeship" / "game-teaching-events" / f"{started['session_id']}.jsonl"
+    assert not event_path.exists()
+
+
+def test_game_teaching_records_valid_v2_observer_lineage(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    started = _start()
+    recorder = GameTeachingObservationRecorder(min_scene_confirmations=1)
+
+    result = recorder.record(_observation(), observed_at=101.0)
+
+    assert result["capture_status"] == "scene_transition_recorded"
+    assert result["event_written"] is True
+    event_path = tmp_path / "logs" / "apprenticeship" / "game-teaching-events" / f"{started['session_id']}.jsonl"
+    event = json.loads(event_path.read_text(encoding="utf-8"))
+    assert event["source_observation_version"] == 2
+    assert event["authority_receipt_id"] == "capture-receipt"
 
 
 def test_game_teaching_requires_distinct_consecutive_classification_frames(

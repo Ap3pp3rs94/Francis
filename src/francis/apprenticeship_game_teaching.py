@@ -632,8 +632,15 @@ def _status_payload(
 
 
 def _observation_blocker(observation: dict[str, Any], *, target_id: str) -> str:
-    if observation.get("kind") != LENS_GAME_OBSERVATION_KIND or observation.get("version") != 1:
+    if observation.get("kind") != LENS_GAME_OBSERVATION_KIND:
         return "game_teaching_observation_contract_invalid"
+    version = observation.get("version")
+    if isinstance(version, bool) or not isinstance(version, int):
+        return "game_teaching_observation_contract_version_unsupported"
+    if version == 1:
+        return "game_teaching_observation_contract_v1_legacy"
+    if version != LENS_GAME_OBSERVATION_VERSION:
+        return "game_teaching_observation_contract_version_unsupported"
     target = _as_dict(observation.get("target"))
     foreground = _as_dict(observation.get("foreground"))
     scene = _as_dict(observation.get("scene"))
@@ -662,6 +669,16 @@ def _observation_blocker(observation: dict[str, Any], *, target_id: str) -> str:
         return "game_teaching_observation_lineage_missing"
     if model.get("remote_inference") is not False:
         return "game_teaching_remote_inference_denied"
+    if (
+        _safe_text(classification.get("target_id")) != _safe_text(target.get("id"))
+        or _safe_int(classification.get("process_id")) != _safe_int(foreground.get("process_id"))
+        or _safe_text(classification.get("process_name")) != _safe_text(foreground.get("process_name"))
+        or _safe_text(classification.get("model_id")) != _safe_text(model.get("id"))
+        or _safe_text(classification.get("scene_id")) != _safe_text(scene.get("id"))
+        or _safe_text(classification.get("authority_receipt_id"))
+        != _safe_text(runtime_identity.get("authority_receipt_id"))
+    ):
+        return "game_teaching_observation_lineage_mismatch"
     required_true = ("observation_only", "local_inference_only")
     required_false = (
         "remote_frame_transfer",

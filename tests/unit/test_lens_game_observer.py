@@ -9,6 +9,10 @@ from typing import Any
 
 import pytest
 
+from francis.apprenticeship_game_teaching import (
+    GameTeachingObservationRecorder,
+    start_game_teaching_session,
+)
 from francis.lens import game_observer as game_observer_module
 from francis.lens.game_observer import (
     GameSceneDefinition,
@@ -345,6 +349,64 @@ def test_observer_classifies_allowlisted_foreground_game_without_leaking_window_
     assert classified["governance"]["input_execution_authority"] is False
     assert classified["governance"]["learning_authority"] is False
     assert classifier.calls == 1
+
+
+def test_observer_discards_classification_when_authority_receipt_rotates(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "test")
+    started = start_game_teaching_session(
+        actor="test.game.teacher",
+        reason="verify rotated observer authority is not recorded",
+        target_id="sand",
+        intent_label="observe active gameplay",
+        declared_scope="semantic Sand scene transitions only",
+        success_condition="active gameplay is observed",
+        max_duration_seconds=300,
+        max_events=5,
+        now=99.0,
+    )
+    model_path = tmp_path / "model"
+    model_path.mkdir()
+    classifier = _Classifier(
+        [
+            {"scene_id": "active_gameplay", "score": 0.78},
+            {"scene_id": "game_menu", "score": 0.12},
+        ]
+    )
+    observer = LensGameObserver(
+        _config(model_path),
+        foreground_process=_foreground,
+        classifier=classifier,
+        executor=_ImmediateExecutor(),
+        clock=lambda: 100.15,
+    )
+
+    warming = observer.observe(
+        frame=_frame(),
+        source_frame_id="frame-1",
+        authority_receipt_id="receipt-1",
+        observed_at=100.1,
+    )
+    rotated = observer.observe(
+        frame=_frame(captured_at=100.2),
+        source_frame_id="frame-2",
+        authority_receipt_id="receipt-2",
+        observed_at=100.2,
+    )
+
+    assert warming["status"] == "semantic_warming"
+    assert rotated["status"] == "semantic_warming"
+    assert rotated["blockers"] == ["lens_game_semantic_inference_pending"]
+    assert rotated["runtime_identity"]["authority_receipt_id"] == "receipt-2"
+    assert rotated["classification"] == {}
+    teaching = GameTeachingObservationRecorder(min_scene_confirmations=1).record(rotated, observed_at=100.3)
+    assert teaching["capture_status"] == "observation_blocked"
+    assert teaching["blockers"] == ["game_teaching_semantic_scene_not_ready"]
+    event_path = tmp_path / "logs" / "apprenticeship" / "game-teaching-events" / f"{started['session_id']}.jsonl"
+    assert not event_path.exists()
 
 
 def test_observer_classifies_verified_existing_foreground_game_without_launch_authority(tmp_path: Path) -> None:

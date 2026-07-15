@@ -408,6 +408,8 @@ class LensGameObserver:
         if not math.isfinite(now) or now < frame.captured_at or not frame_id:
             raise ValueError("lens_game_observer_observation_invalid")
         self._harvest_pending()
+        if self._last_classification and self._last_classification.get("authority_receipt_id") != receipt_id:
+            self._last_classification = {}
         foreground = self._read_foreground_process()
         target_match, game_verification = self._target_match(foreground)
         foreground_process_id = _safe_int(foreground.get("process_id"))
