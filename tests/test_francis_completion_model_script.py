@@ -58,7 +58,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["latest_ledger_entry"]["title"] == (
-        "2026-07-14 00:08Z - Stage 18 managed-copy request recording implemented"
+        "2026-07-15 05:19Z - Stage 18 safe-delta review and Lens v2 observation promoted"
     )
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
         "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"
@@ -68,8 +68,9 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "record the first real operator-approved managed-copy request through the hash-bound "
-            "dry-run/apply route; customer identity and policy are not inferred or fabricated."
+            "the governed safe-delta approval/rejection decision receipt. Production copy creation "
+            "still requires real operator-supplied tenant and policy facts; those facts are not "
+            "inferred or fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,

@@ -60,7 +60,7 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current executable goal is the governed safe-delta approval/rejection
+The current goal is the governed safe-delta approval/rejection
 decision receipt. Production copy creation still requires real operator-supplied
 tenant and policy facts; those facts are not inferred or fabricated.
 
