@@ -96,6 +96,8 @@ contract that composes safely with the Lens situation model.
 Required commands, all with exit code 0:
 
 ```powershell
+$env:FRANCIS_DATA_DIR='D:\Francis-runtime-leases\argus-game-observer\data'
+$env:PYTHONPATH='D:\Francis-worktrees\argus-game-observer\src'
 .venv\Scripts\python.exe -m pytest tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py tests/unit/test_apprenticeship_game_teaching.py tests/unit/test_apprenticeship_game_episode_review.py tests/unit/test_lens_perception_worker.py -q
 .venv\Scripts\python.exe -m ruff check src/francis/lens/game_observer.py src/francis/lens/situation_model.py src/francis/apprenticeship_game_teaching.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py tests/unit/test_apprenticeship_game_teaching.py tests/unit/test_apprenticeship_game_episode_review.py tests/unit/test_lens_perception_worker.py
 .venv\Scripts\python.exe -m ruff format --check src/francis/lens/game_observer.py src/francis/lens/situation_model.py src/francis/apprenticeship_game_teaching.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py tests/unit/test_apprenticeship_game_teaching.py tests/unit/test_apprenticeship_game_episode_review.py tests/unit/test_lens_perception_worker.py
