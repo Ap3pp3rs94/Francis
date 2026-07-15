@@ -60,14 +60,25 @@ once against that closing cycle.
 
 ## Assignment And Isolation
 
-- Maximum three concurrent mutating fronts.
-- One named worker, task card, `codex/*` branch, worktree, bounded objective,
-  file scope, do-not-touch list, acceptance contract, and runtime lease per front.
-- Workers never write to `main`, share implementation worktrees, merge
-  themselves, or modify another front's files without a revised assignment.
-- ATLAS is manager/integrator, not a fourth feature worker.
-- Read-only seats do not consume mutating slots. A specialist may mutate only
-  after receiving one of those slots plus a card, branch, and worktree.
+- `D:\Francis` on `main` is the authoritative implementation checkout. ATLAS
+  serializes mutating ownership so only one worker changes it at a time.
+- Read-only reviewers may operate concurrently against the same exact main head.
+- A task card still owns a bounded objective, file scope, do-not-touch list,
+  acceptance contract, and runtime lease; a branch/worktree is exceptional, not
+  automatic.
+- Temporary isolation is allowed only for rollback safety, conflicting mutation,
+  or exact-head validation. Normally no more than one temporary mutating worktree
+  exists, under `D:\Francis-support\worktrees`, with an owner, task, exact base,
+  lease, and removal condition.
+- Workers never merge themselves or modify another assignment's files. ATLAS
+  owns the mutating queue, review routing, integration, and cleanup.
+- Promoted, rejected, superseded, or parked worktrees are removed in the same
+  integration cycle after unique state is retained by `main` or an intentional
+  ref. Parked branches do not retain permanent checkouts.
+- Temporary reversible drive mappings may provide short Windows paths; permanent
+  drive-root worktree aliases are prohibited.
+- Capital Room content remains outside the Francis repository under
+  `D:\Francis-support\capital`.
 
 ATLAS remains an active build director. At the start of each management turn it
 reconciles native session topology, then spends available capacity on executable
@@ -94,6 +105,11 @@ All allocations are recorded in `RUNTIME_LEASES.md`. Live-service access is
 denied by default. Ports `8000`, `8787`, and `5173` are operator-reserved. No two
 fronts may share a writable data directory or active port. Unknown processes are
 never killed merely because they hold a desired port.
+
+New runtime state belongs under `D:\Francis-support\runtime-leases`. Released
+lease data is removed or archived during the same integration cycle after
+required logs and receipts are preserved. Historical receipts retain their
+original recorded paths.
 
 Before `READY_FOR_REVIEW`, the worker stops every owned service, releases ports,
 preserves required logs/receipts, and submits cleanup evidence. ARGUS and LUMEN
@@ -218,12 +234,13 @@ Validation tiers are:
 
 1. edit loop: syntax, changed-file Ruff/format, changed-module mypy, focused
    tests, and diff checks;
-2. stable worker head: card acceptance, subsystem regression, required full
-   gate, and independent exact-commit review;
-3. rebased promotion head: complete acceptance, full gate, final diff, and any
-   materially affected specialist review;
-4. integrated local main: meaningful post-promotion checks and one authoritative
-   combined full gate; remote CI/CodeQL only after an operator-authorized push.
+2. stable candidate head: card acceptance, subsystem regression, changed-path
+   static checks, and independent affected-delta review;
+3. integrated local main: meaningful post-integration checks against the exact
+   head;
+4. pushed main: remote CI/CodeQL is the normal repository-wide gate. Local full
+   `scripts/check.ps1` is reserved for broad integration, release checkpoints,
+   or CI-divergence diagnosis.
 
 Every material run receives a `VAL-YYYYMMDD-NNN` entry indexed by
 `VALIDATION_RUNS.md`. It records seat/front, exact commit, branch/worktree,
@@ -247,20 +264,19 @@ before batching documentation.
 
 ## Exact-Head Promotion
 
-Control Room commits can advance local `main`, so pre-rebase evidence is not
-sufficient. Before promotion ATLAS must:
+Before promotion ATLAS must:
 
 1. record the worker's review-ready commit;
-2. commit current Control Room state;
-3. rebase the worker branch onto that exact local `main` head;
-4. rerun the complete card acceptance suite on the rebased head;
-5. run `scripts/check.ps1` on the rebased head;
-6. confirm the final diff still satisfies the card and required reviews;
-7. freeze new local-main commits;
-8. fast-forward local `main` only when certain;
-9. verify commit reachability;
-10. run meaningful post-promotion validation;
-11. commit the resulting Control Room sync.
+2. confirm the candidate is based on the intended exact `main` head;
+3. run focused acceptance, the complete affected card/subsystem suite, and
+   changed-path static checks;
+4. confirm the final diff satisfies the card and affected reviews;
+5. freeze unrelated local-main mutation;
+6. commit or fast-forward the exact validated candidate on `main`;
+7. verify commit reachability and run meaningful post-integration validation;
+8. remove any temporary checkout after its state, processes, lease, and artifacts
+   pass the removal checklist;
+9. commit the resulting Control Room sync when material state changed.
 
 The exact promoted head must be the head that passed final validation. Publishing
 or pushing remains operator-gated. Remote branch deletion is operator-gated.

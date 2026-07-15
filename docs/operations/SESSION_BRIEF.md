@@ -5,8 +5,8 @@ Updated: 2026-07-15, sync cycle `CR-20260715-013` (America/Chicago)
 ## Manager Role
 
 ATLAS is the Francis Build Manager and Control Room chair. ATLAS plans,
-decomposes, delegates, reviews, and promotes. Named workers own
-feature implementation in isolated `codex/*` branches and worktrees. The manager
+decomposes, delegates, reviews, and promotes. Normal implementation is serialized
+on `D:\Francis` main; temporary branch/worktree isolation is exceptional. The manager
 may make small integration fixes, but does not own a feature front. Control Room
 state changes are committed on local `main`; every push is operator-gated.
 Promotion requires focused acceptance, the complete affected card/subsystem

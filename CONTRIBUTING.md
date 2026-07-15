@@ -24,6 +24,26 @@ Licensing questions and permission requests: peppera091@gmail.com
 - Promote validated work back to `main` with a fast-forward merge. Do not create avoidable merge bubbles for routine slices.
 - Do not force-push shared branches unless there is an explicit recovery reason and everyone involved understands the history rewrite.
 
+### Temporary worktree policy
+
+- Normal bounded implementation is serialized in `D:\Francis` on `main`.
+- Read-only reviewers may inspect the same exact head concurrently.
+- Create a temporary worktree only for rollback isolation, conflicting mutation,
+  or exact-head validation that cannot safely use the main checkout.
+- Normally at most one mutating temporary worktree may exist. Record its owner,
+  task, exact base, runtime lease, and removal condition before use.
+- Place temporary worktrees under `D:\Francis-support\worktrees`; do not create
+  permanent drive-root names such as `D:\fa`, `D:\fg`, or `D:\fv`.
+- A promoted, rejected, superseded, or parked branch may retain an intentional
+  Git ref, but its checkout must be removed in the same integration cycle after
+  unique dirty state and untracked artifacts are preserved.
+- For short-path validation, prefer a temporary reversible drive mapping backed
+  by `D:\Francis-support\worktrees`, and remove the mapping after validation.
+- Before removal, prove the worktree is clean or preserved, its unique commits
+  are reachable from `main` or an intentional ref, no process or lease uses its
+  path, and no required artifact exists only as an untracked file. Use
+  `git worktree remove`; never force-remove uncertain work.
+
 ## Expected Local Flow
 
 ```powershell
@@ -39,10 +59,11 @@ Work, validate, commit, and push `main`:
 git push origin main
 ```
 
-For isolated work only, create a named branch after syncing `main`:
+For exceptional isolated work only, create a named branch after syncing `main`
+and add its checkout below `D:\Francis-support\worktrees`:
 
 ```powershell
-git switch -c codex/<slice-name>
+git worktree add D:\Francis-support\worktrees\<slice-name> -b codex/<slice-name> main
 ```
 
 ## Repo Checks

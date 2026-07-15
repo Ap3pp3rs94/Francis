@@ -23,10 +23,13 @@ without declaring the copy rogue or performing any containment or recovery actio
 
 - Lease: `LEASE-FORGE-007` in `control_room/RUNTIME_LEASES.md`.
 - `FRANCIS_DATA_DIR`:
-  `D:\Francis-runtime-leases\forge-rogue-detection-assessment\data`.
+  `D:\Francis-support\runtime-leases\forge-rogue-detection-assessment\data`.
 - Ports: `18008` / `18788` / `15178`; no service may bind them.
 - Permitted processes: pytest, Ruff, mypy, and bounded validation only.
 - Persistent services and operator-visible Orb access: denied.
+- Removal condition: after promotion or parking, preserve the branch/ref, prove
+  no owned process or untracked artifact remains, release the lease, and remove
+  temporary `D:\fg` in this integration cycle.
 
 ## Files In Scope
 
