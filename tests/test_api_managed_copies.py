@@ -1651,6 +1651,20 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     ).json()
     assert evidence_replayed["status"] == "integrity_evidence_recorded"
     assert evidence_replayed["writes_receipt"] is False
+    active_evidence_readback = client.get(
+        "/managed-copies/integrity-evidence-readback",
+        params={
+            "copy_id": provisioned["copy_id"],
+            "provisioning_receipt_id": provisioned["receipt_id"],
+            "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+        },
+    ).json()
+    assert active_evidence_readback["integrity_incident_state"] == "active_drift"
+    assert active_evidence_readback["triage_required"] is True
+    assert active_evidence_readback["highest_severity"] == "high"
+    assert active_evidence_readback["latest_finding_count"] == drifted_integrity["finding_count"]
+    assert active_evidence_readback["incident_opened"] is False
+    assert active_evidence_readback["incident_resolved"] is False
     drifted_access = client.post(
         "/managed-copies/tenant-access-check",
         json={**access_payload, "domain": "tenant_policy"},
@@ -1674,6 +1688,9 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert evidence_readback["valid_count"] == 1
     assert evidence_readback["latest_receipt_id"] == evidence_recorded["receipt_id"]
     assert evidence_readback["live_drift_matches_latest"] is False
+    assert evidence_readback["integrity_incident_state"] == "historical_or_changed"
+    assert evidence_readback["triage_required"] is False
+    assert evidence_readback["incident_resolved"] is False
     assert evidence_readback["writes_receipts"] is False
     assert "findings" not in evidence_readback["items"][0]
 
@@ -4056,6 +4073,8 @@ def test_managed_copy_integrity_evidence_requires_exact_confirmation_and_valid_r
         )
         assert lineage_readback["status"] == "empty"
         assert lineage_readback["valid_count"] == 0
+        assert lineage_readback["integrity_incident_state"] == "empty"
+        assert lineage_readback["triage_required"] is False
         substituted_path.unlink()
 
     raw_finding = json.loads(json.dumps(original))

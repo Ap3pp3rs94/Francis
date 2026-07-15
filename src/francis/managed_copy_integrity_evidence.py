@@ -217,6 +217,12 @@ def managed_copy_integrity_evidence_readback(
         if latest
         else {}
     )
+    live_drift_matches_latest = bool(
+        latest
+        and live.get("status") == "integrity_drift_detected"
+        and live.get("scan_fingerprint") == latest.get("scan_fingerprint")
+    )
+    incident_state = "active_drift" if live_drift_matches_latest else "historical_or_changed" if bounded else "empty"
     return {
         "ok": True,
         "kind": READBACK_KIND,
@@ -226,11 +232,14 @@ def managed_copy_integrity_evidence_readback(
         "valid_count": len(bounded),
         "latest_receipt_id": _text(latest.get("receipt_id")),
         "latest_evidence_fingerprint": _text(latest.get("evidence_fingerprint")),
-        "live_drift_matches_latest": bool(
-            latest
-            and live.get("status") == "integrity_drift_detected"
-            and live.get("scan_fingerprint") == latest.get("scan_fingerprint")
-        ),
+        "live_drift_matches_latest": live_drift_matches_latest,
+        "integrity_incident_state": incident_state,
+        "triage_required": live_drift_matches_latest,
+        "highest_severity": "high" if live_drift_matches_latest else "",
+        "latest_finding_count": int(latest.get("finding_count") or 0) if latest else 0,
+        "latest_evidence_recorded_ts": int(latest.get("recorded_ts") or 0) if latest else 0,
+        "incident_opened": False,
+        "incident_resolved": False,
         "writes_receipts": False,
         **_NO_AUTHORITY,
     }
