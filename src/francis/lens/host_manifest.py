@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir, repo_root
+from francis.lens.runtime_identity import runtime_identity, scoped_runtime_label
 
 
 SUPERVISOR_READBACK_FRESH_SECONDS = 15 * 60
@@ -392,11 +393,19 @@ def _lens_tray_runtime_readback() -> dict[str, Any]:
     state_kind = str(state_payload.get("kind") or "")
     state_status = str(state_payload.get("status") or "")
     state_pid = _safe_pid(state_payload.get("pid"))
+    expected_runtime_identity = runtime_identity()
+    expected_presence_name = scoped_runtime_label("Francis Lens Tray Presence")
+    state_runtime_identity = str(state_payload.get("runtime_identity") or "")
+    state_presence_name = str(state_payload.get("presence_name") or "")
     state_claims_running_tray = (
         state_kind == "lens.tray.runtime_state"
         and state_status == "tray_running"
         and state_pid > 0
         and state_pid == pid
+        and (
+            not expected_runtime_identity
+            or (state_runtime_identity == expected_runtime_identity and state_presence_name == expected_presence_name)
+        )
     )
     if state_claims_running_tray:
         process_alive, process_alive_check = _process_alive_readback(pid)
@@ -440,6 +449,12 @@ def _lens_tray_runtime_readback() -> dict[str, Any]:
         "process_alive": process_alive,
         "process_alive_check": process_alive_check,
         "tray_icon_visible": tray_icon_visible,
+        "presence_name": state_presence_name,
+        "expected_presence_name": expected_presence_name,
+        "runtime_identity": state_runtime_identity,
+        "expected_runtime_identity": expected_runtime_identity,
+        "runtime_identity_matches_expected": not expected_runtime_identity
+        or state_runtime_identity == expected_runtime_identity,
         "requirement_state": requirement_state,
         "blocker": blocker,
     }
@@ -535,7 +550,8 @@ def _lens_hotkey_runtime_readback() -> dict[str, Any]:
 
 def _lens_overlay_runtime_readback() -> dict[str, Any]:
     config = _runtime_json_dict("config/runtime/lens/overlay.json")
-    expected_overlay_name = str(config.get("overlay_name") or "Francis Lens Overlay")
+    expected_overlay_name = scoped_runtime_label(str(config.get("overlay_name") or "Francis Lens Overlay"))
+    expected_runtime_identity = runtime_identity()
     expected_overlay_scope = str(config.get("overlay_scope") or "user_session")
     state_file = data_dir() / "runtime" / "lens-overlay" / "status.json"
     pid_file = data_dir() / "runtime" / "lens-overlay" / "lens-overlay.pid"
@@ -547,6 +563,7 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
     state_status = str(state_payload.get("status") or "")
     state_pid = _safe_pid(state_payload.get("pid"))
     state_overlay_name = str(state_payload.get("overlay_name") or "")
+    state_runtime_identity = str(state_payload.get("runtime_identity") or "")
     state_overlay_scope = str(state_payload.get("overlay_scope") or "")
     state_claims_running_overlay = (
         state_kind == "lens.overlay.runtime_state"
@@ -554,6 +571,7 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
         and state_pid > 0
         and state_pid == pid
         and state_overlay_name == expected_overlay_name
+        and (not expected_runtime_identity or state_runtime_identity == expected_runtime_identity)
         and state_overlay_scope == expected_overlay_scope
     )
     if state_claims_running_overlay:
@@ -603,6 +621,10 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
         "always_on_top": always_on_top,
         "overlay_name": state_overlay_name,
         "expected_overlay_name": expected_overlay_name,
+        "runtime_identity": state_runtime_identity,
+        "expected_runtime_identity": expected_runtime_identity,
+        "runtime_identity_matches_expected": not expected_runtime_identity
+        or state_runtime_identity == expected_runtime_identity,
         "overlay_scope": state_overlay_scope,
         "expected_overlay_scope": expected_overlay_scope,
         "orb_visual": _orb_visual_runtime_readback(state_payload.get("orb_visual")),
@@ -1665,7 +1687,7 @@ def _lens_host_overlay_window_requirement_readback(
     config = _runtime_json_dict(config_path)
     overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
     config_exists = bool(config)
-    overlay_name = str(config.get("overlay_name") or "Francis Lens Overlay")
+    overlay_name = scoped_runtime_label(str(config.get("overlay_name") or "Francis Lens Overlay"))
     overlay_scope = str(config.get("overlay_scope") or "user_session")
     status_route = str(config.get("status_route") or "/lens/status")
     host_route = str(config.get("host_route") or "/lens/host")

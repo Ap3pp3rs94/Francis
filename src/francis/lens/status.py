@@ -60,6 +60,7 @@ from francis.lens.activation import (
     lens_resident_surface_activation_boundary,
 )
 from francis.lens.errors import lens_error_code
+from francis.lens.runtime_identity import canonical_orb_identity_id, runtime_identity
 from francis.lens.host_manifest import (
     lens_host_launch_manifest,
     lens_host_persistent_supervision_enablement_preflight,
@@ -5972,7 +5973,8 @@ def _canonical_orb_runtime_identity(
         "kind": "lens.orb.runtime_identity",
         "status": status,
         "ready": ready and not blockers,
-        "canonical_identity_id": "francis.operator_orb",
+        "canonical_identity_id": canonical_orb_identity_id(),
+        "runtime_identity": runtime_identity(),
         "canonical_visible_surface": "lens.overlay_window",
         "canonical_data_root": str(data_dir()),
         "route": "/lens/orb/runtime-identity",

@@ -5,6 +5,9 @@ param(
 
   [string]$DataDir = '',
 
+  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$')]
+  [string]$RuntimeIdentity = '',
+
   [ValidateRange(1, 30)]
   [int]$StartupTimeoutSeconds = 5,
 
@@ -14,6 +17,16 @@ param(
 
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($RuntimeIdentity) -and -not [string]::IsNullOrWhiteSpace([string]$env:FRANCIS_RUNTIME_IDENTITY)) {
+  if ([string]$env:FRANCIS_RUNTIME_IDENTITY -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$') {
+    throw 'FRANCIS_RUNTIME_IDENTITY must contain only letters, numbers, dots, underscores, or hyphens and be at most 40 characters.'
+  }
+  $RuntimeIdentity = [string]$env:FRANCIS_RUNTIME_IDENTITY
+}
+
+$EffectivePresenceName = if ([string]::IsNullOrWhiteSpace($RuntimeIdentity)) { 'Francis Lens Tray Presence' } else { "Francis Lens Tray Presence [$RuntimeIdentity]" }
+$EffectiveTrayText = if ([string]::IsNullOrWhiteSpace($RuntimeIdentity)) { 'Francis Lens' } else { "Francis Lens [$RuntimeIdentity]" }
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
@@ -140,7 +153,9 @@ function Write-TrayState {
     status = $Status
     pid = $PID
     tray_icon_visible = $TrayIconVisible
-    presence_name = 'Francis Lens Tray Presence'
+    presence_name = $EffectivePresenceName
+    tray_text = $EffectiveTrayText
+    runtime_identity = $RuntimeIdentity
     updated_at = [DateTimeOffset]::UtcNow.ToString('o')
     message = $Message
   }
@@ -157,6 +172,8 @@ function Get-TrayRuntimeReadback {
   $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
   $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
   $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $StatusPresenceName = Get-StringProperty -Payload $Status -Name 'presence_name' -Default ''
+  $StatusRuntimeIdentity = Get-StringProperty -Payload $Status -Name 'runtime_identity' -Default ''
   $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
   $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
   $RuntimePid = 0
@@ -172,7 +189,11 @@ function Get-TrayRuntimeReadback {
     $StatusKind -eq 'lens.tray.runtime_state' -and
     $StatusValue -eq 'tray_running' -and
     $StatusPid -gt 0 -and
-    $StatusPid -eq $RuntimePid
+    $StatusPid -eq $RuntimePid -and
+    ([string]::IsNullOrWhiteSpace($RuntimeIdentity) -or (
+      $StatusPresenceName -eq $EffectivePresenceName -and
+      $StatusRuntimeIdentity -eq $RuntimeIdentity
+    ))
   )
   $ProcessAlive = $false
   if ($StatusClaimsRunningTray) {
@@ -209,6 +230,11 @@ function Get-TrayRuntimeReadback {
     runtime_status_kind = $StatusKind
     runtime_status_pid = $StatusPid
     runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    presence_name = $StatusPresenceName
+    expected_presence_name = $EffectivePresenceName
+    runtime_identity = $StatusRuntimeIdentity
+    expected_runtime_identity = $RuntimeIdentity
+    runtime_identity_matches_expected = ([string]::IsNullOrWhiteSpace($RuntimeIdentity) -or $StatusRuntimeIdentity -eq $RuntimeIdentity)
     requirement_state = $RequirementState
     blocker = $Blocker
   }
@@ -230,6 +256,9 @@ function New-StatusPayload {
     mode = $ModeName
     ready = $Ready
     tray_presence = $Ready
+    runtime_identity = $RuntimeIdentity
+    presence_name = $EffectivePresenceName
+    tray_text = $EffectiveTrayText
     data_root = $Root
     runtime_state_path = 'data/runtime/lens-tray/status.json'
     pid_path = 'data/runtime/lens-tray/lens-tray.pid'
@@ -273,7 +302,7 @@ if ($Mode -eq 'Run') {
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $MainForm = New-Object System.Windows.Forms.Form
-    $MainForm.Text = 'Francis Lens Tray Presence'
+    $MainForm.Text = $EffectivePresenceName
     $MainForm.ShowInTaskbar = $false
     $MainForm.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
     $MainForm.Opacity = 0
@@ -282,7 +311,7 @@ if ($Mode -eq 'Run') {
         $MainForm.Hide()
       })
     $NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-    $NotifyIcon.Text = 'Francis Lens'
+    $NotifyIcon.Text = $EffectiveTrayText
     $NotifyIcon.Icon = [System.Drawing.SystemIcons]::Application
     $NotifyIcon.Visible = $true
     Write-TrayState -Root $DataRoot -Status 'tray_running' -TrayIconVisible $true -Message 'Francis Lens tray presence is running.'
@@ -364,6 +393,8 @@ $ArgumentList = @(
   'Run',
   '-DataDir',
   $DataRoot,
+  '-RuntimeIdentity',
+  $RuntimeIdentity,
   '-RunSeconds',
   ([string]$RunSeconds)
 )

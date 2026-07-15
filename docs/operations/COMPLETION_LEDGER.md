@@ -128,6 +128,27 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-15 - Isolated Lens runtime identity contract
+
+- Lens overlay and tray runners now accept one bounded `RuntimeIdentity`, inherit
+  the same validated value from `FRANCIS_RUNTIME_IDENTITY`, project visibly
+  distinct window/tray labels, and preserve the existing operator labels when
+  no identity is supplied.
+- PowerShell and Python readbacks bind readiness to the expected isolated
+  identity. A differently labeled runtime is reported as missing or mismatched
+  rather than being accepted as the canonical proof-owned component.
+- Canonical Orb identity readback distinguishes the default
+  `francis.operator_orb` from a scoped `francis.proof_orb.<identity>` without
+  granting process, desktop, input, or mutation authority.
+- This closes the product-level namespacing mechanism required to retry CPJ-001
+  D-02. It does not itself claim a successful resident proof stack or completed
+  Category Proof Journey; those claims remain gated by terminal CI and isolated
+  runtime evidence.
+- PowerShell parser checks passed for `scripts/lens-overlay-window.ps1` and
+  `scripts/lens-tray-presence.ps1`.
+- Focused pytest validation passed 37 tests across the runtime-identity unit,
+  overlay runner, tray runner, and host-manifest readback surfaces.
+
 ### 2026-07-15 - Stage 18 rogue-signal assessment promoted locally
 
 Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now

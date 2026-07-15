@@ -5,6 +5,9 @@ param(
 
   [string]$DataDir = '',
 
+  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$')]
+  [string]$RuntimeIdentity = '',
+
   [ValidateSet('All', 'ProcessOnly')]
   [string]$VoiceEnvironmentScope = 'All',
 
@@ -101,6 +104,13 @@ param(
 
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($RuntimeIdentity) -and -not [string]::IsNullOrWhiteSpace([string]$env:FRANCIS_RUNTIME_IDENTITY)) {
+  if ([string]$env:FRANCIS_RUNTIME_IDENTITY -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$') {
+    throw 'FRANCIS_RUNTIME_IDENTITY must contain only letters, numbers, dots, underscores, or hyphens and be at most 40 characters.'
+  }
+  $RuntimeIdentity = [string]$env:FRANCIS_RUNTIME_IDENTITY
+}
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
@@ -1934,10 +1944,12 @@ function Write-OverlayRuntimeRecoveryManifest {
 function Get-OverlayConfig {
   $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\overlay.json'
   $Config = Read-JsonFile -Path $ConfigPath
+  $ConfiguredOverlayName = Get-StringProperty -Payload $Config -Name 'overlay_name' -Default 'Francis Lens Overlay'
   return [ordered]@{
     path = $ConfigPath
     payload = $Config
-    overlay_name = Get-StringProperty -Payload $Config -Name 'overlay_name' -Default 'Francis Lens Overlay'
+    overlay_name = if ([string]::IsNullOrWhiteSpace($RuntimeIdentity)) { $ConfiguredOverlayName } else { "$ConfiguredOverlayName [$RuntimeIdentity]" }
+    runtime_identity = $RuntimeIdentity
     overlay_scope = Get-StringProperty -Payload $Config -Name 'overlay_scope' -Default 'user_session'
     status_route = Get-StringProperty -Payload $Config -Name 'status_route' -Default '/lens/status'
     mcp_status_route = Get-StringProperty -Payload $Config -Name 'mcp_status_route' -Default '/lens/mcp/status'
@@ -7827,6 +7839,7 @@ function Write-OverlayState {
     status = $Status
     pid = $PID
     overlay_name = $Config.overlay_name
+    runtime_identity = $Config.runtime_identity
     overlay_scope = $Config.overlay_scope
     status_route = $Config.status_route
     mcp_status_route = $Config.mcp_status_route
@@ -8043,6 +8056,7 @@ function New-StatusPayload {
     mode = $ModeName
     ready = $Ready
     overlay_window = $Ready
+    runtime_identity = $Config.runtime_identity
     data_root = $Root
     runtime_state_path = 'data/runtime/lens-overlay/status.json'
     pid_path = 'data/runtime/lens-overlay/lens-overlay.pid'
@@ -8804,6 +8818,8 @@ $ArgumentList = @(
   'Run',
   '-DataDir',
   $DataRoot,
+  '-RuntimeIdentity',
+  $RuntimeIdentity,
   '-VoiceEnvironmentScope',
   $VoiceEnvironmentScope,
   '-ChatUiBaseUrl',

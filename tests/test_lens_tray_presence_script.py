@@ -54,6 +54,44 @@ def test_lens_tray_presence_status_reports_missing_runtime(tmp_path: Path) -> No
     assert payload["governance"]["tray_icon_authority"] is False
 
 
+def test_lens_tray_presence_projects_and_requires_isolated_runtime_identity(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-tray"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-tray.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.tray.runtime_state",
+                "status": "tray_running",
+                "pid": pid,
+                "tray_icon_visible": True,
+                "presence_name": "Francis Lens Tray Presence [CPJ-001]",
+                "tray_text": "Francis Lens [CPJ-001]",
+                "runtime_identity": "CPJ-001",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_tray_presence("-Mode", "Status", "-DataDir", str(data_dir), "-RuntimeIdentity", "CPJ-001")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ready"] is True
+    assert payload["runtime_identity"] == "CPJ-001"
+    assert payload["presence_name"] == "Francis Lens Tray Presence [CPJ-001]"
+    assert payload["tray_text"] == "Francis Lens [CPJ-001]"
+    assert payload["tray_runtime"]["runtime_identity_matches_expected"] is True
+
+    mismatch = _run_tray_presence("-Mode", "Status", "-DataDir", str(data_dir), "-RuntimeIdentity", "CPJ-002")
+    assert mismatch.returncode == 0, mismatch.stderr
+    mismatch_payload = json.loads(mismatch.stdout)
+    assert mismatch_payload["ready"] is False
+    assert mismatch_payload["tray_runtime"]["runtime_identity_matches_expected"] is False
+
+
 def test_lens_tray_presence_status_reports_live_runtime_readback(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     runtime_dir = data_dir / "runtime" / "lens-tray"
@@ -96,3 +134,4 @@ def test_lens_tray_presence_run_uses_hidden_message_loop_form() -> None:
     assert "$MainForm.Close()" in script
     assert "[System.Windows.Forms.Application]::Run($MainForm)" in script
     assert "$MainForm.Dispose()" in script
+    assert "'-RuntimeIdentity'" in script

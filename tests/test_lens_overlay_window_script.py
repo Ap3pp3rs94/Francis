@@ -158,6 +158,27 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["governance"]["local_process_launch_authority"] is False
 
 
+def test_lens_overlay_window_projects_proof_specific_runtime_identity(tmp_path: Path) -> None:
+    proc = _run_overlay_window(
+        "-Mode",
+        "Status",
+        "-VoiceEnvironmentScope",
+        "ProcessOnly",
+        "-DataDir",
+        str(tmp_path / "data"),
+        "-RuntimeIdentity",
+        "CPJ-001",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["overlay_runtime"]["expected_overlay_name"] == "Francis Lens Overlay [CPJ-001]"
+    assert payload["runtime_identity"] == "CPJ-001"
+
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+    assert "'-RuntimeIdentity'" in script
+
+
 def test_lens_overlay_window_status_labels_configured_elevenlabs_voice_as_emma(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("FRANCIS_ELEVENLABS_API_KEY", None)

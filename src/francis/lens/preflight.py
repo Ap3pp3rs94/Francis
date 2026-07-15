@@ -7,6 +7,7 @@ from typing import Any
 from francis.lens.errors import lens_error_code
 from francis.kernel.paths import data_dir, repo_root
 from francis.lens.host_manifest import _process_alive_readback, lens_host_launch_manifest
+from francis.lens.runtime_identity import runtime_identity, scoped_runtime_label
 
 
 def _safe_str(value: Any, default: str = "") -> str:
@@ -306,12 +307,15 @@ def _overlay_runtime_readback(*, overlay_name: str, overlay_scope: str) -> dict[
     state_kind = _safe_str(state_payload.get("kind"))
     state_status = _safe_str(state_payload.get("status"))
     state_pid = _int_value(state_payload.get("pid"))
+    expected_runtime_identity = runtime_identity()
+    state_runtime_identity = _safe_str(state_payload.get("runtime_identity"))
     state_claims_running_overlay = (
         state_kind == "lens.overlay.runtime_state"
         and state_status == "overlay_running"
         and state_pid > 0
         and state_pid == pid
         and _safe_str(state_payload.get("overlay_name")) == overlay_name
+        and (not expected_runtime_identity or state_runtime_identity == expected_runtime_identity)
         and _safe_str(state_payload.get("overlay_scope")) == overlay_scope
     )
     if state_claims_running_overlay:
@@ -357,6 +361,10 @@ def _overlay_runtime_readback(*, overlay_name: str, overlay_scope: str) -> dict[
         "runtime_state_updated_at": _safe_str(state_payload.get("updated_at")),
         "overlay_name": _safe_str(state_payload.get("overlay_name")),
         "expected_overlay_name": overlay_name,
+        "runtime_identity": state_runtime_identity,
+        "expected_runtime_identity": expected_runtime_identity,
+        "runtime_identity_matches_expected": not expected_runtime_identity
+        or state_runtime_identity == expected_runtime_identity,
         "overlay_scope": _safe_str(state_payload.get("overlay_scope")),
         "expected_overlay_scope": overlay_scope,
         "requirement_state": requirement_state,
@@ -1022,7 +1030,7 @@ def _tray_preflight() -> dict[str, Any]:
 def _overlay_preflight() -> dict[str, Any]:
     config_path = "config/runtime/lens/overlay.json"
     payload, exists, error = _read_config(config_path)
-    overlay_name = _safe_str(payload.get("overlay_name"), "Francis Lens Overlay")
+    overlay_name = scoped_runtime_label(_safe_str(payload.get("overlay_name"), "Francis Lens Overlay"))
     overlay_scope = _safe_str(payload.get("overlay_scope"), "user_session")
     status_route = _safe_str(payload.get("status_route"), "/lens/status")
     host_route = _safe_str(payload.get("host_route"), "/lens/host")
