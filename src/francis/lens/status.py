@@ -5812,6 +5812,9 @@ $RendererMatches = Get-CimInstance Win32_Process -Filter "Name = 'native_orb_ren
         if component != "unknown" and not expected_canonical_process:
             competing.append(candidate)
     blockers = ["competing_orb_runtime_process_detected"] if competing else []
+    renderer_candidates = [candidate for candidate in candidates if candidate["component"] == "renderer"]
+    expected_renderer_pid = expected_pids.get("renderer", 0)
+    renderer_candidates.sort(key=lambda candidate: candidate["pid"] != expected_renderer_pid)
     return {
         "status": "competing_detected" if competing else "single_canonical_runtime" if candidates else "none_observed",
         "checked_process_table": True,
@@ -5819,8 +5822,10 @@ $RendererMatches = Get-CimInstance Win32_Process -Filter "Name = 'native_orb_ren
         "limit": safe_limit,
         "candidate_count": len(candidates),
         "competing_candidate_count": len(competing),
-        "renderer_process_count": sum(1 for candidate in candidates if candidate["component"] == "renderer"),
-        "renderer_pids": [candidate["pid"] for candidate in candidates if candidate["component"] == "renderer"],
+        "renderer_process_count": len(renderer_candidates),
+        "renderer_pids": [candidate["pid"] for candidate in renderer_candidates],
+        "renderer_candidates": renderer_candidates[:safe_limit],
+        "renderer_candidates_truncated": len(renderer_candidates) > safe_limit,
         "candidates": candidates[:safe_limit],
         "competing_candidates": competing[:safe_limit],
         "candidates_truncated": len(candidates) > safe_limit,
@@ -5919,11 +5924,13 @@ def _canonical_orb_runtime_identity(
             "blockers": [],
         }
     )
-    renderer_candidates = [
-        _as_dict(candidate)
-        for candidate in _as_list(process_scan.get("candidates"))
-        if _safe_str(_as_dict(candidate).get("component")).strip() == "renderer"
-    ]
+    renderer_candidates = [_as_dict(candidate) for candidate in _as_list(process_scan.get("renderer_candidates"))]
+    if not renderer_candidates:
+        renderer_candidates = [
+            _as_dict(candidate)
+            for candidate in _as_list(process_scan.get("candidates"))
+            if _safe_str(_as_dict(candidate).get("component")).strip() == "renderer"
+        ]
     expected_renderer_pid = expected_pids["renderer"]
     canonical_renderer_candidate = next(
         (candidate for candidate in renderer_candidates if _runtime_pid(candidate.get("pid")) == expected_renderer_pid),

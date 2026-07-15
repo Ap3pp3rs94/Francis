@@ -971,6 +971,75 @@ def test_lens_runtime_process_scan_flags_extra_native_renderer(monkeypatch) -> N
     assert payload["competing_candidates"][0]["pid"] == 777
 
 
+def test_lens_runtime_process_scan_retains_expected_renderer_beyond_general_limit(monkeypatch) -> None:
+    import francis.lens.status as status_module
+
+    canonical_root = r"D:\Francis\data"
+    process_payload = [
+        {
+            "component": component,
+            "process_id": pid,
+            "parent_process_id": parent_pid,
+            "name": "powershell.exe",
+            "command_line": f"powershell -DataDir {canonical_root}",
+        }
+        for component, pid, parent_pid in (
+            ("supervisor", 101, 1),
+            ("resident_host", 102, 101),
+            ("tray", 103, 1),
+            ("hotkey", 104, 1),
+            ("overlay", 105, 1),
+        )
+    ]
+    process_payload.append(
+        {
+            "component": "renderer",
+            "process_id": 106,
+            "parent_process_id": 105,
+            "name": "native_orb_renderer.exe",
+            "command_line": r'"D:\Francis\native\orb\build\native_orb_renderer.exe" --run-seconds 0',
+        }
+    )
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout=json.dumps(process_payload), stderr="")
+
+    monkeypatch.setattr(status_module.os, "name", "nt")
+    monkeypatch.setattr(status_module.shutil, "which", lambda _: "powershell.exe")
+    monkeypatch.setattr(status_module, "data_dir", lambda: Path(canonical_root))
+    monkeypatch.setattr(status_module.subprocess, "run", fake_run)
+
+    payload = status_module._lens_runtime_process_scan(
+        {
+            "supervisor": 101,
+            "resident_host": 102,
+            "tray": 103,
+            "hotkey": 104,
+            "overlay": 105,
+            "renderer": 106,
+        },
+        limit=5,
+    )
+
+    assert payload["candidate_count"] == 6
+    assert payload["candidates_truncated"] is True
+    assert payload["renderer_candidates"] == [
+        {
+            "component": "renderer",
+            "pid": 106,
+            "parent_pid": 105,
+            "name": "native_orb_renderer.exe",
+            "data_root": "",
+            "data_root_matches_canonical": False,
+            "matches_expected_runtime_pid": True,
+            "expected_runtime_pid": 106,
+            "expected_canonical_process": True,
+            "command_line_redacted": r'"D:\Francis\native\orb\build\native_orb_renderer.exe" --run-seconds 0',
+        }
+    ]
+    assert payload["renderer_candidates_truncated"] is False
+
+
 def test_lens_runtime_process_scan_excludes_parallel_scan_helpers(monkeypatch) -> None:
     import francis.lens.status as status_module
 
