@@ -60,9 +60,9 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is record the first real operator-approved managed-copy request
-through the hash-bound dry-run/apply route; customer identity and policy are not
-inferred or fabricated.
+The current executable goal is the governed safe-delta approval/rejection
+decision receipt. Production copy creation still requires real operator-supplied
+tenant and policy facts; those facts are not inferred or fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -123,6 +123,41 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 05:19Z - Stage 18 safe-delta review and Lens v2 observation promoted
+
+Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now
+includes request, preflight, creation-plan, approval, provisioning, structural-
+isolation verification, and hash-only safe-delta candidate-review receipts. The
+safe-delta chain stops truthfully at a separate operator approval decision; no
+export, import, learning, runtime execution, or production tenant fact exists.
+
+Evidence:
+
+- Main `414014e9` passed local `scripts/check.ps1`, focused post-promotion tests,
+  GitHub CI run `29379568003`, and CodeQL run `29379568025`.
+- Safe-delta candidate review is tenant-local, exact-schema validated, lineage-
+  and policy-bound, collision resistant, and rejects path redirection. Readback
+  leaves approval, export, import, learning, execution, memory, registry, and
+  tenant-state mutation disabled.
+- Main `7af273af` promotes the v2 local game-observer and situation-model
+  contracts, direct teaching-recorder composition, stale authority-result
+  rejection, and PID-correlated blocked worker terminal readback.
+- Exact ARGUS card tests, affected API/Lens integration tests, Ruff, format,
+  mypy, PowerShell parsing, and post-promotion tests passed. The final local CI-
+  equivalent gate reached 100%; its sole stale v1 ready fixture was corrected
+  test-only and the exact affected suite passed. Remote CI/CodeQL for
+  `7af273af` are pending and are not claimed green here.
+
+Remaining truthful gap:
+
+- Record a separately scoped, immutable safe-delta approval or rejection receipt
+  bound to the exact live candidate review and current lineage/policy. Approval
+  must not itself export, import, learn, execute, or mutate tenant state.
+- Production copy creation remains blocked on real operator-supplied tenant,
+  identity, policy, isolation, support, and decommission declarations.
+- No Stage 18 completion, FR-018 clearance, production action, or physical-
+  validation claim is made.
 
 ### 2026-07-14 00:08Z - Stage 18 managed-copy request recording implemented
 

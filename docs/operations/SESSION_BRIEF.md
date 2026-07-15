@@ -39,9 +39,9 @@ Cold-start order:
   `stage17_capability_economy_closure_afd0fa32f7d1`.
 - Stage 18 remains open. Production has no real customer request, tenant, or
   managed-copy runtime. Never invent customer identity, policy, or business facts.
-- The ledger's first production gate is still that real operator-supplied
-  request. FORGE is the highest-priority executable internal Stage 18 slice but
-  cannot close or bypass the production gate with fixtures.
+- The production gate still requires real operator-supplied tenant and policy
+  facts. FORGE's next executable internal slice is the separate safe-delta
+  approval/rejection receipt; fixtures cannot close or bypass production.
 - Stage 6 is ledger-closed. Current Lens/Orb work is cross-stage hardening and
   must not be used to claim a new Stage 6 or Stage 18 closure.
 - The live Orb process family is out of scope: do not stop, restart, replace,
@@ -49,25 +49,21 @@ Cold-start order:
 
 ## Active Fronts
 
-### Managed copies / safe delta
+### Managed copies / safe-delta approval
 
-Task card: `docs/operations/task_cards/managed-copy-safe-delta.md`
-Seat: FORGE. Branch: `codex/forge-managed-copies-safe-delta`.
+Task card: `docs/operations/task_cards/managed-copy-safe-delta-approval.md`
+Seat: FORGE. Branch: `codex/forge-safe-delta-approval`.
 
-Proof target: a structurally verified tenant can record an exact-schema,
-hash-only safe-delta candidate-review receipt while approval, export, import,
-learning writes, and cross-tenant flow remain disabled. Readback must detect live
-source-boundary drift and must not echo or persist raw customer data.
+Proof target: an authorized actor can record an immutable approval or rejection
+decision bound to an exact live-aligned safe-delta review while export, import,
+learning, execution, and tenant-state mutation remain disabled.
 
-Current state: FORGE correction `24658090` enforces exact nested Boolean types
-and passed focused tests, Ruff, format, mypy, and diff-check. SENTINEL and VERA
-passed the affected correction. ATLAS integration head `cdfc4a23` adds a bounded
-test-harness retry for transient supervisor status-file locks. Full gate
-`VAL-20260714-028` passed with explicit exit `0` on that exact head in `D:\fg`.
+Current state: safe-delta candidate review is promoted in `414014e9`; local full
+gate, GitHub CI, and CodeQL passed. The decision receipt is not implemented.
 
-Next smallest truthful gap: commit CR-005, rebase onto that exact local-main
-head, and re-prove the rebased promotion candidate. This remains a hash-only
-review slice, not approval or export.
+Next smallest truthful gap: implement dry-run/apply approval or rejection with a
+dedicated scope, immutable redacted receipt, conflict rejection, and validated
+readback. Approval is not export authority.
 
 ### Lens game observer
 
@@ -78,14 +74,12 @@ Proof target: local, read-only, foreground-bound semantic game observations
 compose with the Lens situation model through strict versioned contracts and do
 not acquire input or execution authority.
 
-Current state: rebased commit `683134a7` passed its focused suite but VERA and
-SENTINEL rejected promotion. The v2 producer is incompatible with the v1-only
-apprenticeship recorder; strict legacy-heartbeat projection and receipt rotation
-also remain open. No watcher or live runtime was used.
+Current state: promoted at `7af273af`. V2 observations compose with teaching,
+stale authority results are discarded, and terminal blocked worker readback is
+PID-correlated. No watcher or live runtime was used.
 
-Next smallest truthful gap: parked pending a revised card that owns the teaching
-consumer and direct observer-to-recorder composition tests. Do not validate or
-expand the branch until that ownership is assigned.
+Next smallest truthful gap: none on the completed card; remote CI/CodeQL verdict
+for `7af273af` remains pending.
 
 ### Orb right-click delivery / visual-lock alignment
 
@@ -108,6 +102,8 @@ water mark and producer outcome surface. Do not launch or touch the live Orb.
 
 - Stage 18 safe-delta contract:
   `stage18_managed_copy_safe_delta_review_v1`.
+- Stage 18 safe-delta decision contract:
+  `stage18_managed_copy_safe_delta_approval_v1`.
 - Safe-delta authority:
   `managed_copies.safe_delta.write`; candidate review does not confer approval,
   export, learning, execution, or mutation authority.

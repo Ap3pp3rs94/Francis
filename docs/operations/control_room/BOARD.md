@@ -2,7 +2,7 @@
 
 Updated: 2026-07-14
 
-Sync cycle: `CR-20260714-005`
+Sync cycle: `CR-20260715-006`
 
 Cycle-start local main:
 `6e883d1d19a18d157ed99799d598a7f8285771fd`.
@@ -28,24 +28,22 @@ GitHub baseline:
 
 ## Fronts
 
-### CR-FORGE-001 - Managed-copy safe-delta
+### CR-FORGE-002 - Managed-copy safe-delta approval
 
 - Agent: FORGE
 - Roadmap: Phase 2, Stage 18 Managed Copies Platform
-- Task card: `docs/operations/task_cards/managed-copy-safe-delta.md`
-- Branch: `codex/forge-managed-copies-safe-delta`
+- Task card: `docs/operations/task_cards/managed-copy-safe-delta-approval.md`
+- Branch: `codex/forge-safe-delta-approval`
 - Worktree: `D:\fg`
-- State: `READY_FOR_PROMOTION`; pre-rebase exact integration gate passed
-- Latest verified worker commit: `246580901b145a7f1f59d9c85d199ffdfdf536d8`
-- Integration head: `cdfc4a23fe030b4e31dbf3b067c39d3e3daae1f8`
-- Validation: correction focused suite/Ruff/format/mypy/diff-check passed;
-  `VAL-20260714-028` full gate passed with explicit exit `0`
-- Dependencies: provision receipt, live structural-isolation receipt, tenant
-  safe-delta policy, API actor-scope contract
-- Blocker: post-CR-005 rebase and exact rebased-head proof remain outstanding
-- Next action: commit CR-005, freeze local main, rebase, and re-prove the exact
-  promotion head
-- Runtime lease: `LEASE-FORGE-001`; no service or live Orb access permitted
+- State: `READY`
+- Latest verified base: `7af273af863f8a729f79f45429d8a72653f2036b`
+- Validation: predecessor safe-delta review promoted at `414014e9`; GitHub CI and
+  CodeQL green
+- Dependencies: exact safe-delta review receipt, live provision/isolation
+  lineage, tenant policy, dedicated approval scope
+- Blocker: none for implementation; production facts remain external
+- Next action: implement the bounded decision receipt and focused tests
+- Runtime lease: `LEASE-FORGE-002`; no service or live Orb access permitted
 
 ### CR-ARGUS-001 - Lens game observer
 
@@ -54,18 +52,15 @@ GitHub baseline:
 - Task card: `docs/operations/task_cards/lens-game-observer.md`
 - Branch: `codex/argus-game-observer`
 - Worktree: `D:\Francis-worktrees\argus-game-observer`
-- State: `BLOCKED`; promotion rejected pending task-card scope reassignment
-- Latest verified worker commit: `683134a7cccd6b4dd1b1cd1604d2641615f07307`
-- Validation: `VAL-20260714-007` diff-check passed; full pytest
-  `VAL-20260714-003` was `INTERRUPTED_KNOWN_REMEDIATION`; no pass/fail claim
+- State: `PROMOTED`
+- Latest verified worker commit: `7af273af863f8a729f79f45429d8a72653f2036b`
+- Validation: 103 card tests, affected integrations, post-promotion 115-test
+  suite, Ruff, format, mypy, parser, VERA and HARBOR reviews passed
 - Dependencies: game-observer runtime config, foreground-process readback,
   situation-model source contract, portable Windows typing
-- Blocker: the v2 producer is incompatible with the v1-only apprenticeship
-  recorder; legacy heartbeat redaction and stale receipt-lineage readiness also
-  fail review
-- Next action: park until scope is reassigned to the teaching consumer and direct
-  composition tests; no further validation on `683134a7`
-- Runtime lease: `LEASE-ARGUS-001`; no watcher/service/live Orb access permitted
+- Blocker: none; remote CI/CodeQL for promoted head are pending
+- Next action: release seat after remote verdict
+- Runtime lease: `LEASE-ARGUS-001` released; no live runtime used
 
 ### CR-LUMEN-001 - Orb right-click delivery / visual-lock alignment
 
