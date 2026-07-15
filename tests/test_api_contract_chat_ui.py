@@ -114,6 +114,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/managed-copies/safe-delta-model-contract"),
         ("POST", "/managed-copies/safe-delta-review"),
         ("GET", "/managed-copies/safe-delta-reviews"),
+        ("POST", "/managed-copies/safe-delta-decision"),
+        ("GET", "/managed-copies/safe-delta-decisions"),
         ("GET", "/managed-copies/rogue-recovery-contract"),
         ("POST", "/managed-copies/rogue-recovery-review"),
         ("GET", "/managed-copies/sla-framework-contract"),

@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import francis.managed_copy_safe_delta as managed_copy_safe_delta
+import francis.managed_copy_safe_delta_approval as safe_delta_approval
 from francis.api.app import create_app
 
 
@@ -53,6 +54,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "safe_delta_review": "/managed-copies/safe-delta-review",
         "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
+        "safe_delta_decision": "/managed-copies/safe-delta-decision",
+        "safe_delta_decisions": "/managed-copies/safe-delta-decisions",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -3707,6 +3710,216 @@ def _safe_delta_receipt_test_readback(
         isolation_verification_receipt_id=str(plan["isolation_verification_receipt_id"]),
         review_fingerprint=review_fingerprint,
     )
+
+
+def _safe_delta_decision_test_plan(
+    monkeypatch,
+    source_state: dict[str, dict[str, Any]],
+    review: dict[str, Any],
+    *,
+    decision: Any = "approved",
+    actor: str = "safe-delta.test-approver",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    monkeypatch.setattr(
+        safe_delta_approval,
+        "managed_copy_provision_for_copy",
+        managed_copy_safe_delta.managed_copy_provision_for_copy,
+    )
+    monkeypatch.setattr(
+        safe_delta_approval,
+        "latest_managed_copy_isolation_verification_for_provision",
+        managed_copy_safe_delta.latest_managed_copy_isolation_verification_for_provision,
+    )
+    payload = {
+        "copy_id": source_state["provision"]["copy_id"],
+        "provisioning_receipt_id": source_state["provision"]["receipt_id"],
+        "isolation_verification_receipt_id": source_state["isolation"]["receipt_id"],
+        "review_fingerprint": review["receipt"]["review_fingerprint"],
+        "decision": decision,
+        **(extra or {}),
+    }
+    return safe_delta_approval.managed_copy_safe_delta_decision_plan(payload, actor=actor)
+
+
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+def test_managed_copy_safe_delta_exact_decision_receipt_and_idempotent_replay(
+    monkeypatch, tmp_path, decision: str
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / decision)
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    review_path = _safe_delta_receipt_test_path(source_state, review["receipt"])
+    review_before = review_path.read_bytes()
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision=decision)
+
+    assert plan["ok"] is True
+    assert plan["status"] == "safe_delta_decision_ready"
+    assert len(plan["decision_fingerprint"]) == 64
+    wrong = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint="0" * 64, confirmed=True
+    )
+    assert wrong["error"] == "safe_delta_decision_fingerprint_mismatch"
+    unconfirmed = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=False
+    )
+    assert unconfirmed["error"] == "safe_delta_decision_confirmation_required"
+
+    recorded = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=True
+    )
+    assert recorded["ok"] is True
+    assert recorded["status"] == decision
+    assert recorded["safe_delta_approved"] is (decision == "approved")
+    assert recorded["safe_delta_rejected"] is (decision == "rejected")
+    assert recorded["eligible_for_future_export_preflight"] is (decision == "approved")
+    for flag in (
+        "exports_delta",
+        "imports_delta",
+        "writes_learning",
+        "executes_action",
+        "writes_memory",
+        "writes_registry",
+        "writes_tenant_state",
+        "uses_network",
+        "grants_execution_authority",
+        "grants_mutation_authority",
+    ):
+        assert recorded[flag] is False
+    assert review_path.read_bytes() == review_before
+
+    replay = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=True
+    )
+    assert replay["status"] == "already_decided"
+    assert replay["receipt_id"] == recorded["receipt_id"]
+    assert replay["writes_receipt"] is False
+
+    readback = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
+        copy_id=plan["copy_id"],
+        provisioning_receipt_id=plan["provisioning_receipt_id"],
+        isolation_verification_receipt_id=plan["isolation_verification_receipt_id"],
+        review_fingerprint=plan["review_fingerprint"],
+    )
+    assert readback["status"] == decision
+    assert readback["valid_count"] == 1
+    assert readback["latest_valid_receipt_id"] == recorded["receipt_id"]
+
+
+@pytest.mark.parametrize("decision", [True, False, 0, 1, "Approved", "REJECTED", "approve", ""])
+def test_managed_copy_safe_delta_decision_rejects_non_exact_values(monkeypatch, tmp_path, decision: Any) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "invalid")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision=decision)
+    assert plan["ok"] is False
+    assert "safe_delta_decision_invalid" in plan["blockers"]
+
+
+def test_managed_copy_safe_delta_decision_rejects_unknown_fields_and_conflict(monkeypatch, tmp_path) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "conflict")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    unknown = _safe_delta_decision_test_plan(monkeypatch, source_state, review, extra={"unexpected": True})
+    assert unknown["ok"] is False
+    assert unknown["unknown_fields"] == ["unexpected"]
+    approved = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    first = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        approved, provided_fingerprint=approved["decision_fingerprint"], confirmed=True
+    )
+    assert first["ok"] is True, first
+    rejected = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="rejected")
+    conflict = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        rejected, provided_fingerprint=rejected["decision_fingerprint"], confirmed=True
+    )
+    assert conflict["error"] == "safe_delta_decision_conflict"
+    assert conflict["writes_receipt"] is False
+
+
+def test_managed_copy_safe_delta_decision_fails_closed_on_policy_and_live_lineage_drift(monkeypatch, tmp_path) -> None:
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "drift")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    baseline = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    assert baseline["ok"] is True
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["safe_delta_policy"]["operator_review_required"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    policy_drift = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    assert policy_drift["ok"] is False
+    assert "safe_delta_tenant_policy_not_current" in policy_drift["blockers"]
+
+    config["safe_delta_policy"]["operator_review_required"] = True
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    source_state["isolation"]["live_state_aligned"] = False
+    lineage_drift = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    assert lineage_drift["ok"] is False
+    assert "safe_delta_isolation_lineage_not_live" in lineage_drift["blockers"]
+
+
+def test_managed_copy_safe_delta_decision_readback_rejects_tampering_and_production_is_empty(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "readback")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    recorded = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=True
+    )
+    assert recorded["ok"] is True, recorded
+    directory = safe_delta_approval._decision_directory(plan, create=False)
+    assert directory is not None
+    path = next(directory.glob("*.json"))
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    receipt["exports_delta"] = True
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    invalid = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
+        copy_id=plan["copy_id"],
+        provisioning_receipt_id=plan["provisioning_receipt_id"],
+        isolation_verification_receipt_id=plan["isolation_verification_receipt_id"],
+        review_fingerprint=plan["review_fingerprint"],
+    )
+    assert invalid["valid_count"] == 0
+    assert invalid["safe_delta_approved"] is False
+    assert recorded["receipt_id"]
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "production-empty"))
+    monkeypatch.setattr(safe_delta_approval, "managed_copy_provision_for_copy", lambda *args, **kwargs: {})
+    empty = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
+        copy_id=plan["copy_id"],
+        provisioning_receipt_id=plan["provisioning_receipt_id"],
+        isolation_verification_receipt_id=plan["isolation_verification_receipt_id"],
+        review_fingerprint=plan["review_fingerprint"],
+    )
+    assert empty["status"] == "empty"
+    assert empty["count"] == 0
+
+
+def test_managed_copy_safe_delta_decision_rejects_cross_tenant_lineage(monkeypatch, tmp_path) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "cross-tenant")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    source_state["provision"]["tenant_key"] = "f" * 64
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    assert plan["ok"] is False
+    assert "safe_delta_review_receipt_missing_or_invalid" in plan["blockers"]
+
+
+def test_managed_copy_safe_delta_decision_denies_unscoped_actor_without_writing(monkeypatch, tmp_path) -> None:
+    data_root = tmp_path / "denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/safe-delta-decision",
+            json={"request_actor": "unscoped", "decision": "approved", "dry_run": True},
+        )
+        .json()
+    )
+    assert body["ok"] is False
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.safe_delta.approval.write"
+    assert body["writes_receipt"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert not data_root.exists()
 
 
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(

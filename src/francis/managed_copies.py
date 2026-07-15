@@ -47,6 +47,11 @@ from francis.managed_copy_safe_delta import (
     managed_copy_safe_delta_review_receipts_readback,
     record_managed_copy_safe_delta_review,
 )
+from francis.managed_copy_safe_delta_approval import (
+    managed_copy_safe_delta_decision_plan,
+    managed_copy_safe_delta_decisions_readback,
+    record_managed_copy_safe_delta_decision,
+)
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -63,6 +68,7 @@ MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE = "managed_copies.isolation_ve
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
 MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND = "francis.stage18.managed_copies.safe_delta_review"
 MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE = "managed_copies.safe_delta.write"
+MANAGED_COPIES_SAFE_DELTA_APPROVAL_WRITE_SCOPE = "managed_copies.safe_delta.approval.write"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND = "francis.stage18.managed_copies.rogue_recovery_review"
 MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE = "managed_copies.rogue_recovery.write"
@@ -505,6 +511,20 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     safe_delta_review_receipt_id = (
         _safe_str(latest_safe_delta_review.get("receipt_id")).strip() if safe_delta_review_recorded else ""
     )
+    safe_delta_decisions = (
+        managed_copy_safe_delta_decisions_readback(
+            copy_id=provisioned_copy_id,
+            provisioning_receipt_id=copy_provision_receipt_id,
+            isolation_verification_receipt_id=copy_isolation_receipt_id,
+            review_fingerprint=_safe_str(latest_safe_delta_review.get("review_fingerprint")).strip(),
+            limit=20,
+        )
+        if safe_delta_review_recorded
+        else {}
+    )
+    safe_delta_approved = bool(safe_delta_decisions.get("safe_delta_approved"))
+    safe_delta_rejected = bool(safe_delta_decisions.get("safe_delta_rejected"))
+    safe_delta_decision_receipt_id = _safe_str(safe_delta_decisions.get("latest_valid_receipt_id")).strip()
     deliverables = [
         _deliverable(
             "stage17_ledger_closure_backstop",
@@ -625,7 +645,15 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_model",
             "Safe delta model",
             ready=False,
-            status="candidate_review_recorded" if safe_delta_review_recorded else "contract_readback_ready",
+            status=(
+                "candidate_approved"
+                if safe_delta_approved
+                else "candidate_rejected"
+                if safe_delta_rejected
+                else "candidate_review_recorded"
+                if safe_delta_review_recorded
+                else "contract_readback_ready"
+            ),
             next_gap=(
                 "stage18_safe_delta_operator_approval" if safe_delta_review_recorded else "stage18_safe_delta_model"
             ),
@@ -694,6 +722,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "ready_count": ready_count,
         "required_count": len(deliverables),
         "deliverables": deliverables,
+        "safe_delta_decision_receipt_id": safe_delta_decision_receipt_id,
+        "safe_delta_approved": safe_delta_approved,
+        "safe_delta_rejected": safe_delta_rejected,
         "routes": {
             "status": "/managed-copies/status",
             "copy_creation_contract": "/managed-copies/copy-creation-contract",
@@ -713,6 +744,8 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "safe_delta_review": "/managed-copies/safe-delta-review",
             "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
+            "safe_delta_decision": "/managed-copies/safe-delta-decision",
+            "safe_delta_decisions": "/managed-copies/safe-delta-decisions",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -778,7 +811,6 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "copy_full_customer_isolation_verified": False,
         "safe_delta_review_recorded": safe_delta_review_recorded,
         "safe_delta_review_receipt_id": safe_delta_review_receipt_id,
-        "safe_delta_approved": False,
         "safe_delta_exported": False,
         "safe_delta_learning_written": False,
         "read_only": governance["read_only"],
@@ -3091,6 +3123,59 @@ def managed_copy_safe_delta_reviews_snapshot(
         review_fingerprint=review_fingerprint,
         limit=limit,
     )
+
+
+def managed_copy_safe_delta_decision_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    plan = managed_copy_safe_delta_decision_plan(payload, actor=actor)
+    dry_run_value = payload.get("dry_run", True)
+    if not isinstance(dry_run_value, bool):
+        outcome = {"ok": False, "status": "blocked", "error": "dry_run_must_be_boolean"}
+    elif dry_run_value:
+        outcome = {
+            "ok": bool(plan["ok"]),
+            "status": plan["status"],
+            "error": "" if plan["ok"] else "safe_delta_decision_contract_not_ready",
+        }
+    else:
+        outcome = record_managed_copy_safe_delta_decision(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("decision_fingerprint")).strip(),
+            confirmed=payload.get("confirm_safe_delta_decision") is True,
+        )
+    writes = bool(outcome.get("writes_receipt"))
+    decision = _safe_str(plan.get("decision")).strip()
+    return {
+        **plan,
+        "ok": bool(outcome["ok"]),
+        "kind": "francis.stage18.managed_copies.safe_delta_approval",
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "status": outcome["status"],
+        "error": outcome["error"],
+        "dry_run": dry_run_value if isinstance(dry_run_value, bool) else True,
+        "receipt": outcome.get("receipt"),
+        "receipt_id": _safe_str(outcome.get("receipt_id")).strip(),
+        "safe_delta_approved": bool(outcome.get("safe_delta_approved")),
+        "safe_delta_rejected": bool(outcome.get("safe_delta_rejected")),
+        "eligible_for_future_export_preflight": bool(outcome.get("eligible_for_future_export_preflight")),
+        "writes_receipt": writes,
+        "writes_receipts": writes,
+        "exports_delta": False,
+        "imports_delta": False,
+        "writes_learning": False,
+        "executes_action": False,
+        "writes_memory": False,
+        "writes_registry": False,
+        "writes_tenant_state": False,
+        "uses_network": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_APPROVAL_WRITE_SCOPE,
+        "decision_exact": decision in {"approved", "rejected"},
+    }
+
+
+def managed_copy_safe_delta_decisions_snapshot(**kwargs: Any) -> dict[str, Any]:
+    return managed_copy_safe_delta_decisions_readback(**kwargs)
 
 
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:

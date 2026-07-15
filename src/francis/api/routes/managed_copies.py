@@ -14,6 +14,7 @@ from francis.managed_copies import (
     MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
     MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+    MANAGED_COPIES_SAFE_DELTA_APPROVAL_WRITE_SCOPE,
     MANAGED_COPIES_SLA_WRITE_SCOPE,
     managed_copies_status_snapshot,
     managed_copy_completion_review_snapshot,
@@ -42,6 +43,8 @@ from francis.managed_copies import (
     managed_copy_safe_delta_model_contract_snapshot,
     managed_copy_safe_delta_review_snapshot,
     managed_copy_safe_delta_reviews_snapshot,
+    managed_copy_safe_delta_decision_snapshot,
+    managed_copy_safe_delta_decisions_snapshot,
     managed_copy_sla_commitment_review_blocked_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
@@ -396,6 +399,41 @@ def safe_delta_reviews(
     limit: int = 20,
 ) -> dict[str, Any]:
     return managed_copy_safe_delta_reviews_snapshot(
+        copy_id=copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+        isolation_verification_receipt_id=isolation_verification_receipt_id,
+        review_fingerprint=review_fingerprint,
+        limit=limit,
+    )
+
+
+@router.post("/safe-delta-decision")
+def safe_delta_decision(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_SAFE_DELTA_APPROVAL_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_SAFE_DELTA_APPROVAL_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_deciding_managed_copy_safe_delta",
+        )
+    return managed_copy_safe_delta_decision_snapshot(payload, actor=actor)
+
+
+@router.get("/safe-delta-decisions")
+def safe_delta_decisions(
+    copy_id: str = "",
+    provisioning_receipt_id: str = "",
+    isolation_verification_receipt_id: str = "",
+    review_fingerprint: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    return managed_copy_safe_delta_decisions_snapshot(
         copy_id=copy_id,
         provisioning_receipt_id=provisioning_receipt_id,
         isolation_verification_receipt_id=isolation_verification_receipt_id,
