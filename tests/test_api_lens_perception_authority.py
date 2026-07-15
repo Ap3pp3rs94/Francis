@@ -9,7 +9,7 @@ from francis.lens.perception_capture import DesktopFrame, PerceptionRingBuffer
 
 
 def _client(monkeypatch, tmp_path: Path):
-    repo_root = tmp_path / "repo"
+    repo_root = tmp_path.parent / f"repo-{tmp_path.name[-8:]}"
     data_root = repo_root / "data"
     repo_root.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
@@ -56,31 +56,58 @@ def _write_perception_state(
         json.dumps(
             {
                 "kind": "lens.perception.situation_model",
-                "version": 1,
+                "version": 2,
                 "status": "heartbeat_partial",
                 "revision": situation_revision,
                 "updated_at": observed_at,
                 "has_current_desktop_state": True,
                 "semantic_comprehension_ready": True,
+                "game_scene_ready": True,
                 "runtime_identity": {
                     "authority_receipt_id": receipt_id,
                     "execution_approval_id": execution_approval_id,
                 },
-                "present": {"plane": "desktop"},
-                "sources": {},
+                "present": {
+                    "plane": "desktop",
+                    "game": {
+                        "target": {"id": "sand", "mode": "process_allowlist"},
+                        "scene": {"id": "active_gameplay", "ready": True},
+                        "model": {"id": "test/siglip", "remote_inference": False},
+                    },
+                },
+                "sources": {
+                    "game_observer": {
+                        "status": "scene_classified",
+                        "ready": True,
+                        "configured": True,
+                        "target_id": "sand",
+                        "target_mode": "process_allowlist",
+                        "model_id": "test/siglip",
+                        "local_inference_only": True,
+                        "remote_inference": False,
+                        "foreground_game_required": True,
+                        "local_process_launch_authority": False,
+                    }
+                },
                 "blockers": [],
                 "governance": {
                     "runtime_state_only": True,
                     "observation_only": True,
                     "desktop_capture_authority": True,
                     "execution_authority": True,
+                    "foreground_game_required": True,
+                    "local_game_inference": True,
                     "camera_capture_authority": False,
                     "microphone_capture_authority": False,
                     "keyboard_content_captured": False,
                     "user_mouse_captured": False,
                     "input_execution_authority": False,
+                    "local_process_launch_authority": False,
                     "memory_write": False,
                     "raw_pixels_in_state": False,
+                    "remote_frame_transfer": False,
+                    "learning_authority": False,
+                    "reward_authority": False,
                 },
             }
         ),
