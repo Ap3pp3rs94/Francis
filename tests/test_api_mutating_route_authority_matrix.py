@@ -409,6 +409,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert rogue_assessment["required_scope"] == "managed_copies.rogue_recovery.write"
     assert "Never declares rogue detection" in rogue_assessment["notes"]
 
+    integrity_scan = entries["/managed-copies/integrity-scan"]
+    assert integrity_scan["family"] == "managed_copies_integrity_scan"
+    assert integrity_scan["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert integrity_scan["receipt_behavior"] == "none; read-only derived integrity findings"
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

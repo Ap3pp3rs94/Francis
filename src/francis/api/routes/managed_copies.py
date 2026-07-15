@@ -41,6 +41,7 @@ from francis.managed_copies import (
     managed_copy_rogue_recovery_contract_snapshot,
     managed_copy_rogue_detection_assessment_snapshot,
     managed_copy_rogue_detection_assessments_snapshot,
+    managed_copy_integrity_scan_snapshot,
     managed_copy_rogue_recovery_review_blocked_snapshot,
     managed_copy_role_authority_review_blocked_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
@@ -587,6 +588,21 @@ def rogue_detection_assessments(
         isolation_verification_receipt_id=isolation_verification_receipt_id,
         limit=limit,
     )
+
+
+@router.post("/integrity-scan")
+def integrity_scan(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor, required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE, route=request.url.path, method=request.method
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_scanning_managed_copy_integrity",
+        )
+    return managed_copy_integrity_scan_snapshot(payload, actor=actor)
 
 
 @router.post("/rogue-recovery-review")

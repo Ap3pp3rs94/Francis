@@ -436,6 +436,14 @@ def managed_copy_isolation_guarded_subpath(
     return guarded_path
 
 
+def managed_copy_isolation_integrity_checks(
+    provision_receipt: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Evaluate the existing structural isolation checks without planning or writing."""
+    domain_checks, artifact_checks = _live_structural_checks(provision_receipt)
+    return ([dict(item) for item in domain_checks], [dict(item) for item in artifact_checks])
+
+
 def _live_structural_checks(
     provision_receipt: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

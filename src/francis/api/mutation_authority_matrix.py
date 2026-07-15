@@ -1420,6 +1420,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Event actor remains provenance; request_actor/api_actor can carry the API caller identity for scoped writes.",
     ),
     AuthorityRule(
+        family="managed_copies_integrity_scan",
+        prefixes=("/managed-copies/integrity-scan",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.rogue_recovery.write",
+        approval_requirement="exact live provision and structural-isolation lineage",
+        receipt_behavior="none; read-only derived integrity findings",
+        denial_behavior="api_permission_denied before provision or isolation inspection",
+        governance_maturity="permission_gated_read_only_scan",
+        notes="Never declares a copy rogue or grants halt, quarantine, replacement, restore, execution, or mutation authority.",
+    ),
+    AuthorityRule(
         family="managed_copies_rogue_detection_assessment",
         prefixes=("/managed-copies/rogue-detection-assessment",),
         required_actor="payload.request_actor",

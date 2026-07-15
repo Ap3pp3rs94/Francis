@@ -16,6 +16,7 @@ import francis.managed_copy_safe_delta_export_authorization as safe_delta_export
 import francis.managed_copy_safe_delta_export_authorization_decision as safe_delta_export_authorization_decision
 import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export_artifact_plan
 import francis.managed_copy_rogue_detection_assessment as rogue_detection_assessment
+import francis.managed_copy_integrity_scan as integrity_scan
 from francis.api.app import create_app
 
 
@@ -71,6 +72,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
         "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
+        "integrity_scan": "/managed-copies/integrity-scan",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "sla_commitment_review": "/managed-copies/sla-commitment-review",
         "roles_contract": "/managed-copies/roles-contract",
@@ -814,6 +816,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
                     "managed_copies.copy_creation.write",
                     "managed_copies.isolation_verification.write",
                     "managed_copies.safe_delta.write",
+                    "managed_copies.rogue_recovery.write",
                 ],
                 decision_actor: ["approvals.decide"],
             }
@@ -1559,6 +1562,18 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert structurally_verified_contract["state_machine"]["current_state"] == "structurally_verified"
     assert structurally_verified_contract["state_machine"]["enabled_transitions"] == []
 
+    integrity_payload = {
+        "request_actor": actor,
+        "copy_id": provisioned["copy_id"],
+        "provisioning_receipt_id": provisioned["receipt_id"],
+        "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+    }
+    aligned_integrity = client.post("/managed-copies/integrity-scan", json=integrity_payload).json()
+    assert aligned_integrity["status"] == "integrity_aligned"
+    assert aligned_integrity["finding_count"] == 0
+    assert aligned_integrity["writes_receipts"] is False
+    assert aligned_integrity["rogue_detected"] is False
+
     policy_path = tenant_root / "policy"
     displaced_policy_path = tenant_root / "policy-displaced"
     policy_path.rename(displaced_policy_path)
@@ -1570,6 +1585,11 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert drifted_readback["status"] == "drift_detected"
     assert drifted_readback["live_aligned_count"] == 0
     assert "tenant_policy_directory_missing" in drifted_readback["latest_valid_receipt"]["live_blockers"]
+    drifted_integrity = client.post("/managed-copies/integrity-scan", json=integrity_payload).json()
+    assert drifted_integrity["status"] == "integrity_drift_detected"
+    assert drifted_integrity["finding_count"] >= 1
+    assert any(item["blocker"] == "tenant_policy_directory_missing" for item in drifted_integrity["findings"])
+    assert drifted_integrity["rogue_detected"] is False
     displaced_policy_path.rename(policy_path)
 
     restored_status = client.get("/managed-copies/status").json()
@@ -3757,6 +3777,76 @@ def test_managed_copy_rogue_detection_assessment_unscoped_and_production_empty(m
     )
     assert empty["status"] == "empty"
     assert empty["valid_count"] == 0
+
+
+def test_managed_copy_integrity_scan_derives_clean_and_drift_state(monkeypatch) -> None:
+    provision = {"copy_id": "copy-1", "receipt_id": "provision-1", "provision_fingerprint": "b" * 64}
+    state = {"drift": False, "receipt_id": "isolation-1"}
+    monkeypatch.setattr(integrity_scan, "managed_copy_provision_for_copy", lambda *args, **kwargs: provision)
+    monkeypatch.setattr(
+        integrity_scan,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda *args, **kwargs: {"receipt_id": state["receipt_id"], "live_state_aligned": not state["drift"]},
+    )
+
+    def isolation_checks(*args, **kwargs):
+        check = {
+            "id": "tenant_configuration_fingerprint_aligned",
+            "ready": not state["drift"],
+            "blocker": "tenant_configuration_fingerprint_mismatch",
+        }
+        return [], [check]
+
+    monkeypatch.setattr(integrity_scan, "managed_copy_isolation_integrity_checks", isolation_checks)
+    payload = {
+        "request_actor": "integrity.scanner",
+        "copy_id": "copy-1",
+        "provisioning_receipt_id": "provision-1",
+        "isolation_verification_receipt_id": "isolation-1",
+    }
+    clean = integrity_scan.managed_copy_integrity_scan(payload, actor="integrity.scanner")
+    assert clean["status"] == "integrity_aligned"
+    assert clean["finding_count"] == 0
+    assert clean["rogue_detected"] is False
+    first_fingerprint = clean["scan_fingerprint"]
+
+    state["drift"] = True
+    drifted = integrity_scan.managed_copy_integrity_scan(payload, actor="integrity.scanner")
+    assert drifted["status"] == "integrity_drift_detected"
+    assert drifted["finding_count"] == 1
+    assert drifted["findings"][0]["blocker"] == "tenant_configuration_fingerprint_mismatch"
+    assert drifted["rogue_detected"] is False
+    assert drifted["writes_tenant_state"] is False
+    assert drifted["scan_fingerprint"] != first_fingerprint
+
+    state["drift"] = False
+    state["receipt_id"] = "different-isolation"
+    mismatched = integrity_scan.managed_copy_integrity_scan(payload, actor="integrity.scanner")
+    assert mismatched["status"] == "blocked"
+    assert "integrity_scan_isolation_receipt_lineage_mismatch" in mismatched["blockers"]
+
+    unknown = integrity_scan.managed_copy_integrity_scan(
+        {**payload, "raw_incident": "must-not-be-echoed"}, actor="integrity.scanner"
+    )
+    assert unknown["status"] == "blocked"
+    assert "integrity_scan_unknown_fields" in unknown["blockers"]
+    assert "must-not-be-echoed" not in json.dumps(unknown)
+
+
+def test_managed_copy_integrity_scan_route_denies_unscoped_actor(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "empty"))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/integrity-scan",
+            json={"request_actor": "unscoped", "copy_id": "x", "provisioning_receipt_id": "y"},
+        )
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert not (tmp_path / "empty").exists()
 
 
 def _configure_safe_delta_receipt_test_sources(
