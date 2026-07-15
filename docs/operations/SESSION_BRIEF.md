@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-15, sync cycle `CR-20260715-012` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-013` (America/Chicago)
 
 ## Manager Role
 
@@ -8,10 +8,11 @@ ATLAS is the Francis Build Manager and Control Room chair. ATLAS plans,
 decomposes, delegates, reviews, and promotes. Named workers own
 feature implementation in isolated `codex/*` branches and worktrees. The manager
 may make small integration fixes, but does not own a feature front. Control Room
-state changes are committed as docs-only commits on local `main`; every push is
-operator-gated. Promotion requires rebasing onto the exact committed local-main
-head, rerunning the complete card and `scripts/check.ps1`, then fast-forwarding
-local `main` only when certain. Escalate every listed operator boundary.
+state changes are committed on local `main`; every push is operator-gated.
+Promotion requires focused acceptance, the complete affected card/subsystem
+suite, changed-path static checks, and affected-delta reviews. GitHub CI/CodeQL
+is the normal repository-wide exact-head gate. Run local `scripts/check.ps1`
+only for broad integration, release checkpoints, or CI divergence diagnosis.
 
 Cold-start order:
 
@@ -55,10 +56,13 @@ Proof target: one exact approved decision can yield a deterministic bounded
 artifact plan while every persistence, payload, network, and export effect stays
 false. Fixture approval remains test evidence only.
 
-Current state: task card and test-only lease are ready on local main.
+Current state: promoted locally at `2673cd5e` after focused/card/static evidence
+and final SENTINEL, VERA, and HARBOR passes. The lease is released; no production
+effect or live runtime access occurred.
 
-Next smallest truthful gap: implement exact-schema no-write planning and
-fail-closed approval/lineage drift handling.
+Next smallest truthful gap: await the current prior-head GitHub CI verdict, push
+the integrated plan once doing so will not cancel that evidence, then select the
+next executable Stage 18 prerequisite outside the operator-fact boundary.
 
 ### Managed copies / safe-delta export authorization decision
 

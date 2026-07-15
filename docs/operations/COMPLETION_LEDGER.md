@@ -60,12 +60,13 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is a deterministic, no-write safe-delta export-artifact plan
-preflight bound to one exact, live-valid approved authorization decision. It may
-return only bounded hashes, enums, counts, and lineage references; it cannot
-persist an artifact or consume approval as export authority. Production copy
-creation still requires real operator-supplied tenant and policy facts; those
-facts are not inferred or fabricated.
+The current goal is the next executable Stage 18 capability after the promoted,
+deterministic no-write export-artifact plan. The plan is bound to one exact,
+live-valid approved authorization decision and returns only bounded hashes,
+enums, counts, and lineage references; it cannot persist an artifact or consume
+approval as export authority. Production copy creation still requires real
+operator-supplied tenant and policy facts; those facts are not inferred or
+fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -126,6 +127,34 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 - Stage 18 export-artifact plan promoted locally
+
+Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now
+includes a permission-gated, exact-schema, deterministic no-write artifact plan
+bound to one exact live-valid approved authorization decision. It grants no
+export authority and performs no artifact, manifest, payload, receipt, network,
+or tenant-state write.
+
+Evidence:
+
+- Exact candidate `2673cd5e` passed 3 focused artifact-plan tests, the complete
+  94-test managed-copy card suite, changed-path Ruff, format, targeted mypy, and
+  diff-check.
+- SENTINEL, VERA, and HARBOR passed the final affected delta after exact built-in
+  integer validation rejected Boolean, float, and string artifact counts.
+- Post-promotion checks passed 3 focused artifact-plan tests and 4 route/mutation
+  contract tests plus changed-path Ruff, format, and diff-check. No local full
+  suite was run; exact-head GitHub CI is the broad repository gate.
+- No live service, Orb process, production decision, artifact, network operation,
+  or tenant mutation occurred.
+
+Remaining truthful gap:
+
+- Actual artifact materialization and export remain blocked on real operator
+  facts and approval. Select the next executable roadmap prerequisite without
+  fabricating those facts or extending the no-write preparation chain.
+- Stage 18 closure, FR-018 clearance, and physical validation remain unclaimed.
 
 ### 2026-07-15 11:43Z - Stage 18 export-authorization decision promoted
 

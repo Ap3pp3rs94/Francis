@@ -2,11 +2,11 @@
 
 Updated: 2026-07-15
 
-Sync cycle: `CR-20260715-012`
+Sync cycle: `CR-20260715-013`
 
-Cycle-start local main source head: `287a27c8`.
+Cycle-start local main source head: `2673cd5e`.
 
-Remote `origin/main` observed during this sync: `5df8aab0`.
+Remote `origin/main` observed during this sync: `5f931fab`.
 
 Push state: final validated integrated-main push is operator-authorized.
 
@@ -33,14 +33,16 @@ GitHub baseline:
 - Task card: `docs/operations/task_cards/managed-copy-safe-delta-export-artifact-plan.md`
 - Branch: `codex/forge-safe-delta-export-artifact-plan`
 - Worktree: `D:\fg`
-- State: `READY`
-- Latest verified base: local main containing CR-012
+- State: `PROMOTED`
+- Latest verified worker commit: `2673cd5e`
 - Dependencies: one exact live-valid approved decision and current source
   lineage/policy; fixtures are test evidence only
-- Blocker: none for no-write fixture-backed planning; production approval and
-  all export effects remain external/operator-controlled
-- Next action: implement deterministic bounded plan and fail-closed tests
-- Runtime lease: `LEASE-FORGE-006`; no service or live Orb access permitted
+- Validation: 3 focused tests, complete 94-test card suite, changed-path static
+  checks, post-promotion route/matrix checks, and SENTINEL/VERA/HARBOR pass
+- Blocker: none for this card; production approval and all export effects remain
+  external/operator-controlled
+- Next action: push after prior-head CI terminates, then select the next roadmap gap
+- Runtime lease: `LEASE-FORGE-006`; released, no service or live Orb access
 
 ### CR-FORGE-005 - Safe-delta export authorization decision
 

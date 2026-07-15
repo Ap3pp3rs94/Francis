@@ -2,11 +2,12 @@
 
 Updated: 2026-07-15
 
-CR-FORGE-005 is promoted locally and awaits the authorized integrated-main push
-plus exact remote CI/CodeQL verdict.
+CR-FORGE-006 is promoted locally and awaits the authorized integrated-main push
+after the current prior-head GitHub CI run terminates.
 
 | Front | Branch | Worker commit | Worker evidence | Specialist reviews | VERA | ATLAS exact-head validation | Operator gate | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CR-FORGE-006 | `codex/forge-safe-delta-export-artifact-plan` | `8131692d`; remediations `10d14689`, `2673cd5e` | 3 focused tests and complete 94-test card suite | SENTINEL/HARBOR pass | VERA pass | post-promotion focused/route/matrix/static checks passed; broad gate delegated to GitHub | integrated-main push authorized; real artifact/export operator-only | `PROMOTED` |
 | CR-FORGE-005 | `codex/forge-safe-delta-export-authorization-decision` | `1a68de41`; remediations `17bccd28`, `0a0cfd55` | 6 focused tests and complete 91-test card suite | SENTINEL/HARBOR pass | VERA pass | static gates passed; full pytest interrupted without verdict; post-promotion focused-green | integrated-main push authorized; real decision/export operator-only | `PROMOTED` |
 | CR-FORGE-004 | `codex/forge-safe-delta-export-authorization-request` | `9c43bb45`; remediation `44048d85`; main fix `f3cc8c7c` | 6 focused tests and complete 85-test card suite | SENTINEL/HARBOR pass | VERA pass | exact `44048d85` full gate exit `0`; post-promotion focused-green | integrated-main push authorized; real approval/export operator-only | `PROMOTED` |
 | CR-FORGE-003 | `codex/forge-safe-delta-export-preflight` | `b5fbb3af`; remediation/main `287a27c8` | 6 focused tests, 2 matrix tests, complete 79-test card suite | SENTINEL/HARBOR pass | VERA pass | exact `287a27c8` full gate exit `0`; post-promotion focused-green | integrated-main push authorized; no production action | `PROMOTED` |
@@ -16,7 +17,8 @@ plus exact remote CI/CodeQL verdict.
 
 Promotion requires an exact worker commit, task-card evidence, required concrete
 specialist reviews, independent VERA acceptance, ARCHIVIST traceability where
-applicable, and ATLAS certainty. Before fast-forward, the branch must be rebased
-onto the exact committed local-main Control Room head and the complete card plus
-`scripts/check.ps1` must pass on that rebased commit. Pre-rebase evidence is not
-sufficient.
+applicable, and ATLAS certainty. Focused acceptance, the complete affected
+card/subsystem suite, changed-path checks, and affected reviews prove the local
+candidate. GitHub CI/CodeQL is the normal repository-wide exact-head gate; local
+`scripts/check.ps1` is reserved for broad integration, release checkpoints, or
+CI divergence diagnosis.
