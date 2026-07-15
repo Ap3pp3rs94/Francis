@@ -38,11 +38,11 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the next executable Stage 18 capability after the promoted, deterministic no-write export-artifact "
-            "plan. The plan is bound to one exact, live-valid approved authorization decision and returns only "
-            "bounded hashes, enums, counts, and lineage references; it cannot persist an artifact or consume "
-            "approval as export authority. Production copy creation still requires real operator-supplied tenant "
-            "and policy facts; those facts are not inferred or fabricated."
+            "the next executable Stage 18 capability after the promoted, fixture-backed rogue-signal assessment. "
+            "The assessment records one immutable, redacted evidence receipt for a structurally verified managed "
+            "copy while keeping rogue detection, containment, recovery, and general mutation authority false. "
+            "Production copy creation and incident determination still require real operator-supplied tenant, "
+            "policy, and incident facts; those facts are not inferred or fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,
