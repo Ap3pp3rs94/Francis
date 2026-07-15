@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-15, sync cycle `CR-20260715-007` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-008` (America/Chicago)
 
 ## Manager Role
 
@@ -47,23 +47,22 @@ Cold-start order:
 
 ## Active Fronts
 
-### Managed copies / safe-delta approval
+### Managed copies / safe-delta export preflight
 
-Task card: `docs/operations/task_cards/managed-copy-safe-delta-approval.md`
-Seat: FORGE. Branch: `codex/forge-safe-delta-approval`.
+Task card: `docs/operations/task_cards/managed-copy-safe-delta-export-preflight.md`
+Seat: FORGE. Branch: `codex/forge-safe-delta-export-preflight`.
 
-Proof target: an authorized actor can record an immutable approval or rejection
-decision bound to an exact live-aligned safe-delta review while export, import,
-learning, execution, and tenant-state mutation remain disabled.
+Proof target: an authorized actor can dry-run whether one exact approved
+safe-delta candidate remains eligible for future export while no artifact,
+manifest, receipt, export, network, learning, or tenant-state write occurs.
 
-Current state: promoted locally through source head `ff58d6d9`. Exact candidate
-`e799c857` passed the full local gate; SENTINEL and VERA passed the actor-bound
-write/readback contract; post-promotion validation exposed and closed the
-Windows decision-receipt path-length defect.
+Current state: the decision contract is promoted and pushed in integrated main
+`5df8aab0`; exact remote CI/CodeQL are queued. The preflight task card and
+test-only runtime lease are ready; no production receipts are assumed.
 
-Next smallest truthful gap: release FORGE's test-only lease after push evidence,
-then assign the separately governed dry-run export-preflight card. Approval is
-not export authority.
+Next smallest truthful gap: implement the exact-schema, permission-gated,
+side-effect-free preflight against validated review/decision/current-lineage
+truth. Approval remains evidence, not export authority.
 
 ### Lens game observer
 

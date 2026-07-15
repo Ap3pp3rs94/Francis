@@ -2,26 +2,28 @@
 
 - Role: governed backend systems and durable receipts
 - Classification: internal mutating worker; slot 1
-- Staffing: unstaffed; prior handle `019f6100-96ab-7631-98b0-5b92909186e0`
-  returned `not_found`
-- Liveness: correction session completed after commit `24658090`; front is in
-  exact-head integration validation
-- Current assignment: CR-FORGE-001 managed-copy safe-delta candidate review
-- Current task card: `docs/operations/task_cards/managed-copy-safe-delta.md`
-- Branch: `codex/forge-managed-copies-safe-delta`
+- Staffing: staffed through the current native FORGE worker session; reachability
+  must be verified before depending on a delivered instruction
+- Liveness: CR-FORGE-002 completed and promoted; CR-FORGE-003 assignment pending
+  worker acknowledgement
+- Current assignment: CR-FORGE-003 safe-delta export preflight
+- Current task card:
+  `docs/operations/task_cards/managed-copy-safe-delta-export-preflight.md`
+- Branch: `codex/forge-safe-delta-export-preflight`
 - Worktree: `D:\fg`
-- Runtime lease: `LEASE-FORGE-001` released after `VAL-20260714-028` exit `0`;
-  services and real Orb denied
-- Contracts in play: `stage18_managed_copy_safe_delta_review_v1`, provisioning,
-  structural isolation, tenant safe-delta policy, actor scope, drift readback
+- Runtime lease: `LEASE-FORGE-003`; pytest/Ruff/mypy only, services and real Orb
+  denied
+- Contracts in play: safe-delta review and approval v1, export-preflight v1,
+  provisioning, structural isolation, current tenant policy, actor scope, drift
+  readback
 - Known traps: Windows deep paths; no raw tenant/candidate data; no production
   fixtures; no approval/export/import/learning authority
-- Latest verified evidence: correction `246580901b145a7f1f59d9c85d199ffdfdf536d8`
-  passed focused suite/Ruff/format/mypy/diff-check and SENTINEL/VERA affected
-  review; integration head `cdfc4a23fe030b4e31dbf3b067c39d3e3daae1f8`
-- Unresolved questions: rebased exact-head proof
-- Current blocker: CR-005 moves local main before promotion
-- Dependencies: CR-005 rebase and exact rebased re-proof
-- Next action: rebase and re-prove for promotion after CR-005 commits
+- Latest verified evidence: CR-FORGE-002 exact candidate `e799c857` passed the
+  full gate and integrated main `5df8aab0` is pushed; remote checks pending
+- Unresolved questions: none before bounded implementation
+- Current blocker: none; production facts remain outside the card
+- Dependencies: exact validated approval receipt and live lineage/policy fixtures
+- Next action: inspect existing contracts, implement the smallest dry-run-only
+  preflight, and submit focused evidence
 - Replacement instruction: verify branch/worktree, read the card and CR messages,
   and resume only the recorded next action

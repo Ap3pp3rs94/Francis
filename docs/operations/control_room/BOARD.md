@@ -2,7 +2,7 @@
 
 Updated: 2026-07-15
 
-Sync cycle: `CR-20260715-007`
+Sync cycle: `CR-20260715-008`
 
 Cycle-start local main source head: `ff58d6d9`.
 
@@ -25,6 +25,25 @@ GitHub baseline:
   `6e883d1d` or either parked worker head.
 
 ## Fronts
+
+### CR-FORGE-003 - Managed-copy safe-delta export preflight
+
+- Agent: FORGE
+- Roadmap: Phase 2, Stage 18 Managed Copies Platform
+- Task card:
+  `docs/operations/task_cards/managed-copy-safe-delta-export-preflight.md`
+- Branch: `codex/forge-safe-delta-export-preflight`
+- Worktree: `D:\fg`
+- State: `READY`
+- Latest verified base: local main containing CR-008
+- Validation: predecessor decision contract promoted and pushed at `5df8aab0`;
+  exact remote CI/CodeQL pending
+- Dependencies: validated approved decision receipt, exact review/candidate,
+  live provision/isolation lineage, current tenant policy, dedicated scope
+- Blocker: none for fixture-backed implementation; production facts remain
+  external and may not be fabricated
+- Next action: implement a dry-run-only, no-write preflight with focused tests
+- Runtime lease: `LEASE-FORGE-003`; no service or live Orb access permitted
 
 ### CR-FORGE-002 - Managed-copy safe-delta approval
 
