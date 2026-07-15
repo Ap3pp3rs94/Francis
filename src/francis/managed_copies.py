@@ -52,6 +52,7 @@ from francis.managed_copy_safe_delta_approval import (
     managed_copy_safe_delta_decisions_readback,
     record_managed_copy_safe_delta_decision,
 )
+from francis.managed_copy_safe_delta_export import managed_copy_safe_delta_export_preflight
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -69,6 +70,7 @@ MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.
 MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND = "francis.stage18.managed_copies.safe_delta_review"
 MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE = "managed_copies.safe_delta.write"
 MANAGED_COPIES_SAFE_DELTA_APPROVAL_WRITE_SCOPE = "managed_copies.safe_delta.approval.write"
+MANAGED_COPIES_SAFE_DELTA_EXPORT_PREFLIGHT_SCOPE = "managed_copies.safe_delta.export.preflight"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND = "francis.stage18.managed_copies.rogue_recovery_review"
 MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE = "managed_copies.rogue_recovery.write"
@@ -746,6 +748,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
             "safe_delta_decision": "/managed-copies/safe-delta-decision",
             "safe_delta_decisions": "/managed-copies/safe-delta-decisions",
+            "safe_delta_export_preflight": "/managed-copies/safe-delta-export-preflight",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -3176,6 +3179,15 @@ def managed_copy_safe_delta_decision_snapshot(payload: dict[str, Any], *, actor:
 
 def managed_copy_safe_delta_decisions_snapshot(**kwargs: Any) -> dict[str, Any]:
     return managed_copy_safe_delta_decisions_readback(**kwargs)
+
+
+def managed_copy_safe_delta_export_preflight_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    return {
+        **managed_copy_safe_delta_export_preflight(payload, actor=actor),
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_EXPORT_PREFLIGHT_SCOPE,
+    }
 
 
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:

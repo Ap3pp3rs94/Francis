@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import francis.managed_copy_safe_delta as managed_copy_safe_delta
 import francis.managed_copy_safe_delta_approval as safe_delta_approval
+import francis.managed_copy_safe_delta_export as safe_delta_export
 from francis.api.app import create_app
 
 
@@ -56,6 +57,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_reviews": "/managed-copies/safe-delta-reviews",
         "safe_delta_decision": "/managed-copies/safe-delta-decision",
         "safe_delta_decisions": "/managed-copies/safe-delta-decisions",
+        "safe_delta_export_preflight": "/managed-copies/safe-delta-export-preflight",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -4111,6 +4113,174 @@ def test_managed_copy_safe_delta_decision_denies_unscoped_actor_without_writing(
     assert body["required_scope"] == "managed_copies.safe_delta.approval.write"
     assert body["writes_receipt"] is False
     assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert not data_root.exists()
+
+
+def _safe_delta_export_preflight_payload(
+    plan: dict[str, Any], decision: dict[str, Any], *, actor: str = "safe-delta.export-preflight"
+) -> dict[str, Any]:
+    return {
+        "request_actor": actor,
+        "copy_id": plan["copy_id"],
+        "provisioning_receipt_id": plan["provisioning_receipt_id"],
+        "isolation_verification_receipt_id": plan["isolation_verification_receipt_id"],
+        "review_fingerprint": plan["review_fingerprint"],
+        "decision_receipt_id": decision["receipt_id"],
+        "dry_run": True,
+    }
+
+
+def test_managed_copy_safe_delta_export_preflight_approved_is_deterministic_and_has_no_effects(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "export-ready")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    payload = _safe_delta_export_preflight_payload(decision_plan, decision)
+    before = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+
+    first = safe_delta_export.managed_copy_safe_delta_export_preflight(payload, actor=payload["request_actor"])
+    second = safe_delta_export.managed_copy_safe_delta_export_preflight(payload, actor=payload["request_actor"])
+
+    assert first["ok"] is True
+    assert first["status"] == "export_preflight_ready"
+    assert first["contract"] == "stage18_managed_copy_safe_delta_export_preflight_v1"
+    assert len(first["export_preflight_fingerprint"]) == 64
+    assert second["export_preflight_fingerprint"] == first["export_preflight_fingerprint"]
+    assert first["decision"] == "approved"
+    assert first["approved_for_future_export_preflight"] is True
+    assert first["contains_raw_candidate_material"] is False
+    assert first["contains_raw_tenant_identity"] is False
+    for flag in (
+        "writes_file",
+        "writes_receipt",
+        "writes_artifact",
+        "writes_manifest",
+        "exports_delta",
+        "imports_delta",
+        "writes_learning",
+        "writes_memory",
+        "writes_registry",
+        "writes_tenant_state",
+        "uses_network",
+        "executes_action",
+        "grants_export_authority",
+        "grants_execution_authority",
+        "grants_mutation_authority",
+        "safe_delta_exported",
+        "safe_delta_flow_active",
+    ):
+        assert first[flag] is False
+    after = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+    assert after == before
+    assert "candidate" not in first
+    assert "source_record_count" not in json.dumps(first)
+
+
+def test_managed_copy_safe_delta_export_preflight_rejection_and_schema_fail_closed(monkeypatch, tmp_path) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "export-blocked")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="rejected")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    payload = _safe_delta_export_preflight_payload(decision_plan, decision)
+    rejected = safe_delta_export.managed_copy_safe_delta_export_preflight(payload, actor=payload["request_actor"])
+    assert rejected["ok"] is False
+    assert "safe_delta_export_preflight_decision_rejected" in rejected["blockers"]
+    assert rejected["grants_export_authority"] is False
+
+    for changes, blocker in (
+        ({"dry_run": 1}, "safe_delta_export_preflight_dry_run_true_required"),
+        ({"dry_run": False}, "safe_delta_export_preflight_dry_run_true_required"),
+        ({"unexpected": True}, "safe_delta_export_preflight_unknown_fields"),
+        ({"decision_receipt_id": "foreign"}, "safe_delta_export_preflight_decision_receipt_id_invalid"),
+    ):
+        result = safe_delta_export.managed_copy_safe_delta_export_preflight(
+            {**payload, **changes}, actor=payload["request_actor"]
+        )
+        assert result["ok"] is False
+        assert blocker in result["blockers"]
+        assert result["writes_receipt"] is False
+        assert result["exports_delta"] is False
+
+
+def test_managed_copy_safe_delta_export_preflight_blocks_policy_drift_and_real_empty_sources(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "export-drift")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    decision_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    decision = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        decision_plan, provided_fingerprint=decision_plan["decision_fingerprint"], confirmed=True
+    )
+    payload = _safe_delta_export_preflight_payload(decision_plan, decision)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["safe_delta_policy"]["operator_review_required"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    drifted = safe_delta_export.managed_copy_safe_delta_export_preflight(payload, actor=payload["request_actor"])
+    assert drifted["ok"] is False
+    assert "safe_delta_export_preflight_review_not_live_valid" in drifted["blockers"]
+
+    from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
+    from francis.managed_copy_provisioning import managed_copy_provision_for_copy
+
+    monkeypatch.setattr(managed_copy_safe_delta, "managed_copy_provision_for_copy", managed_copy_provision_for_copy)
+    monkeypatch.setattr(
+        managed_copy_safe_delta,
+        "latest_managed_copy_isolation_verification_for_provision",
+        latest_managed_copy_isolation_verification_for_provision,
+    )
+    monkeypatch.setattr(safe_delta_approval, "managed_copy_provision_for_copy", managed_copy_provision_for_copy)
+    monkeypatch.setattr(
+        safe_delta_approval,
+        "latest_managed_copy_isolation_verification_for_provision",
+        latest_managed_copy_isolation_verification_for_provision,
+    )
+    empty_root = tmp_path / "export-production-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(empty_root))
+    empty = safe_delta_export.managed_copy_safe_delta_export_preflight(payload, actor=payload["request_actor"])
+    assert empty["ok"] is False
+    assert empty["export_preflight_fingerprint"] == ""
+    assert empty["writes_file"] is False
+    assert empty["exports_delta"] is False
+    assert not empty_root.exists()
+
+
+def test_managed_copy_safe_delta_export_preflight_denies_unscoped_before_lineage_projection(
+    monkeypatch, tmp_path
+) -> None:
+    data_root = tmp_path / "export-denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post(
+            "/managed-copies/safe-delta-export-preflight",
+            json={
+                "request_actor": "safe-delta.export-unscoped",
+                "copy_id": "secret-copy",
+                "provisioning_receipt_id": "secret-provision",
+                "isolation_verification_receipt_id": "secret-isolation",
+                "review_fingerprint": "a" * 64,
+                "decision_receipt_id": "managed_copy_safe_delta_decision_secret",
+                "dry_run": True,
+            },
+        )
+        .json()
+    )
+    assert body["ok"] is False
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.safe_delta.export.preflight"
+    assert "secret-copy" not in json.dumps(body)
+    assert body["writes_receipt"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["exports_delta"] is False
+    assert body["grants_export_authority"] is False
     assert body["grants_execution_authority"] is False
     assert not data_root.exists()
 
