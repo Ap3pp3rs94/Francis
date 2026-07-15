@@ -190,6 +190,9 @@ def record_managed_copy_safe_delta_decision(
     expected = _text(plan.get("decision_fingerprint"))
     if not plan.get("decision_contract_ready"):
         return _blocked("blocked_safe_delta_decision_contract", "safe_delta_decision_contract_not_ready")
+    actor = _text(plan.get("actor"))
+    if not actor or actor != _redacted_text(actor)[:240]:
+        return _blocked("blocked_safe_delta_decision_actor", "safe_delta_decision_actor_not_canonical")
     if not confirmed:
         return _blocked("blocked_safe_delta_decision_confirmation", "safe_delta_decision_confirmation_required")
     if not expected or _text(provided_fingerprint) != expected:
@@ -326,6 +329,9 @@ def _valid_decision_receipt(item: dict[str, Any], *, path: Path, directory: Path
         and item.get("ok") is True
         and item.get("kind") == MANAGED_COPY_SAFE_DELTA_APPROVAL_RECEIPT_KIND
         and item.get("contract") == MANAGED_COPY_SAFE_DELTA_APPROVAL_CONTRACT
+        and bool(_text(item.get("actor")))
+        and len(_text(item.get("actor"))) <= 240
+        and _text(item.get("actor")) == _redacted_text(item.get("actor"))[:240]
         and decision in _DECISIONS
         and item.get("status") == decision
         and _is_sha256(item.get("decision_fingerprint"))

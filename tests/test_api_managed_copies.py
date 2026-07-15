@@ -3953,6 +3953,39 @@ def test_managed_copy_safe_delta_decision_redacts_actor_before_fingerprint_recei
     assert audit_events[0]["actor"] == plan["actor"]
 
 
+def test_managed_copy_safe_delta_decision_rejects_actor_mutated_after_planning_without_writes(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "actor-mutation")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    audit_events: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        safe_delta_approval,
+        "audit_record",
+        lambda event, **fields: audit_events.append({"event": event, **fields}),
+    )
+    decision_directory = safe_delta_approval._decision_directory(plan, create=False)
+    assert decision_directory is not None
+    assert not decision_directory.exists()
+    raw_secret = "post-plan-secret-value-123456"
+    plan["actor"] = f"attacker@example.com token={raw_secret}"
+
+    result = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=True
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked_safe_delta_decision_actor"
+    assert result["error"] == "safe_delta_decision_actor_not_canonical"
+    assert result["writes_receipt"] is False
+    assert result["writes_tenant_state"] is False
+    assert result["grants_execution_authority"] is False
+    assert audit_events == []
+    assert not decision_directory.exists()
+    assert raw_secret not in json.dumps(result)
+
+
 def test_managed_copy_safe_delta_decision_readback_filters_exact_requested_review(monkeypatch, tmp_path) -> None:
     source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "two-reviews")
     review_a = _record_safe_delta_receipt(
