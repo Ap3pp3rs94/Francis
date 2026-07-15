@@ -419,6 +419,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert integrity_evidence["required_scope"] == "managed_copies.rogue_recovery.write"
     assert "tenant-local" in integrity_evidence["receipt_behavior"]
 
+    triage_disposition = entries["/managed-copies/integrity-triage-disposition"]
+    assert triage_disposition["family"] == "managed_copies_integrity_triage_disposition"
+    assert triage_disposition["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert "bounded integrity triage disposition" in triage_disposition["receipt_behavior"]
+
     tenant_access = entries["/managed-copies/tenant-access-check"]
     assert tenant_access["family"] == "managed_copies_tenant_access_check"
     assert tenant_access["required_scope"] == "managed_copies.isolation_verification.write"

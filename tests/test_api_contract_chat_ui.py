@@ -129,6 +129,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/managed-copies/integrity-scan"),
         ("POST", "/managed-copies/integrity-evidence"),
         ("GET", "/managed-copies/integrity-evidence-readback"),
+        ("POST", "/managed-copies/integrity-triage-disposition"),
+        ("GET", "/managed-copies/integrity-triage-dispositions"),
         ("POST", "/managed-copies/tenant-access-check"),
         ("GET", "/managed-copies/sla-framework-contract"),
         ("POST", "/managed-copies/sla-commitment-review"),

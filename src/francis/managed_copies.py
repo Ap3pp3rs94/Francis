@@ -75,6 +75,11 @@ from francis.managed_copy_integrity_evidence import (
     managed_copy_integrity_evidence_readback,
     record_managed_copy_integrity_evidence,
 )
+from francis.managed_copy_integrity_triage_disposition import (
+    managed_copy_integrity_triage_disposition_plan,
+    managed_copy_integrity_triage_dispositions_readback,
+    record_managed_copy_integrity_triage_disposition,
+)
 from francis.managed_copy_tenant_access import managed_copy_tenant_access_check
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
@@ -531,6 +536,18 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
     copy_integrity_incident_state = _safe_str(integrity_evidence.get("integrity_incident_state")).strip()
     copy_integrity_triage_required = integrity_evidence.get("triage_required") is True
     copy_integrity_evidence_receipt_id = _safe_str(integrity_evidence.get("latest_receipt_id")).strip()
+    integrity_triage = managed_copy_integrity_triage_dispositions_readback(
+        copy_id=provisioned_copy_id,
+        provisioning_receipt_id=copy_provision_receipt_id,
+        isolation_verification_receipt_id=copy_isolation_receipt_id,
+    )
+    copy_integrity_triage_disposition_recorded = bool(
+        integrity_triage.get("ok") is True
+        and integrity_triage.get("valid_count", 0) > 0
+        and integrity_triage.get("latest_integrity_evidence_receipt_id") == copy_integrity_evidence_receipt_id
+    )
+    copy_integrity_triage_disposition = _safe_str(integrity_triage.get("latest_disposition")).strip()
+    copy_integrity_triage_disposition_receipt_id = _safe_str(integrity_triage.get("latest_receipt_id")).strip()
     safe_delta_reviews = managed_copy_safe_delta_review_receipts_readback(
         copy_id=provisioned_copy_id,
         provisioning_receipt_id=copy_provision_receipt_id,
@@ -707,20 +724,30 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "Rogue kill/replace flows",
             ready=False,
             status=(
-                "integrity_triage_required"
+                "integrity_triage_disposition_recorded"
+                if copy_integrity_triage_disposition_recorded
+                else "integrity_triage_required"
                 if copy_integrity_triage_required
                 else "integrity_evidence_recorded"
                 if copy_integrity_evidence_recorded
                 else "contract_readback_ready"
             ),
             next_gap=(
-                "stage18_integrity_evidence_operator_triage"
+                "stage18_containment_authorization_boundary"
+                if copy_integrity_triage_disposition == "containment_authorization_required"
+                else "stage18_integrity_investigation"
+                if copy_integrity_triage_disposition == "investigation_required"
+                else "stage18_rogue_kill_replace_flows"
+                if copy_integrity_triage_disposition_recorded
+                else "stage18_integrity_evidence_operator_triage"
                 if copy_integrity_triage_required
                 else "stage18_rogue_kill_replace_flows"
             ),
             evidence=[
                 (
-                    f"Live integrity triage requires operator review: {copy_integrity_evidence_receipt_id}."
+                    f"Integrity triage disposition receipt: {copy_integrity_triage_disposition_receipt_id}."
+                    if copy_integrity_triage_disposition_recorded
+                    else f"Live integrity triage requires operator review: {copy_integrity_evidence_receipt_id}."
                     if copy_integrity_triage_required
                     else f"Historical or changed integrity evidence: {copy_integrity_evidence_receipt_id}."
                     if copy_integrity_evidence_recorded
@@ -812,6 +839,8 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "integrity_scan": "/managed-copies/integrity-scan",
             "integrity_evidence": "/managed-copies/integrity-evidence",
             "integrity_evidence_readback": "/managed-copies/integrity-evidence-readback",
+            "integrity_triage_disposition": "/managed-copies/integrity-triage-disposition",
+            "integrity_triage_dispositions": "/managed-copies/integrity-triage-dispositions",
             "tenant_access_check": "/managed-copies/tenant-access-check",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "sla_commitment_review": "/managed-copies/sla-commitment-review",
@@ -878,6 +907,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "copy_integrity_evidence_receipt_id": copy_integrity_evidence_receipt_id,
         "copy_integrity_incident_state": copy_integrity_incident_state,
         "copy_integrity_triage_required": copy_integrity_triage_required,
+        "copy_integrity_triage_disposition_recorded": copy_integrity_triage_disposition_recorded,
+        "copy_integrity_triage_disposition": copy_integrity_triage_disposition,
+        "copy_integrity_triage_disposition_receipt_id": copy_integrity_triage_disposition_receipt_id,
         "safe_delta_review_recorded": safe_delta_review_recorded,
         "safe_delta_review_receipt_id": safe_delta_review_receipt_id,
         "safe_delta_exported": False,
@@ -3534,6 +3566,28 @@ def managed_copy_integrity_evidence_snapshot(payload: dict[str, Any], *, actor: 
 
 def managed_copy_integrity_evidence_readback_snapshot(**kwargs: Any) -> dict[str, Any]:
     return managed_copy_integrity_evidence_readback(**kwargs)
+
+
+def managed_copy_integrity_triage_disposition_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    plan = managed_copy_integrity_triage_disposition_plan(payload, actor=actor)
+    outcome: dict[str, Any] = plan
+    if payload.get("dry_run") is False:
+        outcome = record_managed_copy_integrity_triage_disposition(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("disposition_fingerprint")).strip(),
+            confirmed=payload.get("confirm_integrity_triage_disposition") is True,
+        )
+    return {
+        **plan,
+        **outcome,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+    }
+
+
+def managed_copy_integrity_triage_dispositions_snapshot(**kwargs: Any) -> dict[str, Any]:
+    return managed_copy_integrity_triage_dispositions_readback(**kwargs)
 
 
 def managed_copy_tenant_access_check_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:

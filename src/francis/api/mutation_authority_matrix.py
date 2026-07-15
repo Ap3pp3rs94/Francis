@@ -1431,6 +1431,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Preserves derived drift evidence but never declares rogue status or grants containment authority.",
     ),
     AuthorityRule(
+        family="managed_copies_integrity_triage_disposition",
+        prefixes=("/managed-copies/integrity-triage-disposition",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.rogue_recovery.write",
+        approval_requirement="exact current integrity evidence plus exact fingerprint replay and explicit confirmation",
+        receipt_behavior="immutable tenant-local bounded integrity triage disposition receipt only",
+        denial_behavior="api_permission_denied before provision, isolation, scan, or integrity evidence inspection",
+        governance_maturity="permission_gated_triage_disposition_only",
+        notes="Never declares rogue status, resolves an incident, acts on containment, or grants new authority.",
+    ),
+    AuthorityRule(
         family="managed_copies_tenant_access_check",
         prefixes=("/managed-copies/tenant-access-check",),
         required_actor="payload.request_actor",

@@ -18,6 +18,8 @@ import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export
 import francis.managed_copy_rogue_detection_assessment as rogue_detection_assessment
 import francis.managed_copy_integrity_scan as integrity_scan
 import francis.managed_copy_integrity_evidence as integrity_evidence
+import francis.managed_copy_integrity_triage_disposition as integrity_triage
+import francis.managed_copies as managed_copies
 import francis.managed_copy_tenant_access as tenant_access
 from francis.api.app import create_app
 
@@ -77,6 +79,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "integrity_scan": "/managed-copies/integrity-scan",
         "integrity_evidence": "/managed-copies/integrity-evidence",
         "integrity_evidence_readback": "/managed-copies/integrity-evidence-readback",
+        "integrity_triage_disposition": "/managed-copies/integrity-triage-disposition",
+        "integrity_triage_dispositions": "/managed-copies/integrity-triage-dispositions",
         "tenant_access_check": "/managed-copies/tenant-access-check",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "sla_commitment_review": "/managed-copies/sla-commitment-review",
@@ -4124,6 +4128,262 @@ def test_managed_copy_integrity_evidence_route_denies_unscoped_actor(monkeypatch
     assert body["error"] == "api_permission_denied"
     assert body["required_scope"] == "managed_copies.rogue_recovery.write"
     assert not data_root.exists()
+
+
+def _integrity_triage_fixture(monkeypatch, tmp_path) -> tuple[dict[str, Any], dict[str, Any]]:
+    receipts = tmp_path / "triage-receipts"
+    state: dict[str, Any] = {
+        "active": True,
+        "evidence_receipt_id": "managed_copy_integrity_evidence_" + "1" * 16,
+        "evidence_fingerprint": "1" * 64,
+        "scan_fingerprint": "2" * 64,
+    }
+    provision = {
+        "tenant_key": "a" * 64,
+        "copy_id": "copy-1",
+        "receipt_id": "provision-1",
+        "provision_fingerprint": "b" * 64,
+    }
+    isolation = {
+        "tenant_key": "a" * 64,
+        "copy_id": "copy-1",
+        "receipt_id": "isolation-1",
+        "provisioning_receipt_id": "provision-1",
+        "verification_fingerprint": "c" * 64,
+    }
+    state["isolation"] = isolation
+
+    def evidence_readback(**kwargs):
+        if kwargs.get("copy_id") != "copy-1" or kwargs.get("provisioning_receipt_id") != "provision-1":
+            return {"status": "empty", "valid_count": 0, "items": [], "triage_required": False}
+        return {
+            "status": "integrity_evidence_recorded",
+            "valid_count": 1,
+            "latest_receipt_id": state["evidence_receipt_id"],
+            "latest_evidence_fingerprint": state["evidence_fingerprint"],
+            "live_drift_matches_latest": state["active"],
+            "triage_required": state["active"],
+            "items": [
+                {
+                    "receipt_id": state["evidence_receipt_id"],
+                    "evidence_fingerprint": state["evidence_fingerprint"],
+                    "scan_fingerprint": state["scan_fingerprint"],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(integrity_triage, "managed_copy_integrity_evidence_readback", evidence_readback)
+    monkeypatch.setattr(
+        integrity_triage,
+        "managed_copy_provision_for_copy",
+        lambda copy_id, **kwargs: provision if copy_id == "copy-1" else {},
+    )
+    monkeypatch.setattr(
+        integrity_triage,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda provision_id, **kwargs: isolation if provision_id == "provision-1" else {},
+    )
+
+    def guarded_subpath(*args, create_leaf_directory=False, **kwargs):
+        if create_leaf_directory:
+            receipts.mkdir(parents=True, exist_ok=True)
+        return receipts
+
+    monkeypatch.setattr(integrity_triage, "managed_copy_isolation_guarded_subpath", guarded_subpath)
+    payload = {
+        "request_actor": "integrity.operator",
+        "copy_id": "copy-1",
+        "provisioning_receipt_id": "provision-1",
+        "isolation_verification_receipt_id": "isolation-1",
+        "integrity_evidence_receipt_id": state["evidence_receipt_id"],
+        "integrity_evidence_fingerprint": state["evidence_fingerprint"],
+        "disposition": "investigation_required",
+        "rationale_fingerprint": "d" * 64,
+        "dry_run": True,
+    }
+    return state, payload
+
+
+@pytest.mark.parametrize(
+    "disposition",
+    ["investigation_required", "no_rogue_determination", "containment_authorization_required"],
+)
+def test_integrity_triage_disposition_records_replays_and_reads_each_bounded_disposition(
+    monkeypatch, tmp_path, disposition
+) -> None:
+    _, payload = _integrity_triage_fixture(monkeypatch, tmp_path)
+    payload["disposition"] = disposition
+    plan = integrity_triage.managed_copy_integrity_triage_disposition_plan(payload, actor="integrity.operator")
+    assert plan["status"] == "integrity_triage_disposition_ready"
+    assert plan["writes_receipt"] is False
+    recorded = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        plan, provided_fingerprint=plan["disposition_fingerprint"], confirmed=True
+    )
+    assert recorded["status"] == "integrity_triage_disposition_recorded"
+    assert recorded["disposition"] == disposition
+    assert recorded["writes_receipt"] is True
+    for key in (
+        "rogue_detected",
+        "halts_copy",
+        "quarantines_copy",
+        "replaces_copy",
+        "restores_copy",
+        "uses_network",
+        "writes_tenant_state",
+        "incident_resolved",
+        "grants_new_authority",
+        "grants_execution_authority",
+        "grants_mutation_authority",
+    ):
+        assert recorded[key] is False
+    replayed = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        plan, provided_fingerprint=plan["disposition_fingerprint"], confirmed=True
+    )
+    assert replayed["writes_receipt"] is False
+    readback = integrity_triage.managed_copy_integrity_triage_dispositions_readback(
+        copy_id="copy-1",
+        provisioning_receipt_id="provision-1",
+        isolation_verification_receipt_id="isolation-1",
+    )
+    assert readback["valid_count"] == 1
+    assert readback["latest_disposition"] == disposition
+    assert readback["rogue_recovery_ready"] is False
+    assert "actor" not in readback["items"][0]
+
+
+@pytest.mark.parametrize(
+    ("change", "blocker"),
+    [
+        ({"raw_rationale": "private"}, "integrity_triage_disposition_unknown_fields"),
+        ({"dry_run": 1}, "integrity_triage_disposition_dry_run_boolean_required"),
+        ({"disposition": "quarantine"}, "integrity_triage_disposition_invalid"),
+        ({"rationale_fingerprint": "raw rationale"}, "integrity_triage_disposition_rationale_fingerprint_invalid"),
+        ({"request_actor": "substitute"}, "integrity_triage_disposition_actor_lineage_mismatch"),
+        ({"integrity_evidence_fingerprint": "f" * 64}, "integrity_triage_disposition_evidence_not_current_valid"),
+        ({"copy_id": "other-copy"}, "integrity_triage_disposition_evidence_not_current_valid"),
+    ],
+)
+def test_integrity_triage_disposition_rejects_malformed_and_substituted_inputs(
+    monkeypatch, tmp_path, change, blocker
+) -> None:
+    _, payload = _integrity_triage_fixture(monkeypatch, tmp_path)
+    blocked = integrity_triage.managed_copy_integrity_triage_disposition_plan(
+        {**payload, **change}, actor="integrity.operator"
+    )
+    assert blocked["ok"] is False
+    assert blocker in blocked["blockers"]
+    assert blocked["disposition_fingerprint"] == ""
+    assert not (tmp_path / "triage-receipts").exists()
+
+
+def test_integrity_triage_disposition_blocks_concurrent_drift_and_tampered_receipt(monkeypatch, tmp_path) -> None:
+    state, payload = _integrity_triage_fixture(monkeypatch, tmp_path)
+    plan = integrity_triage.managed_copy_integrity_triage_disposition_plan(payload, actor="integrity.operator")
+    state["scan_fingerprint"] = "3" * 64
+    changed = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        plan, provided_fingerprint=plan["disposition_fingerprint"], confirmed=True
+    )
+    assert changed["error"] == "integrity_triage_disposition_live_state_changed"
+    assert changed["writes_receipt"] is False
+    assert not (tmp_path / "triage-receipts").exists()
+
+    state["scan_fingerprint"] = "2" * 64
+    fresh = integrity_triage.managed_copy_integrity_triage_disposition_plan(payload, actor="integrity.operator")
+    recorded = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        fresh, provided_fingerprint=fresh["disposition_fingerprint"], confirmed=True
+    )
+    path = next((tmp_path / "triage-receipts").glob("*.json"))
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    receipt["disposition"] = "no_rogue_determination"
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert recorded["writes_receipt"] is True
+    readback = integrity_triage.managed_copy_integrity_triage_dispositions_readback(
+        copy_id="copy-1",
+        provisioning_receipt_id="provision-1",
+        isolation_verification_receipt_id="isolation-1",
+    )
+    assert readback["ok"] is False
+    assert readback["valid_count"] == 0
+    assert readback["invalid_receipt_count"] == 1
+    assert readback["items"] == []
+
+
+def test_integrity_triage_disposition_requires_confirmation_and_current_evidence(monkeypatch, tmp_path) -> None:
+    state, payload = _integrity_triage_fixture(monkeypatch, tmp_path)
+    plan = integrity_triage.managed_copy_integrity_triage_disposition_plan(payload, actor="integrity.operator")
+    unconfirmed = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        plan, provided_fingerprint=plan["disposition_fingerprint"], confirmed=False
+    )
+    mismatch = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        plan, provided_fingerprint="0" * 64, confirmed=True
+    )
+    boolean_substitute = integrity_triage.record_managed_copy_integrity_triage_disposition(
+        plan, provided_fingerprint=plan["disposition_fingerprint"], confirmed=1
+    )
+    assert unconfirmed["error"] == "integrity_triage_disposition_confirmation_required"
+    assert mismatch["error"] == "integrity_triage_disposition_fingerprint_mismatch"
+    assert boolean_substitute["error"] == "integrity_triage_disposition_confirmation_required"
+    state["active"] = False
+    stale = integrity_triage.managed_copy_integrity_triage_disposition_plan(payload, actor="integrity.operator")
+    assert "integrity_triage_disposition_active_drift_required" in stale["blockers"]
+    assert not (tmp_path / "triage-receipts").exists()
+
+
+def test_integrity_triage_disposition_rejects_cross_tenant_lineage(monkeypatch, tmp_path) -> None:
+    state, payload = _integrity_triage_fixture(monkeypatch, tmp_path)
+    state["isolation"]["tenant_key"] = "f" * 64
+    blocked = integrity_triage.managed_copy_integrity_triage_disposition_plan(payload, actor="integrity.operator")
+    assert "integrity_triage_disposition_lineage_invalid" in blocked["blockers"]
+    assert blocked["disposition_fingerprint"] == ""
+    assert not (tmp_path / "triage-receipts").exists()
+
+
+def test_integrity_triage_disposition_route_denies_unscoped_actor_and_production_readback_is_empty(
+    monkeypatch, tmp_path
+) -> None:
+    data_root = tmp_path / "triage-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    client = TestClient(create_app())
+    denied = client.post(
+        "/managed-copies/integrity-triage-disposition",
+        json={"request_actor": "unscoped", "dry_run": True},
+    ).json()
+    assert denied["error"] == "api_permission_denied"
+    assert denied["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert not data_root.exists()
+    empty = client.get(
+        "/managed-copies/integrity-triage-dispositions",
+        params={
+            "copy_id": "missing",
+            "provisioning_receipt_id": "missing",
+            "isolation_verification_receipt_id": "missing",
+        },
+    ).json()
+    assert empty["status"] == "empty"
+    assert empty["valid_count"] == 0
+
+
+def test_managed_copy_status_projects_integrity_triage_without_ready_claim(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "status"))
+    monkeypatch.setattr(
+        managed_copies,
+        "managed_copy_integrity_triage_dispositions_readback",
+        lambda **kwargs: {
+            "ok": True,
+            "valid_count": 1,
+            "latest_disposition": "containment_authorization_required",
+            "latest_receipt_id": "triage-receipt-1",
+            "latest_integrity_evidence_receipt_id": "",
+        },
+    )
+    body = managed_copies.managed_copies_status_snapshot()
+    rogue = next(item for item in body["deliverables"] if item["id"] == "rogue_recovery")
+    assert body["copy_integrity_triage_disposition_recorded"] is True
+    assert body["copy_integrity_triage_disposition"] == "containment_authorization_required"
+    assert rogue["status"] == "integrity_triage_disposition_recorded"
+    assert rogue["ready"] is False
+    assert rogue["next_gap"] == "stage18_containment_authorization_boundary"
 
 
 def test_managed_copy_tenant_access_check_is_exact_and_path_opaque(monkeypatch, tmp_path) -> None:
