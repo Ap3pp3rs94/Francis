@@ -394,6 +394,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert export_request["receipt_behavior"] == "immutable pending export authorization-request receipt only"
     assert "Creates no approval, export, artifact" in export_request["notes"]
 
+    export_decision = entries["/managed-copies/safe-delta-export-authorization-decision"]
+    assert export_decision["family"] == "managed_copies_safe_delta_export_authorization_decision"
+    assert export_decision["required_scope"] == "managed_copies.safe_delta.export.authorization.decide"
+    assert "immutable approved or rejected" in export_decision["receipt_behavior"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

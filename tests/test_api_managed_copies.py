@@ -13,6 +13,7 @@ import francis.managed_copy_safe_delta as managed_copy_safe_delta
 import francis.managed_copy_safe_delta_approval as safe_delta_approval
 import francis.managed_copy_safe_delta_export as safe_delta_export
 import francis.managed_copy_safe_delta_export_authorization as safe_delta_export_authorization
+import francis.managed_copy_safe_delta_export_authorization_decision as safe_delta_export_authorization_decision
 from francis.api.app import create_app
 
 
@@ -61,6 +62,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_export_preflight": "/managed-copies/safe-delta-export-preflight",
         "safe_delta_export_authorization_request": "/managed-copies/safe-delta-export-authorization-request",
         "safe_delta_export_authorization_requests": "/managed-copies/safe-delta-export-authorization-requests",
+        "safe_delta_export_authorization_decision": "/managed-copies/safe-delta-export-authorization-decision",
+        "safe_delta_export_authorization_decisions": "/managed-copies/safe-delta-export-authorization-decisions",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -4695,6 +4698,105 @@ def test_managed_copy_safe_delta_export_authorization_request_unscoped_and_produ
     )
     assert readback["status"] == "empty"
     assert readback["count"] == 0
+
+
+def _safe_delta_export_authorization_decision_plan(monkeypatch, source_state, outcome="approved"):
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    approval_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, decision="approved")
+    approval = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        approval_plan, provided_fingerprint=approval_plan["decision_fingerprint"], confirmed=True
+    )
+    request_payload, request_plan = _safe_delta_export_authorization_plan(
+        monkeypatch, source_state, approval_plan, approval
+    )
+    request = safe_delta_export_authorization.record_managed_copy_safe_delta_export_authorization_request(
+        request_plan, provided_fingerprint=request_plan["request_fingerprint"], confirmed=True
+    )["receipt"]
+    monkeypatch.setattr(
+        safe_delta_export_authorization_decision,
+        "managed_copy_provision_for_copy",
+        managed_copy_safe_delta.managed_copy_provision_for_copy,
+    )
+    monkeypatch.setattr(
+        safe_delta_export_authorization_decision,
+        "latest_managed_copy_isolation_verification_for_provision",
+        managed_copy_safe_delta.latest_managed_copy_isolation_verification_for_provision,
+    )
+    payload = {
+        "request_actor": "safe-delta.export-decider",
+        "copy_id": request_payload["copy_id"],
+        "provisioning_receipt_id": request_payload["provisioning_receipt_id"],
+        "isolation_verification_receipt_id": request_payload["isolation_verification_receipt_id"],
+        "review_fingerprint": request["review_fingerprint"],
+        "decision_receipt_id": request["decision_receipt_id"],
+        "preflight_fingerprint": request["preflight_fingerprint"],
+        "request_receipt_id": request["receipt_id"],
+        "request_fingerprint": request["request_fingerprint"],
+        "export_class": request["export_class"],
+        "retention_class": request["retention_class"],
+        "destination_class": request["destination_class"],
+        "purpose_fingerprint": request["purpose_fingerprint"],
+        "decision": outcome,
+        "dry_run": True,
+    }
+    plan = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decision_plan(
+        payload, actor=payload["request_actor"]
+    )
+    return payload, plan
+
+
+@pytest.mark.parametrize("outcome", ["approved", "rejected"])
+def test_managed_copy_safe_delta_export_authorization_decision_record_readback_and_conflict(
+    monkeypatch, tmp_path, outcome
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / f"sy-{outcome}")
+    payload, plan = _safe_delta_export_authorization_decision_plan(monkeypatch, source_state, outcome)
+    assert plan["ok"] is True
+    assert (
+        safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decision_plan(
+            payload, actor=payload["request_actor"]
+        )
+        == plan
+    )
+    unconfirmed = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        plan, provided_fingerprint=plan["authorization_decision_fingerprint"], confirmed=False
+    )
+    assert unconfirmed["writes_receipt"] is False
+    recorded = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        plan, provided_fingerprint=plan["authorization_decision_fingerprint"], confirmed=True
+    )
+    assert recorded["status"] == f"export_authorization_{outcome}"
+    assert recorded["writes_receipt"] is True
+    replay = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        plan, provided_fingerprint=plan["authorization_decision_fingerprint"], confirmed=True
+    )
+    assert replay["status"] == "already_decided"
+    other_payload = {**payload, "decision": "rejected" if outcome == "approved" else "approved"}
+    other = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decision_plan(
+        other_payload, actor=payload["request_actor"]
+    )
+    conflict = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
+        other, provided_fingerprint=other["authorization_decision_fingerprint"], confirmed=True
+    )
+    assert conflict["error"] == "safe_delta_export_authorization_decision_conflict"
+    readback = safe_delta_export_authorization_decision.managed_copy_safe_delta_export_authorization_decisions_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert readback[f"export_authorization_{outcome}"] is True
+    for flag in (
+        "export_approved",
+        "export_executed",
+        "writes_artifact",
+        "writes_manifest",
+        "writes_payload",
+        "writes_tenant_state",
+        "writes_learning",
+        "uses_network",
+        "grants_export_authority",
+    ):
+        assert recorded[flag] is False
 
 
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(
