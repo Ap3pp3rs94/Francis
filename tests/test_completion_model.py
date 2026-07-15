@@ -38,11 +38,11 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "a separately scoped safe-delta export-authorization decision contract bound to one exact, "
-            "live-valid pending request. The software may record only an immutable approved/rejected "
-            "decision receipt; fixture validation is not a real approval and no export may occur. Production "
-            "copy creation still requires real operator-supplied tenant and policy facts; those facts are not "
-            "inferred or fabricated."
+            "a deterministic, no-write safe-delta export-artifact plan preflight bound to one exact, live-valid "
+            "approved authorization decision. It may return only bounded hashes, enums, counts, and lineage "
+            "references; it cannot persist an artifact or consume approval as export authority. Production copy "
+            "creation still requires real operator-supplied tenant and policy facts; those facts are not inferred "
+            "or fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,
@@ -191,7 +191,7 @@ def test_stage17_roadmap_steering_excludes_fr017_forearm_naming_collision() -> N
     matrix = (root / "docs" / "operations" / "STAGE17_CLOSURE_MATRIX.md").read_text(encoding="utf-8")
     manifest = (root / "FR-017_Stage17_Package" / "FR-017-STAGE17-PACKAGE-MANIFEST.json").read_text(encoding="utf-8")
 
-    assert "The current goal is a separately scoped safe-delta export-authorization decision" in ledger
+    assert "The current goal is a deterministic, no-write safe-delta export-artifact plan" in ledger
     assert "stage17_capability_economy_closure_afd0fa32f7d1" in ledger
     assert "The current goal is the FR-017 operator/physical evidence boundary" not in ledger
     assert "The remaining gates are the physically present" not in matrix

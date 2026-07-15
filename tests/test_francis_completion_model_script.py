@@ -58,7 +58,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["latest_ledger_entry"]["title"] == (
-        "2026-07-15 11:14Z - Stage 18 export-authorization request promoted"
+        "2026-07-15 11:43Z - Stage 18 export-authorization decision promoted"
     )
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
         "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"
@@ -68,11 +68,11 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "a separately scoped safe-delta export-authorization decision contract bound to one exact, "
-            "live-valid pending request. The software may record only an immutable approved/rejected "
-            "decision receipt; fixture validation is not a real approval and no export may occur. Production "
-            "copy creation still requires real operator-supplied tenant and policy facts; those facts are not "
-            "inferred or fabricated."
+            "a deterministic, no-write safe-delta export-artifact plan preflight bound to one exact, live-valid "
+            "approved authorization decision. It may return only bounded hashes, enums, counts, and lineage "
+            "references; it cannot persist an artifact or consume approval as export authority. Production copy "
+            "creation still requires real operator-supplied tenant and policy facts; those facts are not inferred "
+            "or fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,
