@@ -66,7 +66,7 @@ def managed_copy_safe_delta_export_artifact_plan(payload: dict[str, Any], *, act
         blockers.append("safe_delta_export_artifact_plan_actor_lineage_mismatch")
     if payload.get("dry_run") is not True:
         blockers.append("safe_delta_export_artifact_plan_dry_run_true_required")
-    if artifact_count != 1 or isinstance(artifact_count, bool):
+    if type(artifact_count) is not int or artifact_count != 1:
         blockers.append("safe_delta_export_artifact_plan_artifact_count_invalid")
     if bounded["artifact_media_type"] != MEDIA_TYPE:
         blockers.append("safe_delta_export_artifact_plan_media_type_invalid")

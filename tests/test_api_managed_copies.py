@@ -5007,6 +5007,7 @@ def test_managed_copy_safe_delta_export_artifact_plan_rejects_source_schema_and_
         {**approved_payload, "dry_run": False},
         {**approved_payload, "dry_run": 1},
         {**approved_payload, "artifact_count": True},
+        {**approved_payload, "artifact_count": 1.0},
         {**approved_payload, "unexpected": "raw"},
         {**approved_payload, "credential": "secret"},
         {**approved_payload, "destination": "https://invalid"},
