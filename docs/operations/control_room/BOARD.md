@@ -2,7 +2,7 @@
 
 Updated: 2026-07-15
 
-Sync cycle: `CR-20260715-009`
+Sync cycle: `CR-20260715-010`
 
 Cycle-start local main source head: `287a27c8`.
 
@@ -25,6 +25,26 @@ GitHub baseline:
   `6e883d1d` or either parked worker head.
 
 ## Fronts
+
+### CR-FORGE-004 - Safe-delta export authorization request
+
+- Agent: FORGE
+- Roadmap: Phase 2, Stage 18 Managed Copies Platform
+- Task card:
+  `docs/operations/task_cards/managed-copy-safe-delta-export-authorization-request.md`
+- Branch: `codex/forge-safe-delta-export-authorization-request`
+- Worktree: `D:\fg`
+- State: `READY`
+- Latest verified base: local main containing CR-010
+- Validation: predecessor export preflight promoted at `287a27c8`; integrated
+  main `7e757513` pushed with exact CI/CodeQL pending
+- Dependencies: freshly recomputed eligible preflight, exact source lineage,
+  current tenant policy, dedicated request scope
+- Blocker: none for fixture-backed implementation; production action facts and
+  any approval remain operator-controlled and may not be fabricated
+- Next action: implement plan, confirmed record, validated readback, and
+  fail-closed drift/replay tests without any export effect
+- Runtime lease: `LEASE-FORGE-004`; no service or live Orb access permitted
 
 ### CR-FORGE-003 - Managed-copy safe-delta export preflight
 

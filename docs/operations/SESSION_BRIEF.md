@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-15, sync cycle `CR-20260715-009` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-010` (America/Chicago)
 
 ## Manager Role
 
@@ -45,6 +45,23 @@ Cold-start order:
   activate, or modify it while handling these branches.
 
 ## Active Fronts
+
+### Managed copies / safe-delta export authorization request
+
+Task card:
+`docs/operations/task_cards/managed-copy-safe-delta-export-authorization-request.md`
+Seat: FORGE. Branch: `codex/forge-safe-delta-export-authorization-request`.
+
+Proof target: a scoped actor can plan and explicitly confirm one immutable,
+redacted pending request for a precisely classified future export action only
+when the safe-delta preflight and all source lineage remain current. The request
+does not approve or perform export.
+
+Current state: task card and test-only lease are ready on local main. Integrated
+head `7e757513` is pushed; exact remote CI/CodeQL are pending.
+
+Next smallest truthful gap: implement the plan/record/readback contract with
+write-boundary replanning and explicit request-versus-approval separation.
 
 ### Managed copies / safe-delta export preflight
 
