@@ -4,7 +4,7 @@ Task ID: `CR-FORGE-002`
 
 Assigned seat: FORGE
 
-Status: `READY`
+Status: `PROMOTED`
 
 ## Objective
 
@@ -95,3 +95,16 @@ changed-path Ruff, format, mypy, and `git diff --check`. Do not run
 - no production tenant/candidate creation or customer facts
 - no runtime startup, provisioning, rogue recovery, SLA, or decommission action
 - no Stage 18 completion or FR-018 claim
+
+## Verified Disposition
+
+- Reviewed worker head: `49893be5`.
+- Exact rebased promotion candidate: `e799c857`.
+- Local main source head after the bounded Windows path integration fix:
+  `ff58d6d9`.
+- Exact candidate full `scripts/check.ps1`: exit `0`.
+- Post-promotion evidence: all 18 decision tests and the complete 77-test card
+  suite passed on `D:\Francis`; Ruff, format, mypy, and diff-check passed.
+- SENTINEL and VERA final affected-delta disposition: `PASS`.
+- No live service, Orb access, production approval, export, import, learning, or
+  tenant-state mutation occurred.

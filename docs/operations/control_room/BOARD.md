@@ -1,16 +1,14 @@
 # Francis Control Room Board
 
-Updated: 2026-07-14
+Updated: 2026-07-15
 
-Sync cycle: `CR-20260715-006`
+Sync cycle: `CR-20260715-007`
 
-Cycle-start local main:
-`6e883d1d19a18d157ed99799d598a7f8285771fd`.
+Cycle-start local main source head: `ff58d6d9`.
 
-Remote `origin/main` observed during this sync:
-`8c84dc4e972b7921e9204e62f7cd655bd3ede037`.
+Remote `origin/main` observed during this sync: `58bc93a5`.
 
-Push state: operator-gated; this sync is local only unless separately approved.
+Push state: final validated integrated-main push is operator-authorized.
 
 Operator-gated decisions are indexed in `OPERATOR_QUEUE.md`; exact evidence is
 indexed in `EVIDENCE_INDEX.md`.
@@ -35,15 +33,18 @@ GitHub baseline:
 - Task card: `docs/operations/task_cards/managed-copy-safe-delta-approval.md`
 - Branch: `codex/forge-safe-delta-approval`
 - Worktree: `D:\fg`
-- State: `READY`
-- Latest verified base: `7af273af863f8a729f79f45429d8a72653f2036b`
-- Validation: predecessor safe-delta review promoted at `414014e9`; GitHub CI and
-  CodeQL green
+- State: `PROMOTED`
+- Latest promoted source commit: `ff58d6d9`
+- Validation: exact candidate `e799c857` passed the complete card suite and full
+  `scripts/check.ps1` gate, exit `0`; post-promotion long-path remediation and
+  complete 77-test card suite passed on `D:\Francis`
 - Dependencies: exact safe-delta review receipt, live provision/isolation
   lineage, tenant policy, dedicated approval scope
-- Blocker: none for implementation; production facts remain external
-- Next action: implement the bounded decision receipt and focused tests
-- Runtime lease: `LEASE-FORGE-002`; no service or live Orb access permitted
+- Blocker: none for this card; production facts remain external
+- Next action: push integrated main, verify remote CI/CodeQL, then assign the
+  dry-run-only export-preflight card
+- Runtime lease: `LEASE-FORGE-002`; released after test processes exited; no
+  service or live Orb access occurred
 
 ### CR-ARGUS-001 - Lens game observer
 
@@ -58,8 +59,8 @@ GitHub baseline:
   suite, Ruff, format, mypy, parser, VERA and HARBOR reviews passed
 - Dependencies: game-observer runtime config, foreground-process readback,
   situation-model source contract, portable Windows typing
-- Blocker: none; remote CI/CodeQL for promoted head are pending
-- Next action: release seat after remote verdict
+- Blocker: none; final integrated CI/CodeQL are pending
+- Next action: no further ARGUS card work
 - Runtime lease: `LEASE-ARGUS-001` released; no live runtime used
 
 ### CR-LUMEN-001 - Orb right-click delivery / visual-lock alignment

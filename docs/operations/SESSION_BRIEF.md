@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-14, sync cycle `CR-20260714-005` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-007` (America/Chicago)
 
 ## Manager Role
 
@@ -27,12 +27,10 @@ Cold-start order:
 
 ## Canonical Posture
 
-- CR-005 local-`main` parent:
-  `6e883d1d19a18d157ed99799d598a7f8285771fd`; resolve the containing sync
-  commit with `git rev-parse HEAD`. Remote `origin/main`:
-  `8c84dc4e972b7921e9204e62f7cd655bd3ede037`. The local docs-only Control Room
-  commits have not been pushed. Remote CI and CodeQL for `8c84dc4e` are green;
-  that does not validate local-only commits.
+- Local main source head before this sync: `ff58d6d9`; remote `origin/main`:
+  `58bc93a5`. Final integrated push is authorized after this exact bounded sync.
+  CodeQL for `58bc93a5` is green; its CI matrix is still running and is not
+  represented as complete.
 - Canonical phase: Phase 2.
 - Canonical active workstream: Stage 18 / Managed Copies Platform groundwork.
 - Stage 17 is closed by governed receipt
@@ -40,8 +38,8 @@ Cold-start order:
 - Stage 18 remains open. Production has no real customer request, tenant, or
   managed-copy runtime. Never invent customer identity, policy, or business facts.
 - The production gate still requires real operator-supplied tenant and policy
-  facts. FORGE's next executable internal slice is the separate safe-delta
-  approval/rejection receipt; fixtures cannot close or bypass production.
+  facts. The next executable internal slice is a permission-gated, dry-run-only
+  safe-delta export preflight; fixtures cannot close or bypass production.
 - Stage 6 is ledger-closed. Current Lens/Orb work is cross-stage hardening and
   must not be used to claim a new Stage 6 or Stage 18 closure.
 - The live Orb process family is out of scope: do not stop, restart, replace,
@@ -58,12 +56,14 @@ Proof target: an authorized actor can record an immutable approval or rejection
 decision bound to an exact live-aligned safe-delta review while export, import,
 learning, execution, and tenant-state mutation remain disabled.
 
-Current state: safe-delta candidate review is promoted in `414014e9`; local full
-gate, GitHub CI, and CodeQL passed. The decision receipt is not implemented.
+Current state: promoted locally through source head `ff58d6d9`. Exact candidate
+`e799c857` passed the full local gate; SENTINEL and VERA passed the actor-bound
+write/readback contract; post-promotion validation exposed and closed the
+Windows decision-receipt path-length defect.
 
-Next smallest truthful gap: implement dry-run/apply approval or rejection with a
-dedicated scope, immutable redacted receipt, conflict rejection, and validated
-readback. Approval is not export authority.
+Next smallest truthful gap: release FORGE's test-only lease after push evidence,
+then assign the separately governed dry-run export-preflight card. Approval is
+not export authority.
 
 ### Lens game observer
 
@@ -78,8 +78,9 @@ Current state: promoted at `7af273af`. V2 observations compose with teaching,
 stale authority results are discarded, and terminal blocked worker readback is
 PID-correlated. No watcher or live runtime was used.
 
-Next smallest truthful gap: none on the completed card; remote CI/CodeQL verdict
-for `7af273af` remains pending.
+Next smallest truthful gap: none on the completed card. The Linux typing failure
+was corrected in `73d81846`; later completion-model CI drift was corrected in
+`58bc93a5`. Final integrated CI remains pending.
 
 ### Orb right-click delivery / visual-lock alignment
 

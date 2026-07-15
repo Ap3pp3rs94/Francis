@@ -1,14 +1,14 @@
 # Francis Control Room Integration Queue
 
-Updated: 2026-07-14
+Updated: 2026-07-15
 
-FORGE is the active promotion candidate but is not yet eligible for promotion.
-Publishing or pushing any ref is operator-gated.
+CR-FORGE-002 is promoted locally and awaits the authorized integrated-main push
+plus exact remote CI/CodeQL verdict.
 
 | Front | Branch | Worker commit | Worker evidence | Specialist reviews | VERA | ATLAS exact-head validation | Operator gate | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CR-FORGE-001 | `codex/forge-managed-copies-safe-delta` | worker `24658090`; integration `cdfc4a23` | correction focused suite/Ruff/format/mypy/diff-check passed | SENTINEL and HARBOR affected-delta passes | exact-type correction pass | `VAL-20260714-028` full gate exit `0`; rebase proof pending | no production action; final validated main push authorized | `READY_FOR_PROMOTION` |
-| CR-ARGUS-001 | `codex/argus-game-observer` | `683134a7` | focused suite/Ruff/format/mypy/diff-check passed | MERIDIAN/HARBOR static pass; SENTINEL blocks teaching/readback composition | VERA rejected | no further validation until scope reassignment | push gated | `BLOCKED` |
+| CR-FORGE-002 | `codex/forge-safe-delta-approval` | reviewed `49893be5`; rebased `e799c857`; main `ff58d6d9` | 18 decision tests and complete 77-test card suite passed | SENTINEL/HARBOR pass | VERA pass | exact `e799c857` full gate exit `0`; post-promotion path fix focused-green | integrated-main push authorized; no production action | `PROMOTED` |
+| CR-ARGUS-001 | `codex/argus-game-observer` | `7af273af` | 103 card tests and post-promotion 115-test suite passed | MERIDIAN/HARBOR/SENTINEL pass | VERA pass | promoted; portability and completion readback CI fixes followed | final integrated CI pending | `PROMOTED` |
 | CR-LUMEN-001 | `codex/lumen-orb-choreography` | `60070438` | focused suite/Ruff/format/native build/diff-check passed | HARBOR/SENTINEL/ARCHIVIST reject durable sequence/outcome truth | VERA rejected | no further validation until durable contract reassignment | live proof separate; push gated | `BLOCKED` |
 
 Promotion requires an exact worker commit, task-card evidence, required concrete
