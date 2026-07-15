@@ -810,16 +810,22 @@ def _windows_game_library_roots(launcher: str) -> tuple[Path, ...]:
         import winreg
     except ImportError:
         return ()
+    hkey_current_user = getattr(winreg, "HKEY_CURRENT_USER", None)
+    hkey_local_machine = getattr(winreg, "HKEY_LOCAL_MACHINE", None)
+    open_key = getattr(winreg, "OpenKey", None)
+    query_value = getattr(winreg, "QueryValueEx", None)
+    if hkey_current_user is None or hkey_local_machine is None or open_key is None or query_value is None:
+        return ()
     steam_roots: list[Path] = []
     registry_values = (
-        (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
+        (hkey_current_user, r"Software\Valve\Steam", "SteamPath"),
+        (hkey_local_machine, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+        (hkey_local_machine, r"SOFTWARE\Valve\Steam", "InstallPath"),
     )
     for hive, key_path, value_name in registry_values:
         try:
-            with winreg.OpenKey(hive, key_path) as key:
-                value, _value_type = winreg.QueryValueEx(key, value_name)
+            with open_key(hive, key_path) as key:
+                value, _value_type = query_value(key, value_name)
         except OSError:
             continue
         if isinstance(value, str) and value.strip():
