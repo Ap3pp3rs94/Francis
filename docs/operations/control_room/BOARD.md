@@ -2,11 +2,11 @@
 
 Updated: 2026-07-15
 
-Sync cycle: `CR-20260715-008`
+Sync cycle: `CR-20260715-009`
 
-Cycle-start local main source head: `ff58d6d9`.
+Cycle-start local main source head: `287a27c8`.
 
-Remote `origin/main` observed during this sync: `58bc93a5`.
+Remote `origin/main` observed during this sync: `5df8aab0`.
 
 Push state: final validated integrated-main push is operator-authorized.
 
@@ -34,16 +34,17 @@ GitHub baseline:
   `docs/operations/task_cards/managed-copy-safe-delta-export-preflight.md`
 - Branch: `codex/forge-safe-delta-export-preflight`
 - Worktree: `D:\fg`
-- State: `READY`
-- Latest verified base: local main containing CR-008
-- Validation: predecessor decision contract promoted and pushed at `5df8aab0`;
-  exact remote CI/CodeQL pending
+- State: `PROMOTED`
+- Latest promoted source commit: `287a27c8`
+- Validation: 6 focused tests, 2 matrix tests, complete 79-test card suite,
+  SENTINEL/VERA/HARBOR affected review, exact-head full gate, and focused
+  post-promotion checks passed
 - Dependencies: validated approved decision receipt, exact review/candidate,
   live provision/isolation lineage, current tenant policy, dedicated scope
-- Blocker: none for fixture-backed implementation; production facts remain
-  external and may not be fabricated
-- Next action: implement a dry-run-only, no-write preflight with focused tests
-- Runtime lease: `LEASE-FORGE-003`; no service or live Orb access permitted
+- Blocker: none for this card; production facts remain external
+- Next action: push integrated main and assign the pending export-authorization
+  request contract after its bounded card is committed
+- Runtime lease: `LEASE-FORGE-003`; released, with no service or live Orb use
 
 ### CR-FORGE-002 - Managed-copy safe-delta approval
 

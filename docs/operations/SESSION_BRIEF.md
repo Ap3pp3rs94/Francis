@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-15, sync cycle `CR-20260715-008` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-009` (America/Chicago)
 
 ## Manager Role
 
@@ -27,10 +27,8 @@ Cold-start order:
 
 ## Canonical Posture
 
-- Local main source head before this sync: `ff58d6d9`; remote `origin/main`:
-  `58bc93a5`. Final integrated push is authorized after this exact bounded sync.
-  CodeQL for `58bc93a5` is green; its CI matrix is still running and is not
-  represented as complete.
+- Local main source head before this sync: `287a27c8`; remote `origin/main`:
+  `5df8aab0`. Final integrated push is authorized after this bounded sync.
 - Canonical phase: Phase 2.
 - Canonical active workstream: Stage 18 / Managed Copies Platform groundwork.
 - Stage 17 is closed by governed receipt
@@ -38,8 +36,9 @@ Cold-start order:
 - Stage 18 remains open. Production has no real customer request, tenant, or
   managed-copy runtime. Never invent customer identity, policy, or business facts.
 - The production gate still requires real operator-supplied tenant and policy
-  facts. The next executable internal slice is a permission-gated, dry-run-only
-  safe-delta export preflight; fixtures cannot close or bypass production.
+  facts. The next executable internal slice is a permission-gated pending
+  export-authorization request bound to fresh preflight truth; fixtures cannot
+  close or bypass production.
 - Stage 6 is ledger-closed. Current Lens/Orb work is cross-stage hardening and
   must not be used to claim a new Stage 6 or Stage 18 closure.
 - The live Orb process family is out of scope: do not stop, restart, replace,
@@ -56,13 +55,13 @@ Proof target: an authorized actor can dry-run whether one exact approved
 safe-delta candidate remains eligible for future export while no artifact,
 manifest, receipt, export, network, learning, or tenant-state write occurs.
 
-Current state: the decision contract is promoted and pushed in integrated main
-`5df8aab0`; exact remote CI/CodeQL are queued. The preflight task card and
-test-only runtime lease are ready; no production receipts are assumed.
+Current state: promoted to local main at `287a27c8` after exact-head full gate,
+required affected reviews, and focused post-promotion validation. The test-only
+runtime lease is released; no production receipt or effect was created.
 
-Next smallest truthful gap: implement the exact-schema, permission-gated,
-side-effect-free preflight against validated review/decision/current-lineage
-truth. Approval remains evidence, not export authority.
+Next smallest truthful gap: create a separately scoped pending export-
+authorization request bound to freshly recomputed preflight truth. Request
+creation must remain distinct from approval and export authority.
 
 ### Lens game observer
 

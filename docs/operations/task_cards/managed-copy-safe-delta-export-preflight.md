@@ -4,7 +4,12 @@ Task ID: `CR-FORGE-003`
 
 Assigned seat: FORGE
 
-Status: `READY`
+Status: `PROMOTED`
+
+Disposition: promoted to local `main` at `287a27c8` after focused acceptance,
+SENTINEL/VERA/HARBOR affected-delta review, exact-head `scripts/check.ps1` exit
+`0`, and focused post-promotion validation. No live service or production path
+was used.
 
 ## Objective
 

@@ -2,11 +2,12 @@
 
 Updated: 2026-07-15
 
-CR-FORGE-002 is promoted locally and awaits the authorized integrated-main push
+CR-FORGE-003 is promoted locally and awaits the authorized integrated-main push
 plus exact remote CI/CodeQL verdict.
 
 | Front | Branch | Worker commit | Worker evidence | Specialist reviews | VERA | ATLAS exact-head validation | Operator gate | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CR-FORGE-003 | `codex/forge-safe-delta-export-preflight` | `b5fbb3af`; remediation/main `287a27c8` | 6 focused tests, 2 matrix tests, complete 79-test card suite | SENTINEL/HARBOR pass | VERA pass | exact `287a27c8` full gate exit `0`; post-promotion focused-green | integrated-main push authorized; no production action | `PROMOTED` |
 | CR-FORGE-002 | `codex/forge-safe-delta-approval` | reviewed `49893be5`; rebased `e799c857`; main `ff58d6d9` | 18 decision tests and complete 77-test card suite passed | SENTINEL/HARBOR pass | VERA pass | exact `e799c857` full gate exit `0`; post-promotion path fix focused-green | integrated-main push authorized; no production action | `PROMOTED` |
 | CR-ARGUS-001 | `codex/argus-game-observer` | `7af273af` | 103 card tests and post-promotion 115-test suite passed | MERIDIAN/HARBOR/SENTINEL pass | VERA pass | promoted; portability and completion readback CI fixes followed | final integrated CI pending | `PROMOTED` |
 | CR-LUMEN-001 | `codex/lumen-orb-choreography` | `60070438` | focused suite/Ruff/format/native build/diff-check passed | HARBOR/SENTINEL/ARCHIVIST reject durable sequence/outcome truth | VERA rejected | no further validation until durable contract reassignment | live proof separate; push gated | `BLOCKED` |
