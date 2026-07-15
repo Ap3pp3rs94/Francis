@@ -4,7 +4,7 @@ Task ID: `CR-ARGUS-001`
 
 Assigned seat: ARGUS
 
-Status: `REMEDIATION_REQUIRED` at `2e454ba5` after ATLAS pre-review
+Status: `ACTIVE` after rebase; current candidate `fa74bdfd`
 
 ## Objective
 
@@ -38,8 +38,12 @@ contract that composes safely with the Lens situation model.
 - `config/runtime/lens/game-observer.json`
 - `src/francis/lens/game_observer.py`
 - `src/francis/lens/situation_model.py`
+- `src/francis/apprenticeship_game_teaching.py`
 - `tests/unit/test_lens_game_observer.py`
 - `tests/unit/test_lens_situation_model.py`
+- `tests/unit/test_apprenticeship_game_teaching.py`
+- `tests/unit/test_apprenticeship_game_episode_review.py`
+- `tests/unit/test_lens_perception_worker.py`
 
 ## Do Not Touch
 
@@ -55,6 +59,7 @@ contract that composes safely with the Lens situation model.
 - `lens.game_observer.runtime_config`
 - `lens.game.observation`
 - `lens.perception.situation_model_readback`
+- `apprenticeship.game_teaching.observation`
 - frame ID, receipt ID, target identity, process identity, model identity, and
   teaching-review lineage checks
 - local-only inference, foreground-target requirement, and no-input-authority
@@ -81,14 +86,20 @@ contract that composes safely with the Lens situation model.
 - No watcher is launched, no process is manipulated, and no input authority is
   introduced by tests or implementation.
 - Tests change in step with code.
+- The v2 observer composes directly with the teaching recorder. Recognized v1
+  observations remain blocked as legacy rather than silently normalized, and
+  unknown or Boolean contract versions fail closed.
+- An asynchronous classification result is discarded when its authority receipt
+  rotates before commit; it returns `semantic_warming` and cannot write a
+  teaching event under stale authority.
 
 Required commands, all with exit code 0:
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py -q
-.venv\Scripts\python.exe -m ruff check src/francis/lens/game_observer.py src/francis/lens/situation_model.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py
-.venv\Scripts\python.exe -m ruff format --check src/francis/lens/game_observer.py src/francis/lens/situation_model.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py
-.venv\Scripts\python.exe -m mypy src/francis/lens/game_observer.py src/francis/lens/situation_model.py
+.venv\Scripts\python.exe -m pytest tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py tests/unit/test_apprenticeship_game_teaching.py tests/unit/test_apprenticeship_game_episode_review.py tests/unit/test_lens_perception_worker.py -q
+.venv\Scripts\python.exe -m ruff check src/francis/lens/game_observer.py src/francis/lens/situation_model.py src/francis/apprenticeship_game_teaching.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py tests/unit/test_apprenticeship_game_teaching.py tests/unit/test_apprenticeship_game_episode_review.py tests/unit/test_lens_perception_worker.py
+.venv\Scripts\python.exe -m ruff format --check src/francis/lens/game_observer.py src/francis/lens/situation_model.py src/francis/apprenticeship_game_teaching.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py tests/unit/test_apprenticeship_game_teaching.py tests/unit/test_apprenticeship_game_episode_review.py tests/unit/test_lens_perception_worker.py
+.venv\Scripts\python.exe -m mypy src/francis/lens/game_observer.py src/francis/lens/situation_model.py src/francis/apprenticeship_game_teaching.py
 git diff --check main...HEAD
 .\scripts\check.ps1
 ```
@@ -116,6 +127,12 @@ identifiers, timestamps, counts, text fields, blockers, and review semantics
 before any field is projected into the situation model. Add crafted lineage
 regressions proving malformed teaching payloads fail closed. Evidence:
 `MSG-20260714-016`.
+
+Compose the current v2 observer producer with the teaching recorder without
+weakening legacy handling. Persisting v1 is out of scope because the episode
+receipt schema cannot represent that evolution truthfully. Add direct tests for
+v2 recording, precise v1/unknown-version blockers, observer-to-recorder
+composition, and authority-receipt rotation during classification.
 
 ## Worker Receipt
 
