@@ -64,6 +64,11 @@ from francis.managed_copy_safe_delta_export_authorization_decision import (
     record_managed_copy_safe_delta_export_authorization_decision,
 )
 from francis.managed_copy_safe_delta_export_artifact_plan import managed_copy_safe_delta_export_artifact_plan
+from francis.managed_copy_rogue_detection_assessment import (
+    managed_copy_rogue_detection_assessment_plan,
+    managed_copy_rogue_detection_assessments_readback,
+    record_managed_copy_rogue_detection_assessment,
+)
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -770,6 +775,8 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_export_artifact_plan": "/managed-copies/safe-delta-export-artifact-plan",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+            "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
+            "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "sla_commitment_review": "/managed-copies/sla-commitment-review",
             "roles_contract": "/managed-copies/roles-contract",
@@ -3438,6 +3445,29 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
         "support_backdoor_allowed": False,
         "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
+
+
+def managed_copy_rogue_detection_assessment_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    plan = managed_copy_rogue_detection_assessment_plan(payload, actor=actor)
+    outcome: dict[str, Any] = plan
+    if payload.get("dry_run") is False:
+        outcome = record_managed_copy_rogue_detection_assessment(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("assessment_fingerprint")).strip(),
+            confirmed=payload.get("confirm_rogue_signal_assessment") is True,
+        )
+    return {
+        **plan,
+        **outcome,
+        "kind": "francis.stage18.managed_copies.rogue_detection_assessment",
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+    }
+
+
+def managed_copy_rogue_detection_assessments_snapshot(**kwargs: Any) -> dict[str, Any]:
+    return managed_copy_rogue_detection_assessments_readback(**kwargs)
 
 
 def managed_copy_rogue_recovery_review_blocked_snapshot(

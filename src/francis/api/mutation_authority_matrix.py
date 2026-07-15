@@ -1420,6 +1420,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Event actor remains provenance; request_actor/api_actor can carry the API caller identity for scoped writes.",
     ),
     AuthorityRule(
+        family="managed_copies_rogue_detection_assessment",
+        prefixes=("/managed-copies/rogue-detection-assessment",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.rogue_recovery.write",
+        approval_requirement="exact live provision and structural-isolation lineage plus explicit confirmation",
+        receipt_behavior="immutable redacted rogue-signal assessment receipt only",
+        denial_behavior="api_permission_denied before provision, isolation, or evidence projection",
+        governance_maturity="permission_gated_assessment_only",
+        notes="Never declares rogue detection or grants halt, quarantine, replacement, restore, execution, or mutation authority.",
+    ),
+    AuthorityRule(
         family="managed_copies_safe_delta_export_artifact_plan",
         prefixes=("/managed-copies/safe-delta-export-artifact-plan",),
         required_actor="payload.request_actor",

@@ -404,6 +404,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert artifact_plan["required_scope"] == "managed_copies.safe_delta.export.artifact.preflight"
     assert "writes no plan, receipt, artifact" in artifact_plan["receipt_behavior"]
 
+    rogue_assessment = entries["/managed-copies/rogue-detection-assessment"]
+    assert rogue_assessment["family"] == "managed_copies_rogue_detection_assessment"
+    assert rogue_assessment["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert "Never declares rogue detection" in rogue_assessment["notes"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

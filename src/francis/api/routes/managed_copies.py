@@ -39,6 +39,8 @@ from francis.managed_copies import (
     managed_copy_isolation_verification_snapshot,
     managed_copy_isolation_verifications_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
+    managed_copy_rogue_detection_assessment_snapshot,
+    managed_copy_rogue_detection_assessments_snapshot,
     managed_copy_rogue_recovery_review_blocked_snapshot,
     managed_copy_role_authority_review_blocked_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
@@ -558,6 +560,33 @@ def safe_delta_export_artifact_plan(payload: dict[str, Any], request: Request) -
 @router.get("/rogue-recovery-contract")
 def rogue_recovery_contract() -> dict[str, Any]:
     return managed_copy_rogue_recovery_contract_snapshot()
+
+
+@router.post("/rogue-detection-assessment")
+def rogue_detection_assessment(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor, required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE, route=request.url.path, method=request.method
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_assessing_managed_copy_rogue_signal",
+        )
+    return managed_copy_rogue_detection_assessment_snapshot(payload, actor=actor)
+
+
+@router.get("/rogue-detection-assessments")
+def rogue_detection_assessments(
+    copy_id: str = "", provisioning_receipt_id: str = "", isolation_verification_receipt_id: str = "", limit: int = 20
+) -> dict[str, Any]:
+    return managed_copy_rogue_detection_assessments_snapshot(
+        copy_id=copy_id,
+        provisioning_receipt_id=provisioning_receipt_id,
+        isolation_verification_receipt_id=isolation_verification_receipt_id,
+        limit=limit,
+    )
 
 
 @router.post("/rogue-recovery-review")

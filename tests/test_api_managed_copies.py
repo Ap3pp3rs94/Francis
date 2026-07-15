@@ -15,6 +15,7 @@ import francis.managed_copy_safe_delta_export as safe_delta_export
 import francis.managed_copy_safe_delta_export_authorization as safe_delta_export_authorization
 import francis.managed_copy_safe_delta_export_authorization_decision as safe_delta_export_authorization_decision
 import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export_artifact_plan
+import francis.managed_copy_rogue_detection_assessment as rogue_detection_assessment
 from francis.api.app import create_app
 
 
@@ -68,6 +69,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_export_artifact_plan": "/managed-copies/safe-delta-export-artifact-plan",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+        "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
+        "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "sla_commitment_review": "/managed-copies/sla-commitment-review",
         "roles_contract": "/managed-copies/roles-contract",
@@ -3572,6 +3575,121 @@ def test_managed_copy_rogue_recovery_review_blocks_scoped_actor_until_stage17_cl
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
+
+
+def _rogue_assessment_fixture(monkeypatch, tmp_path):
+    source_state, config_path = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path)
+    source_state["isolation"]["verification_fingerprint"] = "c" * 64
+    monkeypatch.setattr(
+        rogue_detection_assessment,
+        "managed_copy_provision_for_copy",
+        managed_copy_safe_delta.managed_copy_provision_for_copy,
+    )
+    monkeypatch.setattr(
+        rogue_detection_assessment,
+        "latest_managed_copy_isolation_verification_for_provision",
+        managed_copy_safe_delta.latest_managed_copy_isolation_verification_for_provision,
+    )
+    monkeypatch.setattr(
+        rogue_detection_assessment, "_signal_catalog", lambda: [{"id": "governance_drift", "severity": "high"}]
+    )
+    payload = {
+        "request_actor": "rogue.assessor",
+        "copy_id": source_state["provision"]["copy_id"],
+        "provisioning_receipt_id": source_state["provision"]["receipt_id"],
+        "isolation_verification_receipt_id": source_state["isolation"]["receipt_id"],
+        "signal_id": "governance_drift",
+        "severity": "high",
+        "incident_fingerprint": "d" * 64,
+        "evidence_reference_hashes": ["e" * 64, "f" * 64],
+        "evidence_reference_count": 2,
+        "dry_run": True,
+    }
+    return source_state, config_path, payload
+
+
+def test_managed_copy_rogue_detection_assessment_plan_record_readback_is_assessment_only(monkeypatch, tmp_path) -> None:
+    _, _, payload = _rogue_assessment_fixture(monkeypatch, tmp_path.parent / "rz-ready")
+    plan = rogue_detection_assessment.managed_copy_rogue_detection_assessment_plan(
+        payload, actor=payload["request_actor"]
+    )
+    assert plan["status"] == "rogue_signal_assessed"
+    assert len(plan["assessment_fingerprint"]) == 64
+    unconfirmed = rogue_detection_assessment.record_managed_copy_rogue_detection_assessment(
+        plan, provided_fingerprint=plan["assessment_fingerprint"], confirmed=False
+    )
+    assert unconfirmed["writes_receipt"] is False
+    recorded = rogue_detection_assessment.record_managed_copy_rogue_detection_assessment(
+        plan, provided_fingerprint=plan["assessment_fingerprint"], confirmed=True
+    )
+    assert recorded["status"] == "rogue_signal_assessed"
+    assert recorded["writes_receipt"] is True
+    replay = rogue_detection_assessment.record_managed_copy_rogue_detection_assessment(
+        plan, provided_fingerprint=plan["assessment_fingerprint"], confirmed=True
+    )
+    assert replay["writes_receipt"] is False
+    readback = rogue_detection_assessment.managed_copy_rogue_detection_assessments_readback(
+        copy_id=payload["copy_id"],
+        provisioning_receipt_id=payload["provisioning_receipt_id"],
+        isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
+    )
+    assert readback["valid_count"] == 1
+    for flag in (
+        "rogue_detected",
+        "halts_copy",
+        "quarantines_copy",
+        "replaces_copy",
+        "restores_copy",
+        "uses_tools",
+        "uses_shell",
+        "uses_network",
+        "writes_tenant_state",
+        "grants_mutation_authority",
+    ):
+        assert recorded[flag] is False
+
+
+def test_managed_copy_rogue_detection_assessment_schema_and_drift_fail_closed(monkeypatch, tmp_path) -> None:
+    source_state, _, payload = _rogue_assessment_fixture(monkeypatch, tmp_path.parent / "rz-block")
+    for case in (
+        {**payload, "dry_run": 1},
+        {**payload, "evidence_reference_count": 2.0},
+        {**payload, "evidence_reference_hashes": ["e" * 64, "e" * 64]},
+        {**payload, "severity": "critical"},
+        {**payload, "incident_fingerprint": "bad"},
+        {**payload, "raw_incident": "secret"},
+        {**payload, "credential": "secret"},
+        {**payload, "action": "quarantine"},
+    ):
+        blocked = rogue_detection_assessment.managed_copy_rogue_detection_assessment_plan(
+            case, actor=payload["request_actor"]
+        )
+        assert blocked["ok"] is False
+        assert blocked["assessment_fingerprint"] == ""
+    source_state["isolation"]["live_state_aligned"] = False
+    drifted = rogue_detection_assessment.managed_copy_rogue_detection_assessment_plan(
+        payload, actor=payload["request_actor"]
+    )
+    assert drifted["ok"] is False
+
+
+def test_managed_copy_rogue_detection_assessment_unscoped_and_production_empty(monkeypatch, tmp_path) -> None:
+    root = tmp_path / "rz-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post("/managed-copies/rogue-detection-assessment", json={"request_actor": "unscoped", "dry_run": True})
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert not root.exists()
+    empty = rogue_detection_assessment.managed_copy_rogue_detection_assessments_readback(
+        copy_id="missing", provisioning_receipt_id="missing", isolation_verification_receipt_id="missing"
+    )
+    assert empty["status"] == "empty"
+    assert empty["valid_count"] == 0
 
 
 def _configure_safe_delta_receipt_test_sources(
