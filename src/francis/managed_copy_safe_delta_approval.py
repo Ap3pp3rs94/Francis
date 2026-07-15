@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_secret_text
 from francis.managed_copy_isolation import (
     latest_managed_copy_isolation_verification_for_provision,
     managed_copy_isolation_guarded_subpath,
@@ -88,7 +89,7 @@ def managed_copy_safe_delta_decision_plan(payload: dict[str, Any], *, actor: str
     provision_id = _text(payload.get("provisioning_receipt_id"))
     isolation_id = _text(payload.get("isolation_verification_receipt_id"))
     review_fingerprint = _text(payload.get("review_fingerprint"))
-    safe_actor = _text(actor)
+    safe_actor = _redacted_text(actor)[:240]
     blockers: list[str] = []
     if unknown_fields:
         blockers.append("safe_delta_decision_unknown_fields")
@@ -287,16 +288,20 @@ def managed_copy_safe_delta_decisions_readback(
     )
     if directory is None or not directory.is_dir():
         return _readback_payload([], [], status="empty")
-    paths = sorted(directory.glob("*.json"))[: max(1, min(int(limit), 500))]
+    paths = sorted(directory.glob("*.json"))
     items = [_read_candidate(path)[1] for path in paths]
     valid = [
         item
         for path, item in zip(paths, items, strict=True)
         if _valid_decision_receipt(item, path=path, directory=directory)
+        and _text(item.get("review_fingerprint")) == plan_seed["review_fingerprint"]
     ]
-    aligned = [item for item in valid if _live_aligned(item)]
+    valid.sort(key=_receipt_chronology_key)
+    aligned = [item for item in valid if _live_aligned(item)][-_safe_limit(limit) :]
     return _readback_payload(
-        items, aligned, status=_text(aligned[-1].get("decision")) if aligned else "invalid_or_drifted"
+        [dict(item) for item in valid[-_safe_limit(limit) :]],
+        aligned,
+        status=_text(aligned[-1].get("decision")) if aligned else "invalid_or_drifted",
     )
 
 
@@ -392,6 +397,12 @@ def _readback_payload(items: list[dict[str, Any]], valid: list[dict[str, Any]], 
     }
 
 
+def _receipt_chronology_key(item: dict[str, Any]) -> tuple[int, str, str]:
+    recorded_ts = item.get("recorded_ts")
+    timestamp = recorded_ts if isinstance(recorded_ts, int) and not isinstance(recorded_ts, bool) else 0
+    return timestamp, _text(item.get("receipt_id")), _text(item.get("receipt_fingerprint"))
+
+
 def _result(receipt: dict[str, Any], *, status: str, writes_receipt: bool) -> dict[str, Any]:
     decision = _text(receipt.get("decision"))
     return {
@@ -466,3 +477,15 @@ def _is_sha256(value: Any) -> bool:
 
 def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _redacted_text(value: Any) -> str:
+    return redact_secret_text(_text(value)).strip()
+
+
+def _safe_limit(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = 20
+    return min(max(parsed, 1), 500)

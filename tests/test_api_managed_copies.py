@@ -3880,8 +3880,17 @@ def test_managed_copy_safe_delta_decision_readback_rejects_tampering_and_product
     assert invalid["safe_delta_approved"] is False
     assert recorded["receipt_id"]
 
-    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "production-empty"))
-    monkeypatch.setattr(safe_delta_approval, "managed_copy_provision_for_copy", lambda *args, **kwargs: {})
+    from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
+    from francis.managed_copy_provisioning import managed_copy_provision_for_copy
+
+    production_empty_root = tmp_path / "production-empty"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(production_empty_root))
+    monkeypatch.setattr(safe_delta_approval, "managed_copy_provision_for_copy", managed_copy_provision_for_copy)
+    monkeypatch.setattr(
+        safe_delta_approval,
+        "latest_managed_copy_isolation_verification_for_provision",
+        latest_managed_copy_isolation_verification_for_provision,
+    )
     empty = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
         copy_id=plan["copy_id"],
         provisioning_receipt_id=plan["provisioning_receipt_id"],
@@ -3890,6 +3899,99 @@ def test_managed_copy_safe_delta_decision_readback_rejects_tampering_and_product
     )
     assert empty["status"] == "empty"
     assert empty["count"] == 0
+    assert empty["valid_count"] == 0
+    assert empty["latest_valid_receipt"] == {}
+    assert empty["safe_delta_approved"] is False
+    assert not production_empty_root.exists()
+
+
+def test_managed_copy_safe_delta_decision_redacts_actor_before_fingerprint_receipt_audit_and_replay(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "actor-redaction")
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    raw_secret = "super-secret-actor-value-123456"
+    raw_actor = f"operator@example.com token={raw_secret}"
+    audit_events: list[dict[str, Any]] = []
+
+    def capture_audit(event: str, **fields: Any) -> dict[str, Any]:
+        payload = {"event": event, **fields}
+        audit_events.append(payload)
+        return payload
+
+    monkeypatch.setattr(safe_delta_approval, "audit_record", capture_audit)
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, actor=raw_actor)
+    assert plan["ok"] is True
+    assert raw_secret not in plan["actor"]
+    assert raw_actor not in json.dumps(plan)
+    assert len(plan["actor"]) <= 240
+
+    recorded = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=True
+    )
+    replay_plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review, actor=raw_actor)
+    replay = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        replay_plan, provided_fingerprint=replay_plan["decision_fingerprint"], confirmed=True
+    )
+    readback = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
+        copy_id=plan["copy_id"],
+        provisioning_receipt_id=plan["provisioning_receipt_id"],
+        isolation_verification_receipt_id=plan["isolation_verification_receipt_id"],
+        review_fingerprint=plan["review_fingerprint"],
+    )
+    directory = safe_delta_approval._decision_directory(plan, create=False)
+    assert directory is not None
+    serialized = "\n".join(
+        [json.dumps(recorded), json.dumps(replay), json.dumps(readback), json.dumps(audit_events)]
+        + [path.read_text(encoding="utf-8") for path in directory.glob("*.json")]
+    )
+    assert raw_secret not in serialized
+    assert raw_actor not in serialized
+    assert replay["status"] == "already_decided"
+    assert replay["receipt_id"] == recorded["receipt_id"]
+    assert replay_plan["decision_fingerprint"] == plan["decision_fingerprint"]
+    assert audit_events[0]["actor"] == plan["actor"]
+
+
+def test_managed_copy_safe_delta_decision_readback_filters_exact_requested_review(monkeypatch, tmp_path) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "two-reviews")
+    review_a = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor="safe-delta.reviewer-a", summary_fingerprint="a" * 64)
+    )
+    review_b = _record_safe_delta_receipt(
+        _safe_delta_receipt_test_plan(source_state, actor="safe-delta.reviewer-b", summary_fingerprint="b" * 64)
+    )
+    plan_a = _safe_delta_decision_test_plan(monkeypatch, source_state, review_a, decision="approved")
+    plan_b = _safe_delta_decision_test_plan(monkeypatch, source_state, review_b, decision="rejected")
+    recorded_a = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan_a, provided_fingerprint=plan_a["decision_fingerprint"], confirmed=True
+    )
+    recorded_b = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan_b, provided_fingerprint=plan_b["decision_fingerprint"], confirmed=True
+    )
+    assert recorded_a["ok"] is True
+    assert recorded_b["ok"] is True
+
+    readback_a = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
+        copy_id=plan_a["copy_id"],
+        provisioning_receipt_id=plan_a["provisioning_receipt_id"],
+        isolation_verification_receipt_id=plan_a["isolation_verification_receipt_id"],
+        review_fingerprint=plan_a["review_fingerprint"],
+    )
+    readback_b = safe_delta_approval.managed_copy_safe_delta_decisions_readback(
+        copy_id=plan_b["copy_id"],
+        provisioning_receipt_id=plan_b["provisioning_receipt_id"],
+        isolation_verification_receipt_id=plan_b["isolation_verification_receipt_id"],
+        review_fingerprint=plan_b["review_fingerprint"],
+    )
+    assert readback_a["count"] == readback_a["valid_count"] == 1
+    assert readback_a["decision"] == "approved"
+    assert readback_a["latest_valid_receipt_id"] == recorded_a["receipt_id"]
+    assert recorded_b["receipt_id"] not in json.dumps(readback_a)
+    assert readback_b["count"] == readback_b["valid_count"] == 1
+    assert readback_b["decision"] == "rejected"
+    assert readback_b["latest_valid_receipt_id"] == recorded_b["receipt_id"]
+    assert recorded_a["receipt_id"] not in json.dumps(readback_b)
 
 
 def test_managed_copy_safe_delta_decision_rejects_cross_tenant_lineage(monkeypatch, tmp_path) -> None:
