@@ -26,6 +26,20 @@ GitHub baseline:
 
 ## Fronts
 
+### CR-FORGE-007 - Rogue detection assessment
+
+- Agent: FORGE
+- Roadmap: Phase 2, Stage 18 Managed Copies Platform
+- Task card: `docs/operations/task_cards/managed-copy-rogue-detection-assessment.md`
+- Branch: `codex/forge-rogue-detection-assessment`
+- Worktree: `D:\fg`
+- State: `READY`
+- Dependencies: exact provision and structural-isolation receipts plus bounded
+  fixture signal/evidence references; production incidents are not inferred
+- Blocker: none for fixture-backed assessment software
+- Next action: implement exact-schema immutable assessment receipt and readback
+- Runtime lease: `LEASE-FORGE-007`; no service or live Orb access permitted
+
 ### CR-FORGE-006 - Safe-delta export artifact plan
 
 - Agent: FORGE

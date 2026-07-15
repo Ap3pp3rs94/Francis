@@ -47,6 +47,21 @@ Cold-start order:
 
 ## Active Fronts
 
+### Managed copies / rogue detection assessment
+
+Task card: `docs/operations/task_cards/managed-copy-rogue-detection-assessment.md`
+Seat: FORGE. Branch: `codex/forge-rogue-detection-assessment`.
+
+Proof target: one structurally verified fixture copy can record an immutable,
+redacted rogue-signal assessment bound to canonical signal severity and hashed
+evidence references. It does not declare the copy rogue or perform halt,
+quarantine, replacement, restore, or any runtime action.
+
+Current state: task card and isolated test-only lease are ready.
+
+Next smallest truthful gap: implement fail-closed planning, recording, and
+validated readback against provision/isolation lineage.
+
 ### Managed copies / safe-delta export artifact plan
 
 Task card: `docs/operations/task_cards/managed-copy-safe-delta-export-artifact-plan.md`
