@@ -60,10 +60,12 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is a permission-gated, dry-run-only safe-delta export preflight
-bound to an approved decision and current live lineage/policy. Production copy
-creation still requires real operator-supplied tenant and policy facts; those
-facts are not inferred or fabricated.
+The current goal is a permission-gated safe-delta export authorization-request
+contract bound to a freshly validated export preflight and current live
+lineage/policy. It may create only a pending request receipt; it cannot approve
+or perform export. Production copy creation still requires real
+operator-supplied tenant and policy facts; those facts are not inferred or
+fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -124,6 +126,36 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 09:25Z - Stage 18 safe-delta export preflight promoted
+
+Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now
+includes a permission-gated, exact-schema, dry-run-only preflight that
+revalidates one approved safe-delta review against live provision, isolation,
+and tenant-policy lineage. It writes nothing and grants no export, execution,
+or mutation authority.
+
+Evidence:
+
+- Exact candidate `287a27c8` passed 6 focused preflight tests, 2 authority-matrix
+  tests, the complete 79-test managed-copy card suite, changed-path Ruff,
+  format, mypy, and diff-check.
+- SENTINEL, VERA, and HARBOR passed the affected remediation delta covering
+  authoritative actor binding before lineage readback, exact schema and drift
+  rejection, deterministic no-effect output, and dedicated scope reporting.
+- Exact candidate `287a27c8` passed `scripts/check.ps1` through repository-wide
+  Ruff, format, mypy over 668 source files, and pytest at 100%, exit `0`.
+- Post-promotion validation on `D:\Francis` passed all 6 preflight tests and
+  both authority-matrix tests. No live service, Orb process, production receipt,
+  export artifact, network operation, or tenant mutation occurred.
+
+Remaining truthful gap:
+
+- Implement a separately scoped, immutable pending export-authorization request
+  bound to a freshly recomputed preflight and exact action classification. The
+  request must remain distinct from approval and export execution.
+- Actual approval, export, import, global learning, production tenant creation,
+  Stage 18 closure, FR-018 clearance, and physical validation remain unclaimed.
 
 ### 2026-07-15 07:37Z - Stage 18 safe-delta decision contract promoted
 

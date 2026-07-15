@@ -58,7 +58,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["latest_ledger_entry"]["title"] == (
-        "2026-07-15 07:37Z - Stage 18 safe-delta decision contract promoted"
+        "2026-07-15 09:25Z - Stage 18 safe-delta export preflight promoted"
     )
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
         "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"
@@ -68,8 +68,9 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "a permission-gated, dry-run-only safe-delta export preflight bound to an approved "
-            "decision and current live lineage/policy. Production copy creation still requires "
+            "a permission-gated safe-delta export authorization-request contract bound to a freshly "
+            "validated export preflight and current live lineage/policy. It may create only a pending "
+            "request receipt; it cannot approve or perform export. Production copy creation still requires "
             "real operator-supplied tenant and policy facts; those facts are not inferred or fabricated."
         ),
         "read_only_contract": True,

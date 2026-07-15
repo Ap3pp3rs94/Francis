@@ -38,8 +38,9 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "a permission-gated, dry-run-only safe-delta export preflight bound to an approved "
-            "decision and current live lineage/policy. Production copy creation still requires "
+            "a permission-gated safe-delta export authorization-request contract bound to a freshly "
+            "validated export preflight and current live lineage/policy. It may create only a pending "
+            "request receipt; it cannot approve or perform export. Production copy creation still requires "
             "real operator-supplied tenant and policy facts; those facts are not inferred or fabricated."
         ),
         "read_only_contract": True,
@@ -189,7 +190,7 @@ def test_stage17_roadmap_steering_excludes_fr017_forearm_naming_collision() -> N
     matrix = (root / "docs" / "operations" / "STAGE17_CLOSURE_MATRIX.md").read_text(encoding="utf-8")
     manifest = (root / "FR-017_Stage17_Package" / "FR-017-STAGE17-PACKAGE-MANIFEST.json").read_text(encoding="utf-8")
 
-    assert "The current goal is a permission-gated, dry-run-only safe-delta export preflight" in ledger
+    assert "The current goal is a permission-gated safe-delta export authorization-request" in ledger
     assert "stage17_capability_economy_closure_afd0fa32f7d1" in ledger
     assert "The current goal is the FR-017 operator/physical evidence boundary" not in ledger
     assert "The remaining gates are the physically present" not in matrix
