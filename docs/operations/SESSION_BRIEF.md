@@ -1,6 +1,6 @@
 # Francis Control Room Session Brief
 
-Updated: 2026-07-15, sync cycle `CR-20260715-010` (America/Chicago)
+Updated: 2026-07-15, sync cycle `CR-20260715-011` (America/Chicago)
 
 ## Manager Role
 
@@ -46,6 +46,23 @@ Cold-start order:
 
 ## Active Fronts
 
+### Managed copies / safe-delta export authorization decision
+
+Task card:
+`docs/operations/task_cards/managed-copy-safe-delta-export-authorization-decision.md`
+Seat: FORGE. Branch: `codex/forge-safe-delta-export-authorization-decision`.
+
+Proof target: the software can plan and explicitly record one immutable
+approved/rejected decision for an exact live-valid pending request while every
+export effect remains disabled. Fixture outcomes are not real approvals.
+
+Current state: task card and test-only lease are ready on local main. The
+predecessor request contract is promoted at `44048d85`; compact-path correction
+`f3cc8c7c` passed focused post-promotion checks.
+
+Next smallest truthful gap: implement the decision plan/record/readback contract
+with final in-lock live replanning and contradictory-decision rejection.
+
 ### Managed copies / safe-delta export authorization request
 
 Task card:
@@ -57,11 +74,12 @@ redacted pending request for a precisely classified future export action only
 when the safe-delta preflight and all source lineage remain current. The request
 does not approve or perform export.
 
-Current state: task card and test-only lease are ready on local main. Integrated
-head `7e757513` is pushed; exact remote CI/CodeQL are pending.
+Current state: promoted at `44048d85` after exact-head full gate and required
+reviews; `f3cc8c7c` corrected one Windows-long fixture path and passed all 6
+focused tests. The lease is released and no production effect occurred.
 
-Next smallest truthful gap: implement the plan/record/readback contract with
-write-boundary replanning and explicit request-versus-approval separation.
+Next smallest truthful gap: CR-FORGE-005 separately decides one exact pending
+request without creating export authority beyond that decision receipt.
 
 ### Managed copies / safe-delta export preflight
 

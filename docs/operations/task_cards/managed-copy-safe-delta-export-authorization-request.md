@@ -4,7 +4,12 @@ Task ID: `CR-FORGE-004`
 
 Assigned seat: FORGE
 
-Status: `READY`
+Status: `PROMOTED`
+
+Disposition: promoted to local `main` at `44048d85`; post-promotion Windows
+fixture-path correction `f3cc8c7c` passed all focused request tests. Exact-head
+full gate and SENTINEL/VERA/HARBOR reviews passed. No production or live path was
+used.
 
 ## Objective
 

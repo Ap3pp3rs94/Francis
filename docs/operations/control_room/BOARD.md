@@ -2,7 +2,7 @@
 
 Updated: 2026-07-15
 
-Sync cycle: `CR-20260715-010`
+Sync cycle: `CR-20260715-011`
 
 Cycle-start local main source head: `287a27c8`.
 
@@ -26,6 +26,26 @@ GitHub baseline:
 
 ## Fronts
 
+### CR-FORGE-005 - Safe-delta export authorization decision
+
+- Agent: FORGE
+- Roadmap: Phase 2, Stage 18 Managed Copies Platform
+- Task card:
+  `docs/operations/task_cards/managed-copy-safe-delta-export-authorization-decision.md`
+- Branch: `codex/forge-safe-delta-export-authorization-decision`
+- Worktree: `D:\fg`
+- State: `READY`
+- Latest verified base: local main containing CR-011
+- Validation: predecessor request contract promoted at `44048d85`; focused
+  Windows-path integration correction `f3cc8c7c` passed
+- Dependencies: exact live-valid pending request, current source lineage/policy,
+  dedicated decision scope; real decisions remain operator-only
+- Blocker: none for fixture-backed software validation; no production approval
+  or decision may be fabricated
+- Next action: implement dry-run, explicit-confirm record, validated readback,
+  and contradictory-decision rejection without any export effect
+- Runtime lease: `LEASE-FORGE-005`; no service or live Orb access permitted
+
 ### CR-FORGE-004 - Safe-delta export authorization request
 
 - Agent: FORGE
@@ -34,17 +54,17 @@ GitHub baseline:
   `docs/operations/task_cards/managed-copy-safe-delta-export-authorization-request.md`
 - Branch: `codex/forge-safe-delta-export-authorization-request`
 - Worktree: `D:\fg`
-- State: `READY`
-- Latest verified base: local main containing CR-010
-- Validation: predecessor export preflight promoted at `287a27c8`; integrated
-  main `7e757513` pushed with exact CI/CodeQL pending
+- State: `PROMOTED`
+- Latest promoted source commit: `44048d85`; integration test correction
+  `f3cc8c7c`
+- Validation: 6 focused tests, complete 85-test card suite,
+  SENTINEL/VERA/HARBOR pass, exact-head full gate, and focused post-promotion
+  checks passed
 - Dependencies: freshly recomputed eligible preflight, exact source lineage,
   current tenant policy, dedicated request scope
-- Blocker: none for fixture-backed implementation; production action facts and
-  any approval remain operator-controlled and may not be fabricated
-- Next action: implement plan, confirmed record, validated readback, and
-  fail-closed drift/replay tests without any export effect
-- Runtime lease: `LEASE-FORGE-004`; no service or live Orb access permitted
+- Blocker: none for this card; production facts and approval remain external
+- Next action: push integrated main and continue with CR-FORGE-005
+- Runtime lease: `LEASE-FORGE-004`; released with no service or live Orb use
 
 ### CR-FORGE-003 - Managed-copy safe-delta export preflight
 
