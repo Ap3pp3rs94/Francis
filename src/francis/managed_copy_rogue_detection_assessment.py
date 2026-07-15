@@ -226,7 +226,7 @@ def managed_copy_rogue_detection_assessments_readback(
         "provisioning_receipt_id": _text(provisioning_receipt_id),
         "isolation_verification_receipt_id": _text(isolation_verification_receipt_id),
     }
-    directory = _directory(request, create=False)
+    directory = _directory(request, create=False, require_live=False)
     if directory is None or not directory.is_dir():
         return _readback([], "empty")
     valid = []
@@ -254,7 +254,7 @@ def _signal_catalog() -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-def _directory(request: dict[str, Any], *, create: bool) -> Path | None:
+def _directory(request: dict[str, Any], *, create: bool, require_live: bool = True) -> Path | None:
     provision = managed_copy_provision_for_copy(
         _text(request.get("copy_id")), provisioning_receipt_id=_text(request.get("provisioning_receipt_id"))
     )
@@ -273,7 +273,7 @@ def _directory(request: dict[str, Any], *, create: bool) -> Path | None:
         domain="tenant_receipts",
         relative_parts=("rz",),
         create_leaf_directory=create,
-        require_live=True,
+        require_live=require_live,
     )
 
 

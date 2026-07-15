@@ -3656,8 +3656,9 @@ def test_managed_copy_rogue_detection_assessment_plan_record_readback_is_assessm
         provisioning_receipt_id=payload["provisioning_receipt_id"],
         isolation_verification_receipt_id=payload["isolation_verification_receipt_id"],
     )
-    assert drifted_readback["status"] in {"empty", "invalid_or_drifted"}
+    assert drifted_readback["status"] == "invalid_or_drifted"
     assert drifted_readback["valid_count"] == 0
+    assert drifted_readback["items"] == []
     assert drifted_readback["rogue_detected"] is False
 
 
