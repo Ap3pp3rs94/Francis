@@ -387,7 +387,7 @@ def _decision_directory(plan: dict[str, Any], *, create: bool) -> Path | None:
         provision,
         isolation,
         domain="tenant_receipts",
-        relative_parts=("sd_decisions",),
+        relative_parts=("sda",),
         create_leaf_directory=create,
         require_live=True,
     )

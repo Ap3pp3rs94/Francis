@@ -4058,6 +4058,33 @@ def test_managed_copy_safe_delta_decision_readback_filters_exact_requested_revie
     assert recorded_a["receipt_id"] not in json.dumps(readback_b)
 
 
+def test_managed_copy_safe_delta_decision_short_receipt_path_supports_long_windows_data_root(
+    monkeypatch, tmp_path
+) -> None:
+    tenant_key = "a" * 64
+    placeholder_path = (
+        tmp_path.parent / "x" / "managed_copies" / "tenants" / tenant_key / "receipts" / "sda" / f"{'f' * 16}.json"
+    )
+    padding_length = max(1, 238 - len(str(placeholder_path)) + 1)
+    data_root = tmp_path.parent / ("l" * padding_length)
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, data_root)
+    review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
+    plan = _safe_delta_decision_test_plan(monkeypatch, source_state, review)
+    directory = safe_delta_approval._decision_directory(plan, create=False)
+    assert directory is not None
+    receipt_path = directory / f"{plan['review_fingerprint'][:16]}.json"
+    full_fingerprint_path = receipt_path.with_name(f"{plan['review_fingerprint']}.json")
+
+    result = safe_delta_approval.record_managed_copy_safe_delta_decision(
+        plan, provided_fingerprint=plan["decision_fingerprint"], confirmed=True
+    )
+
+    assert len(str(receipt_path)) < 260
+    assert len(str(full_fingerprint_path)) >= 260
+    assert result["ok"] is True
+    assert receipt_path.exists()
+
+
 def test_managed_copy_safe_delta_decision_rejects_cross_tenant_lineage(monkeypatch, tmp_path) -> None:
     source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path / "cross-tenant")
     review = _record_safe_delta_receipt(_safe_delta_receipt_test_plan(source_state))
