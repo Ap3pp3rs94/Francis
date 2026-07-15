@@ -131,6 +131,10 @@ def test_resident_host_passes_and_restores_game_observer_runtime_config() -> Non
     assert "[System.IO.Path]::Combine($RepoRoot, 'config', 'runtime', 'lens', 'game-observer.json')" in script
     assert "$env:FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH = $GameObserverConfigPath" in script
     assert "Remove-Item Env:\\FRANCIS_LENS_GAME_OBSERVER_CONFIG_PATH -ErrorAction SilentlyContinue" in script
+    assert "function Update-PerceptionWorkerTerminalReadback" in script
+    assert "'lens.perception.runtime_state'" in script
+    assert "$RuntimePid -eq $ExpectedPid" in script
+    assert "$RunningState['perception_worker']['result_status'] = 'blocked'" in script
 
 
 def test_resident_host_consumes_approved_handoff_but_worker_blocks_before_capture_without_supervisor(

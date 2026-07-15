@@ -375,6 +375,45 @@ function Get-PerceptionWorkerHandoff {
   return [pscustomobject]$Result
 }
 
+function Update-PerceptionWorkerTerminalReadback {
+  param([System.Collections.Specialized.OrderedDictionary]$RunningState)
+
+  $WorkerResult = Read-JsonFile -Path $script:PerceptionWorkerStdoutPath
+  $ResultStatus = [string](Get-PropertyValue -Payload $WorkerResult -Name 'status' -Default '')
+  if (-not [string]::IsNullOrWhiteSpace($ResultStatus)) {
+    $RunningState['perception_worker']['result_status'] = $ResultStatus
+    try {
+      $RunningState['perception_worker']['exit_code'] = [int](Get-PropertyValue -Payload $WorkerResult -Name 'exit_code' -Default $null)
+    } catch {
+      $RunningState['perception_worker']['exit_code'] = $null
+    }
+    return
+  }
+
+  $RuntimeStatePath = Join-Path (Join-Path (Join-Path $DataRoot 'runtime') 'lens-perception') 'status.json'
+  $RuntimeState = Read-JsonFile -Path $RuntimeStatePath
+  $ExpectedPid = [int]$RunningState['perception_worker']['pid']
+  $RuntimePid = 0
+  try {
+    $RuntimePid = [int](Get-PropertyValue -Payload $RuntimeState -Name 'pid' -Default 0)
+  } catch {
+    $RuntimePid = 0
+  }
+  if (
+    [string](Get-PropertyValue -Payload $RuntimeState -Name 'kind' -Default '') -eq 'lens.perception.runtime_state' -and
+    [int](Get-PropertyValue -Payload $RuntimeState -Name 'version' -Default 0) -eq 1 -and
+    [string](Get-PropertyValue -Payload $RuntimeState -Name 'state' -Default '') -eq 'blocked' -and
+    $ExpectedPid -gt 0 -and
+    $RuntimePid -eq $ExpectedPid
+  ) {
+    $RunningState['perception_worker']['result_status'] = 'blocked'
+    $RunningState['perception_worker']['exit_code'] = 2
+    $RunningState['perception_worker']['blockers'] = @(
+      Get-PropertyValue -Payload $RuntimeState -Name 'blockers' -Default @('lens_perception_worker_blocked')
+    )
+  }
+}
+
 function Update-PerceptionWorkerState {
   param([System.Collections.Specialized.OrderedDictionary]$RunningState)
 
@@ -390,16 +429,10 @@ function Update-PerceptionWorkerState {
       $RunningState['perception_worker']['status'] = 'exited'
       $RunningState['perception_worker']['process_alive'] = $false
       $RunningState['perception_worker']['process_exit_code'] = [int]$script:PerceptionWorkerProcess.ExitCode
-      $WorkerResult = Read-JsonFile -Path $script:PerceptionWorkerStdoutPath
-      if ($null -ne $WorkerResult) {
-        $RunningState['perception_worker']['result_status'] = [string](Get-PropertyValue -Payload $WorkerResult -Name 'status' -Default '')
-        try {
-          $RunningState['perception_worker']['exit_code'] = [int](Get-PropertyValue -Payload $WorkerResult -Name 'exit_code' -Default $null)
-        } catch {
-          $RunningState['perception_worker']['exit_code'] = $null
-        }
+      Update-PerceptionWorkerTerminalReadback -RunningState $RunningState
+      if ($RunningState['perception_worker']['blockers'].Count -eq 0) {
+        $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_exited_for_enablement')
       }
-      $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_exited_for_enablement')
       $script:PerceptionWorkerProcess = $null
     } catch {
       $RunningState['perception_worker']['status'] = 'unreadable'
@@ -540,15 +573,7 @@ function Stop-OwnedPerceptionWorker {
     }
     $script:PerceptionWorkerProcess.Refresh()
     $RunningState['perception_worker']['process_exit_code'] = [int]$script:PerceptionWorkerProcess.ExitCode
-    $WorkerResult = Read-JsonFile -Path $script:PerceptionWorkerStdoutPath
-    if ($null -ne $WorkerResult) {
-      $RunningState['perception_worker']['result_status'] = [string](Get-PropertyValue -Payload $WorkerResult -Name 'status' -Default '')
-      try {
-        $RunningState['perception_worker']['exit_code'] = [int](Get-PropertyValue -Payload $WorkerResult -Name 'exit_code' -Default $null)
-      } catch {
-        $RunningState['perception_worker']['exit_code'] = $null
-      }
-    }
+    Update-PerceptionWorkerTerminalReadback -RunningState $RunningState
   } catch {
     $RunningState['perception_worker']['status'] = 'stop_failed'
     $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_owned_process_stop_failed')
