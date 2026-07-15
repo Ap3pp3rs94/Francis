@@ -367,6 +367,14 @@ def test_worker_pauses_capture_during_bounded_supervisor_readback_gap_then_recov
 def test_worker_exits_when_supervisor_staleness_exceeds_grace(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     source = _FrameSource()
+    observer_initializations = 0
+
+    def initialize_game_observer() -> _GameObserver:
+        nonlocal observer_initializations
+        observer_initializations += 1
+        return _GameObserver()
+
+    monkeypatch.setattr(perception_worker_module.LensGameObserver, "from_environment", initialize_game_observer)
 
     def stale_supervision(parent_pid: int, _now: float) -> dict[str, Any]:
         return {
@@ -396,6 +404,7 @@ def test_worker_exits_when_supervisor_staleness_exceeds_grace(tmp_path: Path, mo
     assert result["exit_code"] == 2
     assert result["latest"]["blockers"] == ["lens_perception_supervisor_state_stale"]
     assert source.capture_count == 0
+    assert observer_initializations == 0
 
 
 def test_execution_approval_status_requires_exact_capture_receipt(tmp_path: Path, monkeypatch) -> None:

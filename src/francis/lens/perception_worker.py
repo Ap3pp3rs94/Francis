@@ -109,7 +109,7 @@ class LensPerceptionWorker:
         self._authority_status = authority_status or _desktop_authority_status
         self._execution_status = execution_status or lens_perception_execution_approval_status
         self._supervision_status = supervision_status or lens_perception_worker_supervision_readback
-        self._game_observer = game_observer or LensGameObserver.from_environment()
+        self._game_observer = game_observer
         self._game_teaching_recorder = game_teaching_recorder or GameTeachingObservationRecorder()
         self._clock = clock
         self._monotonic = monotonic_clock
@@ -124,7 +124,8 @@ class LensPerceptionWorker:
         )
 
     def close(self) -> None:
-        self._game_observer.close()
+        if self._game_observer is not None:
+            self._game_observer.close()
 
     def capture_once(self) -> dict[str, Any]:
         observed_at = self._clock()
@@ -186,6 +187,8 @@ class LensPerceptionWorker:
         situation_blockers: list[str] = ["lens_situation_model_not_ready"]
         try:
             situation_observed_at = max(frame.captured_at, self._clock())
+            if self._game_observer is None:
+                self._game_observer = LensGameObserver.from_environment()
             game_observation = self._game_observer.observe(
                 frame=frame,
                 source_frame_id=str(ring_buffer.get("latest_frame_id") or ""),
