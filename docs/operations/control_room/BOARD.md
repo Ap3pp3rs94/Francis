@@ -33,12 +33,17 @@ GitHub baseline:
 - Task card: `docs/operations/task_cards/managed-copy-rogue-detection-assessment.md`
 - Branch: `codex/forge-rogue-detection-assessment`
 - Worktree: `D:\fg`
-- State: `READY`
+- State: `PROMOTED`
+- Latest verified commit: `224c9859`
 - Dependencies: exact provision and structural-isolation receipts plus bounded
   fixture signal/evidence references; production incidents are not inferred
-- Blocker: none for fixture-backed assessment software
-- Next action: implement exact-schema immutable assessment receipt and readback
-- Runtime lease: `LEASE-FORGE-007`; no service or live Orb access permitted
+- Validation: 7 focused tests, complete managed-copy card suite, changed-path
+  Ruff/format/mypy/diff-check, and final SENTINEL/VERA passes
+- Blocker: none for fixture-backed assessment software; real incident facts and
+  containment/recovery authority remain external
+- Next action: remove the temporary checkout, push exact integrated main, and
+  observe remote CI
+- Runtime lease: `LEASE-FORGE-007`; released, no service or live Orb access
 
 ### CR-FORGE-006 - Safe-delta export artifact plan
 

@@ -57,10 +57,13 @@ redacted rogue-signal assessment bound to canonical signal severity and hashed
 evidence references. It does not declare the copy rogue or perform halt,
 quarantine, replacement, restore, or any runtime action.
 
-Current state: task card and isolated test-only lease are ready.
+Current state: promoted locally at `224c9859` after focused/card/static evidence
+and final SENTINEL and VERA passes. No service, live Orb, production incident,
+containment, or recovery action occurred.
 
-Next smallest truthful gap: implement fail-closed planning, recording, and
-validated readback against provision/isolation lineage.
+Next smallest truthful gap: finish the authorized cleanup/push cycle, then select
+the next executable Stage 18 prerequisite outside production-fact and authority
+boundaries.
 
 ### Managed copies / safe-delta export artifact plan
 

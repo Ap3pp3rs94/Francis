@@ -15,7 +15,7 @@ directories did not exist. Port `5173` had an unknown listener owned by PID
 `12780`; it is operator-reserved and must not be stopped or inspected by a
 worker merely to acquire a port.
 
-All three worktrees currently junction `.venv` to the repaired shared
+Temporary validation worktrees may junction `.venv` to the repaired shared
 `D:\Francis\.venv` with CI extras `core`, `web`, `dev`, and `bridge`. The leases
 isolate writable runtime/test state but do not isolate package files or physical
 disk load. Package installation, sync, repair, or removal is prohibited while a
@@ -32,7 +32,7 @@ or live Orb access occurred.
 
 | Lease | Seat | Front | Task card | Branch / worktree | State directories | API / overlay / frontend ports | Permitted services | Real Orb | Processes | Acquired | Cleanup evidence | Release state |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `LEASE-FORGE-007` | FORGE | CR-FORGE-007 | `task_cards/managed-copy-rogue-detection-assessment.md` | `codex/forge-rogue-detection-assessment` / temporary `D:\fg` | `FRANCIS_DATA_DIR=D:\Francis-support\runtime-leases\forge-rogue-detection-assessment\data` | `18008` / `18788` / `15178` | pytest/Ruff/mypy only | denied | none; test-only lease | 2026-07-15 | remove temporary checkout after integration/parking; no service | `ACQUIRED` |
+| `LEASE-FORGE-007` | FORGE | CR-FORGE-007 | `task_cards/managed-copy-rogue-detection-assessment.md` | `codex/forge-rogue-detection-assessment` / temporary `D:\fg` | `FRANCIS_DATA_DIR=D:\Francis-support\runtime-leases\forge-rogue-detection-assessment\data` | `18008` / `18788` / `15178` | none while released | denied | none; promoted locally at `224c9859` | 2026-07-15 | focused/card/static checks and reviews passed; no service; ports unused; checkout removal started | `RELEASED` |
 | `LEASE-FORGE-006` | FORGE | CR-FORGE-006 | `task_cards/managed-copy-safe-delta-export-artifact-plan.md` | `codex/forge-safe-delta-export-artifact-plan` / `D:\fg` | `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\forge-safe-delta-export-artifact-plan\data` | `18007` / `18787` / `15177` | none while released | denied | none; promoted locally at `2673cd5e` | 2026-07-15T06:44:00-05:00 | focused/card/static checks and reviews passed; no service; ports unused | `RELEASED` |
 | `LEASE-FORGE-005` | FORGE | CR-FORGE-005 | `task_cards/managed-copy-safe-delta-export-authorization-decision.md` | `codex/forge-safe-delta-export-authorization-decision` / `D:\fg` | `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\forge-safe-delta-export-authorization-decision\data` | `18006` / `18786` / `15176` | none while released | denied | none; promoted locally at `0a0cfd55` | 2026-07-15T06:15:00-05:00 | focused/card/static and reviews passed; full pytest interrupted by policy change; processes exited; ports unused | `RELEASED` |
 | `LEASE-FORGE-004` | FORGE | CR-FORGE-004 | `task_cards/managed-copy-safe-delta-export-authorization-request.md` | `codex/forge-safe-delta-export-authorization-request` / `D:\fg` | `FRANCIS_DATA_DIR=D:\Francis-runtime-leases\forge-safe-delta-export-authorization-request\data` | `18005` / `18785` / `15175` | none while released | denied | none; promoted locally at `44048d85` | 2026-07-15T04:31:00-05:00 | full gate exit `0`; focused post-promotion checks passed after `f3cc8c7c`; processes exited; ports unused | `RELEASED` |

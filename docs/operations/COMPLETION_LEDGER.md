@@ -61,12 +61,12 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
 The current goal is the next executable Stage 18 capability after the promoted,
-deterministic no-write export-artifact plan. The plan is bound to one exact,
-live-valid approved authorization decision and returns only bounded hashes,
-enums, counts, and lineage references; it cannot persist an artifact or consume
-approval as export authority. Production copy creation still requires real
-operator-supplied tenant and policy facts; those facts are not inferred or
-fabricated.
+fixture-backed rogue-signal assessment. The assessment records one immutable,
+redacted evidence receipt for a structurally verified managed copy while keeping
+rogue detection, containment, recovery, and general mutation authority false.
+Production copy creation and incident determination still require real
+operator-supplied tenant, policy, and incident facts; those facts are not
+inferred or fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -127,6 +127,35 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 - Stage 18 rogue-signal assessment promoted locally
+
+Current posture: Phase 2 and Stage 18 remain open. Managed-copy groundwork now
+includes a permission-gated, exact-schema assessment that can record one
+immutable, redacted rogue-signal evidence receipt for a structurally verified
+fixture copy. It does not declare the copy rogue or perform containment,
+recovery, execution, network, or tenant-state mutation.
+
+Evidence:
+
+- Exact rebased candidate and promoted main head `224c9859` passed 7 focused
+  rogue-assessment tests, the complete managed-copy card suite, changed-path
+  Ruff and format checks, targeted mypy, and diff-check.
+- SENTINEL and VERA passed the final affected delta after readback distinguished
+  absent evidence from existing-but-drifted lineage without exposing or
+  accepting invalid receipt content.
+- Existing receipts are exact-schema validated, hash-bound, and checked against
+  fresh tenant, provision, and structural-isolation lineage before projection.
+- No live service, Orb process, production tenant, incident determination,
+  containment action, recovery action, or authority grant occurred.
+
+Remaining truthful gap:
+
+- Real rogue determination and any containment/recovery action remain blocked on
+  real operator facts, governed authority, and production evidence.
+- Select the next executable Stage 18 prerequisite without extending a fixture
+  preparation chain or fabricating production facts.
+- Stage 18 closure, FR-018 clearance, and physical validation remain unclaimed.
 
 ### 2026-07-15 - Stage 18 export-artifact plan promoted locally
 
