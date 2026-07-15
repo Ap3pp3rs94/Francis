@@ -121,6 +121,10 @@ def managed_copy_safe_delta_export_authorization_decision_plan(
         and item.get("request_fingerprint") == bounded["request_fingerprint"]
     ]
     source = matches[0] if len(matches) == 1 else {}
+    provision = managed_copy_provision_for_copy(
+        bounded["copy_id"], provisioning_receipt_id=bounded["provisioning_receipt_id"]
+    )
+    tenant_key = _text(provision.get("tenant_key"))
     source_fields = (
         "copy_id",
         "provisioning_receipt_id",
@@ -136,9 +140,12 @@ def managed_copy_safe_delta_export_authorization_decision_plan(
     )
     if not source or any(source.get(key) != bounded[key] for key in source_fields):
         blockers.append("safe_delta_export_authorization_decision_request_missing_or_mismatch")
+    if not _sha(tenant_key) or source.get("tenant_key") != tenant_key:
+        blockers.append("safe_delta_export_authorization_decision_tenant_lineage_mismatch")
     binding = {
         "contract": CONTRACT,
         "actor": safe_actor,
+        "tenant_key": tenant_key,
         **bounded,
         "request_receipt_fingerprint": _text(source.get("receipt_fingerprint")),
     }
@@ -149,6 +156,7 @@ def managed_copy_safe_delta_export_authorization_decision_plan(
         "contract": CONTRACT,
         "actor": safe_actor,
         "request": bounded,
+        "tenant_key": tenant_key,
         "authorization_decision_fingerprint": fingerprint,
         "blockers": blockers,
         "dry_run": payload.get("dry_run") is True,
@@ -190,9 +198,6 @@ def record_managed_copy_safe_delta_export_authorization_decision(
                     return _recorded(existing, "already_decided", False)
                 return _blocked("safe_delta_export_authorization_decision_conflict")
             return _blocked("safe_delta_export_authorization_decision_receipt_conflict")
-        provision = managed_copy_provision_for_copy(
-            request["copy_id"], provisioning_receipt_id=request["provisioning_receipt_id"]
-        )
         receipt = {
             "ok": True,
             "kind": RECEIPT_KIND,
@@ -201,7 +206,7 @@ def record_managed_copy_safe_delta_export_authorization_decision(
             "receipt_fingerprint": "",
             "status": f"export_authorization_{request['decision']}",
             "actor": _text(final.get("actor")),
-            "tenant_key": _text(provision.get("tenant_key")),
+            "tenant_key": _text(final.get("tenant_key")),
             **request,
             "authorization_decision_fingerprint": final_fp,
             "recorded_ts": int(time.time()),
@@ -236,8 +241,10 @@ def managed_copy_safe_delta_export_authorization_decisions_readback(
         payload["request_actor"] = item.get("actor")
         payload["dry_run"] = True
         live = managed_copy_safe_delta_export_authorization_decision_plan(payload, actor=_text(item.get("actor")))
-        if _valid(item, path, directory) and live.get("authorization_decision_fingerprint") == item.get(
-            "authorization_decision_fingerprint"
+        if (
+            _valid(item, path, directory)
+            and live.get("authorization_decision_fingerprint") == item.get("authorization_decision_fingerprint")
+            and live.get("tenant_key") == item.get("tenant_key")
         ):
             valid.append(item)
     valid.sort(key=lambda item: (int(item["recorded_ts"]), _text(item.get("receipt_id"))))

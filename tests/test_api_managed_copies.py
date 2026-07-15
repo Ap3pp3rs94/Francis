@@ -4813,10 +4813,16 @@ def test_managed_copy_safe_delta_export_authorization_decision_record_readback_a
     assert drifted_readback["items"] == []
 
 
-def test_managed_copy_safe_delta_export_authorization_decision_readback_rejects_rehashed_authority_injection(
-    monkeypatch, tmp_path
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("grants_export_authority", True), ("tenant_key", "f" * 64)),
+)
+def test_managed_copy_safe_delta_export_authorization_decision_readback_rejects_rehashed_injection(
+    monkeypatch, tmp_path, field, value
 ) -> None:
-    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "sy-injected")
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch, tmp_path.parent / f"sy-injected-{field[:3]}"
+    )
     payload, plan = _safe_delta_export_authorization_decision_plan(monkeypatch, source_state)
     recorded = safe_delta_export_authorization_decision.record_managed_copy_safe_delta_export_authorization_decision(
         plan, provided_fingerprint=plan["authorization_decision_fingerprint"], confirmed=True
@@ -4825,7 +4831,7 @@ def test_managed_copy_safe_delta_export_authorization_decision_readback_rejects_
     assert directory is not None
     path = directory / f"{payload['request_fingerprint'][:16]}.json"
     injected = json.loads(path.read_text(encoding="utf-8"))
-    injected["grants_export_authority"] = True
+    injected[field] = value
     injected["receipt_fingerprint"] = safe_delta_export_authorization_decision._receipt_fp(injected)
     path.write_text(json.dumps(injected), encoding="utf-8")
     assert recorded["writes_receipt"] is True
