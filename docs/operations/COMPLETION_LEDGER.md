@@ -128,6 +128,39 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-16 - Process-local managed-copy pilot scope leases
+
+Current posture: Phase 2 and Stage 18 remain open. Francis now has a native,
+opt-in `ApiPermissionGate` extension for one process-local pilot lease bound to
+an exact actor, package and fingerprint, pilot run, runtime nonce, operator
+decision fingerprint, ordered scope/route/method/action bindings, and a maximum
+30-minute lifetime. Binding consumption, revocation, and final sealing are
+serialized under one process lock; a restarted process begins with no leases and
+therefore cannot silently rehydrate prior authority.
+
+Evidence:
+
+- Focused lease and existing permission-gate tests pass, including issuance and
+  expiry boundaries, revocation, exact-binding mismatches, ordered consumption,
+  replay, concurrency, wildcard/static-scope interaction, restart loss, and
+  redacted denial evidence.
+- The complete managed-copy API suite and managed-copy fixture runtime/container
+  unit suites pass without activating lease mode.
+- Changed-path Ruff, format, targeted mypy, and repository diff checks pass.
+- Independent authority/security and acceptance reviews passed after exact
+  action correlation, ordering, issuance-boundary, and maximum-duration findings
+  were remediated.
+
+Remaining truthful gap:
+
+- No managed-copy route enables lease mode, no lease registry is populated by
+  production configuration, and no persistent or process-scoped actor grant was
+  created. The local pilot package remains a proposal without approval IDs.
+- No tenant, managed copy, Docker container, runtime, canonical evidence, Orb, or
+  VSC-1 state was accessed or changed by this slice.
+- The completion audit remains 1 of 8. No Stage 18 closure, pilot authorization,
+  FR-018 clearance, or physical-validation claim is made.
+
 ### 2026-07-16 - Fixed-image Docker managed-copy isolation fixture
 
 Current posture: Phase 2 and Stage 18 remain open. Francis now has a dedicated

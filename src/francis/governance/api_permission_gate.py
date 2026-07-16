@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping
 
 from francis.credentials.scope_checker import ScopeChecker
 from francis.governance.redaction import redact_secret_text
+from francis.governance.pilot_scope_lease import PilotLeaseCheck, PilotScopeLeaseRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,16 @@ def _scope_list(value: Iterable[str] | None) -> tuple[list[str], bool]:
 
 
 class ApiPermissionGate:
-    def __init__(self, actor_scopes: Mapping[str, Iterable[str]] | None = None) -> None:
+    def __init__(
+        self,
+        actor_scopes: Mapping[str, Iterable[str]] | None = None,
+        *,
+        pilot_lease_registry: PilotScopeLeaseRegistry | None = None,
+        require_pilot_lease: bool = False,
+    ) -> None:
         self._actor_scopes: dict[str, tuple[str, ...]] = {}
+        self._pilot_lease_registry = pilot_lease_registry
+        self._require_pilot_lease = require_pilot_lease
         for raw_actor, raw_scopes in (actor_scopes or {}).items():
             actor_id = _safe_text(raw_actor).strip()
             scopes, valid = _scope_list(raw_scopes)
@@ -60,19 +69,38 @@ class ApiPermissionGate:
                 self._actor_scopes[actor_id] = tuple(scopes)
 
     @classmethod
-    def from_env(cls, env_var: str = "FRANCIS_API_ACTOR_SCOPES") -> "ApiPermissionGate":
+    def from_env(
+        cls,
+        env_var: str = "FRANCIS_API_ACTOR_SCOPES",
+        *,
+        pilot_lease_registry: PilotScopeLeaseRegistry | None = None,
+        require_pilot_lease: bool = False,
+    ) -> "ApiPermissionGate":
         raw = _safe_text(os.getenv(env_var)).strip()
         if not raw:
-            return cls()
+            return cls(
+                pilot_lease_registry=pilot_lease_registry,
+                require_pilot_lease=require_pilot_lease,
+            )
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
             logger.warning("invalid API actor-scope policy JSON")
-            return cls()
+            return cls(
+                pilot_lease_registry=pilot_lease_registry,
+                require_pilot_lease=require_pilot_lease,
+            )
         if not isinstance(parsed, dict):
             logger.warning("API actor-scope policy must be a JSON object")
-            return cls()
-        return cls(parsed)
+            return cls(
+                pilot_lease_registry=pilot_lease_registry,
+                require_pilot_lease=require_pilot_lease,
+            )
+        return cls(
+            parsed,
+            pilot_lease_registry=pilot_lease_registry,
+            require_pilot_lease=require_pilot_lease,
+        )
 
     def check(
         self,
@@ -81,7 +109,9 @@ class ApiPermissionGate:
         required_scopes: Iterable[str] | None,
         route: object = "",
         method: object = "",
+        action: object = "",
         actor_scopes: Iterable[str] | None = None,
+        pilot_lease_check: PilotLeaseCheck | None = None,
     ) -> ApiPermissionDecision:
         """Evaluate a privileged API action without leaking scope names."""
         actor = _safe_text(actor_id).strip()
@@ -123,8 +153,42 @@ class ApiPermissionGate:
             for key, value in scope_decision.evidence.items()
             if key in {"requested_scope_count", "allowed_scope_count", "missing_scope_count"}
         }
-        return ApiPermissionDecision(
+        static_decision = ApiPermissionDecision(
             scope_decision.allowed,
             scope_decision.reason,
             {**evidence, "scope_decision": decision_evidence},
+        )
+        if not static_decision.allowed:
+            return static_decision
+
+        lease_required = self._require_pilot_lease or pilot_lease_check is not None
+        if not lease_required:
+            return static_decision
+        if self._pilot_lease_registry is None:
+            return ApiPermissionDecision(False, "pilot_lease_registry_unavailable", static_decision.evidence)
+        if pilot_lease_check is None:
+            return ApiPermissionDecision(False, "missing_pilot_lease", static_decision.evidence)
+        if len(required) != 1 or pilot_lease_check.scope != required[0]:
+            return ApiPermissionDecision(False, "pilot_lease_scope_mismatch", static_decision.evidence)
+        if pilot_lease_check.route != _safe_text(route).strip():
+            return ApiPermissionDecision(False, "pilot_lease_route_mismatch", static_decision.evidence)
+        if _safe_text(pilot_lease_check.method).strip().upper() != _safe_text(method).strip().upper():
+            return ApiPermissionDecision(False, "pilot_lease_method_mismatch", static_decision.evidence)
+        if _safe_text(pilot_lease_check.action).strip() != _safe_text(action).strip():
+            return ApiPermissionDecision(False, "pilot_lease_action_mismatch", static_decision.evidence)
+
+        lease_decision = self._pilot_lease_registry.authorize_and_consume(
+            actor_id=actor,
+            check=pilot_lease_check,
+        )
+        lease_evidence = {
+            key: value
+            for key, value in lease_decision.evidence.items()
+            if key
+            in {"lease_bound", "binding_consumed", "consumed_binding_count", "allowed_binding_count", "lease_state"}
+        }
+        return ApiPermissionDecision(
+            lease_decision.allowed,
+            lease_decision.reason,
+            {**static_decision.evidence, "pilot_lease": lease_evidence},
         )
