@@ -1531,10 +1531,27 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
         receipt_behavior="immutable Stage 18 runtime-evidence receipt; exact replay is idempotent",
         denial_behavior="api_permission_denied before payload processing or filesystem creation; source failures fail closed",
-        governance_maturity="permission_gated_one_requirement_recorder_no_runtime_producer",
+        governance_maturity="permission_gated_one_requirement_recorder_fixture_runtime_producer",
         notes=(
             "The route can record copy_creation_runtime_proof only after an independent canonical verifier succeeds; "
-            "no such production source producer exists yet, and the receipt grants no runtime or tenant authority."
+            "the fixed fixture startup producer is independently verified but cannot satisfy production readiness; "
+            "the receipt grants no runtime or tenant authority."
+        ),
+    ),
+    AuthorityRule(
+        family="managed_copies_runtime_start",
+        prefixes=("/managed-copies/runtime-start",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.runtime_start.execute",
+        approval_requirement=(
+            "separate unexpired unrevoked exact-action approval bound to the final fixed fixture launch descriptor"
+        ),
+        receipt_behavior="immutable launch-attempt, startup or failure, handshake, heartbeat, and fixture cleanup receipts",
+        denial_behavior="api_permission_denied before payload processing, filesystem creation, or process creation",
+        governance_maturity="permission_and_exact_approval_gated_fixed_fixture_startup",
+        notes=(
+            "Starts only the repository-owned bounded fixture runtime; no caller command, shell, service install, "
+            "resident supervision, restart, production runtime, or persistent actor grant is permitted."
         ),
     ),
     AuthorityRule(

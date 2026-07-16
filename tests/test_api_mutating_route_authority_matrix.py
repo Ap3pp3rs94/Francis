@@ -377,8 +377,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert managed_copy["family"] == "managed_copies_runtime_evidence"
     assert managed_copy["required_actor"] == "payload.request_actor"
     assert managed_copy["required_scope"] == "managed_copies.runtime_evidence.write"
-    assert managed_copy["governance_maturity"] == ("permission_gated_one_requirement_recorder_no_runtime_producer")
+    assert managed_copy["governance_maturity"] == ("permission_gated_one_requirement_recorder_fixture_runtime_producer")
     assert "no runtime or tenant authority" in managed_copy["notes"]
+
+    runtime_start = entries["/managed-copies/runtime-start"]
+    assert runtime_start["family"] == "managed_copies_runtime_start"
+    assert runtime_start["required_actor"] == "payload.request_actor"
+    assert runtime_start["required_scope"] == "managed_copies.runtime_start.execute"
+    assert runtime_start["governance_maturity"] == "permission_and_exact_approval_gated_fixed_fixture_startup"
+    assert "before payload processing" in runtime_start["denial_behavior"]
 
     safe_delta_export_preflight = entries["/managed-copies/safe-delta-export-preflight"]
     assert safe_delta_export_preflight["family"] == "managed_copies_safe_delta_export_preflight"

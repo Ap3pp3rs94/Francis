@@ -60,10 +60,11 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is the first canonical Stage 18 runtime producer. Governed
-runtime-evidence recording software exists for the copy-creation proof slot, but
-the canonical source receipt proving an operating managed copy is not yet
-implemented. Production copy creation and incident determination still require
+The current goal is the first authorized production Stage 18 runtime proof. A
+dedicated managed-copy runtime-start authority contract and fixed fixture producer
+now exercise the copy-creation proof path in isolated test state, but no persistent
+actor holds that scope and no production startup receipt exists. Production copy
+creation and incident determination still require
 real operator-supplied tenant, policy, runtime, and incident facts; those facts
 are not inferred or fabricated.
 
@@ -127,6 +128,37 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-15 - Governed managed-copy fixture runtime startup
+
+Current posture: Phase 2 and Stage 18 remain open. Francis now has a dedicated
+`managed_copies.runtime_start.execute` authority contract for one fixed,
+repository-owned fixture runtime. A separate exact-action approval binds the
+provision and isolation lineage, executable and argument fingerprints, bounded
+environment and roots, runtime identity, endpoint, timeout, lease, nonce, and
+trace before a no-shell launch.
+
+Evidence:
+
+- Focused runtime lifecycle, runtime-evidence integration, complete managed-copy
+  API, route-contract, and mutation-authority tests pass in isolated data roots.
+- Changed-path Ruff, format, targeted mypy, and repository diff checks pass.
+- Fixture startup requires an identity-correlated handshake and current heartbeat;
+  PID alone is not accepted. Exact cleanup revalidates process ownership and
+  leaves no live fixture process.
+- The runtime-evidence verifier independently loads the canonical startup receipt
+  and current state. Fixture evidence remains `fixture_software_only` and cannot
+  satisfy production runtime readiness.
+
+Remaining truthful gap:
+
+- No persistent actor received the startup scope, no live managed-copy runtime
+  was started, and no production runtime evidence was recorded.
+- The completion audit remains 1 of 8; fixture tests did not make a runtime
+  requirement ready and did not create a Stage 18 closure claim.
+- Automatic restart, resident supervision, production stop authority, containment,
+  replacement, recovery, and decommission remain separate unimplemented
+  authority boundaries.
+
 ### 2026-07-15 - Stage 18 runtime-evidence recorder software
 
 Current posture: Phase 2 and Stage 18 remain open. The existing
@@ -147,9 +179,9 @@ Evidence:
 
 Remaining truthful gap:
 
-- No canonical producer currently proves an operating managed copy. Production
-  recording therefore fails closed with
-  `stage18_copy_creation_runtime_source_receipt_not_implemented`.
+- No production startup receipt currently proves an operating managed copy.
+  Production recording therefore fails closed with
+  `stage18_copy_creation_runtime_startup_receipt_missing`.
 - No persistent actor received the write scope, no live route invocation
   occurred, and no production runtime evidence was recorded.
 - The runtime-evidence completion audit remains 1 of 8; tests did not make a

@@ -844,6 +844,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "role_authority_review": "/managed-copies/role-authority-review",
             "decommission_contract": "/managed-copies/decommission-contract",
             "decommission_review": "/managed-copies/decommission-review",
+            "runtime_start_contract": "/managed-copies/runtime-start-contract",
+            "runtime_start_status": "/managed-copies/runtime-start-status",
+            "runtime_start": "/managed-copies/runtime-start",
             "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
             "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
             "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
@@ -4743,7 +4746,7 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "blockers": [requirement["blocker"] for requirement in requirements if not requirement["ready"]],
         "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
         "supported_requirement_count": 1,
-        "recordable_requirement_count": 0,
+        "recordable_requirement_count": 1,
         "receipt_logical_scope": "managed_copy_runtime_evidence",
         "completion_review_route": "/managed-copies/completion-review",
         "routes": {

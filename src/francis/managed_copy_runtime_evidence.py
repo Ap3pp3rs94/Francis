@@ -16,7 +16,9 @@ RUNTIME_EVIDENCE_CONTRACT = "stage18_managed_copy_runtime_evidence_v1"
 RUNTIME_EVIDENCE_RECEIPT_KIND = "francis.stage18.managed_copies.runtime_evidence_receipt"
 COPY_CREATION_REQUIREMENT = "copy_creation_runtime_proof"
 COPY_CREATION_PROOF_KIND = "managed_copy_creation_runtime_receipt"
-SOURCE_NOT_IMPLEMENTED = "stage18_copy_creation_runtime_source_receipt_not_implemented"
+COPY_CREATION_SOURCE_MISSING = "stage18_copy_creation_runtime_startup_receipt_missing"
+# Compatibility alias for older callers; the producer now exists but no source receipt is present by default.
+SOURCE_NOT_IMPLEMENTED = COPY_CREATION_SOURCE_MISSING
 KNOWN_REQUIREMENTS = frozenset(
     {
         COPY_CREATION_REQUIREMENT,
@@ -95,15 +97,10 @@ def verify_copy_creation_runtime_source(
     source_receipt_id: str,
     source_receipt_fingerprint: str,
 ) -> dict[str, Any]:
-    """Fail closed until a canonical producer proves an operating managed copy."""
-    del source_receipt_id, source_receipt_fingerprint
-    return {
-        "valid": False,
-        "blocker": SOURCE_NOT_IMPLEMENTED,
-        "evidence_class": "canonical_runtime",
-        "source_lineage_hash": "",
-        "current_state_hash": "",
-    }
+    """Validate independently loaded managed-copy startup evidence."""
+    from francis.managed_copy_runtime_start import verify_runtime_startup_source
+
+    return verify_runtime_startup_source(source_receipt_id, source_receipt_fingerprint)
 
 
 def plan_runtime_evidence(

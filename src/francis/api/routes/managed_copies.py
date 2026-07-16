@@ -68,6 +68,12 @@ from francis.managed_copies import (
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
 )
+from francis.managed_copy_runtime_start import (
+    RUNTIME_START_SCOPE,
+    runtime_start_contract_snapshot,
+    runtime_start_status_snapshot,
+    start_fixture_runtime,
+)
 
 router = APIRouter()
 
@@ -236,6 +242,39 @@ def _permission_denied(
 @router.get("/status")
 def status() -> dict[str, Any]:
     return managed_copies_status_snapshot()
+
+
+@router.get("/runtime-start-contract")
+def runtime_start_contract() -> dict[str, Any]:
+    return runtime_start_contract_snapshot()
+
+
+@router.get("/runtime-start-status")
+def runtime_start_status(copy_id: str = "") -> dict[str, Any]:
+    return runtime_start_status_snapshot(copy_id=copy_id)
+
+
+@router.post("/runtime-start")
+def runtime_start(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=RUNTIME_START_SCOPE,
+        route="/managed-copies/runtime-start",
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=RUNTIME_START_SCOPE,
+            next_step="configure_exact_managed_copy_runtime_start_scope_and_approval",
+        )
+    managed_status = managed_copies_status_snapshot()
+    return start_fixture_runtime(
+        payload,
+        actor=actor,
+        stage17_closed=bool(managed_status["stage17_closed_by_receipt"]),
+    )
 
 
 @router.get("/copy-creation-contract")

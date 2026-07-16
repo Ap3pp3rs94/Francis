@@ -62,7 +62,7 @@ def isolated_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     return root
 
 
-def test_production_source_verifier_fails_closed_without_runtime_producer(isolated_data: Path) -> None:
+def test_production_source_verifier_fails_closed_without_startup_receipt(isolated_data: Path) -> None:
     result = runtime_evidence.plan_runtime_evidence(
         _payload(),
         actor="stage18.test-writer",
@@ -70,7 +70,7 @@ def test_production_source_verifier_fails_closed_without_runtime_producer(isolat
     )
 
     assert result["ok"] is False
-    assert result["error"] == runtime_evidence.SOURCE_NOT_IMPLEMENTED
+    assert result["error"] == runtime_evidence.COPY_CREATION_SOURCE_MISSING
     assert not isolated_data.exists()
 
 

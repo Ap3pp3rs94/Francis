@@ -89,6 +89,9 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "role_authority_review": "/managed-copies/role-authority-review",
         "decommission_contract": "/managed-copies/decommission-contract",
         "decommission_review": "/managed-copies/decommission-review",
+        "runtime_start_contract": "/managed-copies/runtime-start-contract",
+        "runtime_start_status": "/managed-copies/runtime-start-status",
+        "runtime_start": "/managed-copies/runtime-start",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
         "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
         "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
@@ -249,7 +252,7 @@ def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_r
     assert stage17_check["passed"] is True
     assert completion["stage18_completion_review_ready"] is False
     assert "stage17_operator_stage_closure_decision" not in completion["blockers"]
-    assert completion["next_smallest_truthful_gap"] == ("stage18_copy_creation_runtime_source_receipt_not_implemented")
+    assert completion["next_smallest_truthful_gap"] == ("stage18_copy_creation_runtime_startup_receipt_missing")
 
     request = client.post(
         "/managed-copies/copy-creation-request",
@@ -2190,7 +2193,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert check_by_id["decommission_contract"]["route"] == "/managed-copies/decommission-contract"
     assert body["blockers"] == [
         "stage17_operator_stage_closure_decision",
-        "stage18_copy_creation_runtime_source_receipt_not_implemented",
+        "stage18_copy_creation_runtime_startup_receipt_missing",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
         "stage18_rogue_recovery_runtime_not_implemented",
@@ -2301,7 +2304,7 @@ def test_managed_copy_runtime_evidence_contract_exposes_bounded_recorder_without
 
     assert body["blockers"] == [
         "stage17_operator_stage_closure_decision",
-        "stage18_copy_creation_runtime_source_receipt_not_implemented",
+        "stage18_copy_creation_runtime_startup_receipt_missing",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
         "stage18_rogue_recovery_runtime_not_implemented",
@@ -2386,7 +2389,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
     ]
     assert body["missing_blockers"] == [
         "stage17_operator_stage_closure_decision",
-        "stage18_copy_creation_runtime_source_receipt_not_implemented",
+        "stage18_copy_creation_runtime_startup_receipt_missing",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
         "stage18_rogue_recovery_runtime_not_implemented",
@@ -2482,6 +2485,38 @@ def test_managed_copy_runtime_evidence_readbacks_reject_legacy_caller_assertions
     assert body["writes_tenant_state"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
+
+
+def test_managed_copy_runtime_start_contract_is_read_only_and_unscoped_start_has_zero_effect(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    client = TestClient(create_app())
+
+    contract = client.get("/managed-copies/runtime-start-contract").json()
+    status = client.get("/managed-copies/runtime-start-status").json()
+    assert contract["required_scope"] == "managed_copies.runtime_start.execute"
+    assert contract["fixture_only"] is True
+    assert contract["production_runtime_active"] is False
+    assert contract["persistent_actor_grant_present"] is False
+    assert status["ready_count"] == 0
+    assert status["runtime_gate_ready"] is False
+    assert not data_root.exists()
+
+    denied = client.post(
+        "/managed-copies/runtime-start",
+        json={"request_actor": "stage18.unscoped", "executable": "cmd.exe"},
+    ).json()
+    assert denied["ok"] is False
+    assert denied["error"] == "api_permission_denied"
+    assert denied["required_scope"] == "managed_copies.runtime_start.execute"
+    assert denied["writes_receipts"] is False
+    assert denied["writes_tenant_state"] is False
+    assert denied["grants_execution_authority"] is False
+    assert not data_root.exists()
 
 
 def test_managed_copy_runtime_evidence_readback_denies_unscoped_actor_without_writing(
@@ -2703,7 +2738,7 @@ def test_managed_copy_runtime_evidence_route_records_fixture_receipt_without_rea
     assert completion["runtime_ready_count"] == 1
     assert completion["required_count"] == 8
     assert completion["ready_to_close"] is False
-    assert completion["next_smallest_truthful_gap"] == ("stage18_copy_creation_runtime_source_receipt_not_implemented")
+    assert completion["next_smallest_truthful_gap"] == ("stage18_copy_creation_runtime_startup_receipt_missing")
 
 
 def test_managed_copy_decommission_contract_is_projection_only_and_inactive(
