@@ -68,11 +68,11 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the first canonical Stage 18 runtime producer. Governed runtime-evidence recording software exists "
-            "for the copy-creation proof slot, but the canonical source receipt proving an operating managed copy "
-            "is not yet implemented. Production copy creation and incident determination still require real "
-            "operator-supplied tenant, policy, runtime, and incident facts; those facts are not inferred or "
-            "fabricated."
+            "the first authorized production Stage 18 runtime proof. A dedicated managed-copy runtime-start "
+            "authority contract and fixed fixture producer now exercise the copy-creation proof path in isolated "
+            "test state, but no persistent actor holds that scope and no production startup receipt exists. "
+            "Production copy creation and incident determination still require real operator-supplied tenant, "
+            "policy, runtime, and incident facts; those facts are not inferred or fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,
