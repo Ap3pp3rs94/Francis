@@ -58,7 +58,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["latest_ledger_entry"]["title"] == (
-        "2026-07-15 11:43Z - Stage 18 export-authorization decision promoted"
+        "2026-07-16 - Stage 18 completion audit consumes canonical runtime evidence"
     )
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
         "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"

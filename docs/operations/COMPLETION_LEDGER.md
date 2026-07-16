@@ -128,6 +128,35 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-16 - Stage 18 completion audit consumes canonical runtime evidence
+
+Current posture: Phase 2 and Stage 18 remain open. Each Stage 18 completion
+check now derives runtime readiness from its exact canonical runtime-evidence
+slot rather than static contract flags. The projection requires one unique slot,
+`passed` and `receipt_ready`, an ASCII-safe receipt ID, the expected proof kind,
+and the expected source-contract route. Stage 17 additionally remains correlated
+to the current canonical closure receipt.
+
+Evidence:
+
+- Focused completion-projection, runtime-evidence, managed-copy API, and mounted-
+  route contract tests pass.
+- Malformed, missing, duplicate, misrouted, wrong-kind, unattributed, Unicode,
+  non-string, and overlength receipt projections fail closed.
+- Changed-path Ruff, format, targeted mypy, and repository diff checks pass.
+- Independent affected-delta review passed after the malformed-projection
+  findings were remediated.
+
+Remaining truthful gap:
+
+- The audit remains 1 of 8. This wiring makes future canonical runtime evidence
+  consumable but does not create a production receipt or move any runtime gate.
+- No persistent actor grant, live invocation, production evidence, Stage 18
+  closure, FR-018 clearance, or physical validation occurred.
+- The next software prerequisite is a canonical tenant-isolation runtime verifier;
+  structural directory isolation and a cooperative fixture process are not
+  sufficient customer-isolation evidence.
+
 ### 2026-07-15 - Governed managed-copy fixture runtime startup
 
 Current posture: Phase 2 and Stage 18 remain open. Francis now has a dedicated

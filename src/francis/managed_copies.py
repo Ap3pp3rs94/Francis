@@ -139,6 +139,15 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _runtime_evidence_receipt_id(value: Any) -> str:
+    if type(value) is not str:
+        return ""
+    receipt_id = value.strip()
+    if not receipt_id or len(receipt_id) > 240 or not receipt_id[0].isalnum():
+        return ""
+    return receipt_id if all(char.isascii() and (char.isalnum() or char in "._:-") for char in receipt_id) else ""
+
+
 def _safe_limit(value: int, *, default: int = 100) -> int:
     try:
         parsed = int(value)
@@ -378,6 +387,8 @@ def _completion_check(
     runtime_ready: bool,
     route: str,
     blocker: str,
+    runtime_evidence_requirement_id: str,
+    runtime_evidence_receipt_id: str = "",
 ) -> dict[str, Any]:
     return {
         "id": check_id,
@@ -388,6 +399,8 @@ def _completion_check(
         "status": "ready" if readback_ready and runtime_ready else "blocked",
         "route": route,
         "blocker": blocker,
+        "runtime_evidence_requirement_id": runtime_evidence_requirement_id,
+        "runtime_evidence_receipt_id": runtime_evidence_receipt_id if runtime_ready else "",
     }
 
 
@@ -4530,77 +4543,166 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
     sla_framework = managed_copy_sla_framework_contract_snapshot()
     roles = managed_copy_roles_contract_snapshot()
     decommission = managed_copy_decommission_contract_snapshot()
+    runtime_evidence_contract = managed_copy_runtime_evidence_contract_snapshot()
+    runtime_evidence_readbacks = managed_copy_runtime_evidence_readbacks_snapshot()
+    expected_runtime_evidence = {
+        _safe_str(item.get("id")).strip(): item for item in runtime_evidence_contract["requirements"]
+    }
+    runtime_evidence_checks_value = runtime_evidence_readbacks.get("checks")
+    runtime_evidence_checks = runtime_evidence_checks_value if isinstance(runtime_evidence_checks_value, list) else []
+    check_ids = [_safe_str(item.get("id")).strip() for item in runtime_evidence_checks if isinstance(item, dict)]
+    runtime_evidence_shape_valid = bool(
+        len(check_ids) == len(expected_runtime_evidence)
+        and len(set(check_ids)) == len(check_ids)
+        and set(check_ids) == set(expected_runtime_evidence)
+    )
+    runtime_evidence_by_id = (
+        {_safe_str(item.get("id")).strip(): item for item in runtime_evidence_checks if isinstance(item, dict)}
+        if runtime_evidence_shape_valid
+        else {}
+    )
+
+    def runtime_evidence(requirement_id: str, fallback_blocker: str) -> tuple[bool, str, str]:
+        item = runtime_evidence_by_id.get(requirement_id, {})
+        expected = expected_runtime_evidence.get(requirement_id, {})
+        receipt_id = _runtime_evidence_receipt_id(item.get("receipt_id"))
+        ready = bool(
+            item.get("passed") is True
+            and item.get("receipt_ready") is True
+            and receipt_id
+            and _safe_str(item.get("proof_kind")).strip() == _safe_str(expected.get("proof_kind")).strip()
+            and _safe_str(item.get("source_contract_route")).strip()
+            == _safe_str(expected.get("source_contract_route")).strip()
+        )
+        blocker = "" if ready else _safe_str(item.get("blocker")).strip() or fallback_blocker
+        return ready, blocker, receipt_id if ready else ""
+
+    stage17_ready, stage17_blocker, stage17_receipt_id = runtime_evidence(
+        "stage17_closure_receipt",
+        _safe_str(status["stage17_blocker"]),
+    )
+    stage17_ready = bool(
+        stage17_ready
+        and status["stage17_closed_by_receipt"] is True
+        and stage17_receipt_id == _safe_str(status["stage17_closure_receipt_id"]).strip()
+    )
+    if not stage17_ready:
+        stage17_blocker = _safe_str(status["stage17_blocker"]).strip() or "stage17_closure_receipt_not_current"
+        stage17_receipt_id = ""
+    copy_ready, copy_blocker, copy_receipt_id = runtime_evidence(
+        "copy_creation_runtime_proof",
+        SOURCE_NOT_IMPLEMENTED,
+    )
+    isolation_ready, isolation_blocker, isolation_receipt_id = runtime_evidence(
+        "tenant_isolation_runtime_proof",
+        "stage18_tenant_isolation_runtime_not_implemented",
+    )
+    safe_delta_ready, safe_delta_blocker, safe_delta_receipt_id = runtime_evidence(
+        "safe_delta_runtime_proof",
+        "stage18_safe_delta_runtime_not_implemented",
+    )
+    rogue_ready, rogue_blocker, rogue_receipt_id = runtime_evidence(
+        "rogue_recovery_runtime_proof",
+        "stage18_rogue_recovery_runtime_not_implemented",
+    )
+    sla_ready, sla_blocker, sla_receipt_id = runtime_evidence(
+        "sla_runtime_proof",
+        "stage18_sla_runtime_not_implemented",
+    )
+    roles_ready, roles_blocker, roles_receipt_id = runtime_evidence(
+        "role_authority_runtime_proof",
+        "stage18_role_authority_runtime_not_implemented",
+    )
+    decommission_ready, decommission_blocker, decommission_receipt_id = runtime_evidence(
+        "decommission_runtime_proof",
+        "stage18_decommission_runtime_not_implemented",
+    )
     checks = [
         _completion_check(
             "stage17_ledger_closure_backstop",
             "Stage 17 is closed by receipt before managed-copy closure review",
             readback_ready=True,
-            runtime_ready=bool(status["stage17_closed_by_receipt"]),
+            runtime_ready=stage17_ready,
             route="/managed-copies/status",
-            blocker=_safe_str(status["stage17_blocker"]),
+            blocker=stage17_blocker,
+            runtime_evidence_requirement_id="stage17_closure_receipt",
+            runtime_evidence_receipt_id=stage17_receipt_id,
         ),
         _completion_check(
             "copy_creation_contract",
             "Copy creation contract is read back and backed by runtime creation proof",
             readback_ready=bool(copy_creation["contract_readback_ready"]),
-            runtime_ready=bool(copy_creation["copy_creation_allowed"]),
+            runtime_ready=copy_ready,
             route="/managed-copies/copy-creation-contract",
-            blocker=SOURCE_NOT_IMPLEMENTED,
+            blocker=copy_blocker,
+            runtime_evidence_requirement_id="copy_creation_runtime_proof",
+            runtime_evidence_receipt_id=copy_receipt_id,
         ),
         _completion_check(
             "isolation_rules_contract",
             "Tenant isolation rules are read back and enforced at runtime",
             readback_ready=bool(isolation["contract_readback_ready"]),
-            runtime_ready=bool(isolation["isolation_rules_ready"]),
+            runtime_ready=isolation_ready,
             route="/managed-copies/isolation-rules-contract",
-            blocker="stage18_tenant_isolation_runtime_not_implemented",
+            blocker=isolation_blocker,
+            runtime_evidence_requirement_id="tenant_isolation_runtime_proof",
+            runtime_evidence_receipt_id=isolation_receipt_id,
         ),
         _completion_check(
             "safe_delta_model_contract",
             "Safe delta model is read back and proven by governed runtime flow",
             readback_ready=bool(safe_delta["contract_readback_ready"]),
-            runtime_ready=bool(safe_delta["safe_delta_model_ready"]),
+            runtime_ready=safe_delta_ready,
             route="/managed-copies/safe-delta-model-contract",
-            blocker="stage18_safe_delta_runtime_not_implemented",
+            blocker=safe_delta_blocker,
+            runtime_evidence_requirement_id="safe_delta_runtime_proof",
+            runtime_evidence_receipt_id=safe_delta_receipt_id,
         ),
         _completion_check(
             "rogue_recovery_contract",
             "Rogue recovery model is read back and backed by live detect/replace proof",
             readback_ready=bool(rogue_recovery["contract_readback_ready"]),
-            runtime_ready=bool(rogue_recovery["rogue_recovery_ready"]),
+            runtime_ready=rogue_ready,
             route="/managed-copies/rogue-recovery-contract",
-            blocker="stage18_rogue_recovery_runtime_not_implemented",
+            blocker=rogue_blocker,
+            runtime_evidence_requirement_id="rogue_recovery_runtime_proof",
+            runtime_evidence_receipt_id=rogue_receipt_id,
         ),
         _completion_check(
             "sla_framework_contract",
             "SLA framework is read back and backed by active service evidence",
             readback_ready=bool(sla_framework["contract_readback_ready"]),
-            runtime_ready=bool(sla_framework["sla_framework_ready"]),
+            runtime_ready=sla_ready,
             route="/managed-copies/sla-framework-contract",
-            blocker="stage18_sla_runtime_not_implemented",
+            blocker=sla_blocker,
+            runtime_evidence_requirement_id="sla_runtime_proof",
+            runtime_evidence_receipt_id=sla_receipt_id,
         ),
         _completion_check(
             "roles_contract",
             "Managed-copy role contract is read back and backed by authority binding proof",
             readback_ready=bool(roles["contract_readback_ready"]),
-            runtime_ready=bool(roles["roles_contract_ready"]),
+            runtime_ready=roles_ready,
             route="/managed-copies/roles-contract",
-            blocker="stage18_role_authority_runtime_not_implemented",
+            blocker=roles_blocker,
+            runtime_evidence_requirement_id="role_authority_runtime_proof",
+            runtime_evidence_receipt_id=roles_receipt_id,
         ),
         _completion_check(
             "decommission_contract",
             "Decommission contract is read back and backed by exit-rights proof",
             readback_ready=bool(decommission["contract_readback_ready"]),
-            runtime_ready=bool(decommission["decommission_contract_ready"]),
+            runtime_ready=decommission_ready,
             route="/managed-copies/decommission-contract",
-            blocker="stage18_decommission_runtime_not_implemented",
+            blocker=decommission_blocker,
+            runtime_evidence_requirement_id="decommission_runtime_proof",
+            runtime_evidence_receipt_id=decommission_receipt_id,
         ),
     ]
     readback_ready = all(check["readback_ready"] for check in checks)
     runtime_ready = all(check["runtime_ready"] for check in checks)
     ready_to_close = readback_ready and runtime_ready
     blockers = [check["blocker"] for check in checks if not check["passed"]]
-    runtime_evidence_readbacks = managed_copy_runtime_evidence_readbacks_snapshot()
     return {
         "ok": True,
         "kind": MANAGED_COPIES_COMPLETION_REVIEW_KIND,
@@ -4628,9 +4730,9 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
         "required_count": len(checks),
         "blockers": blockers,
         "done_criteria": {
-            "customer_instances_are_isolated": bool(isolation["isolation_rules_ready"]),
-            "global_core_improves_through_safe_signals": bool(safe_delta["safe_delta_model_ready"]),
-            "rogue_instances_can_be_detected_and_replaced": bool(rogue_recovery["rogue_recovery_ready"]),
+            "customer_instances_are_isolated": isolation_ready,
+            "global_core_improves_through_safe_signals": safe_delta_ready,
+            "rogue_instances_can_be_detected_and_replaced": rogue_ready,
             "business_model_aligned_to_product_law": ready_to_close,
         },
         "routes": {
