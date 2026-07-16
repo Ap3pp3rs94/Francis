@@ -26,6 +26,7 @@ RUNTIME_START_ACTION = "managed_copies.runtime_start"
 RUNTIME_START_CONTRACT = "stage18_managed_copy_runtime_start_v1"
 RUNTIME_IDENTITY = "stage18_fixed_fixture_runtime_v1"
 HEARTBEAT_IDENTITY = "stage18_fixed_fixture_heartbeat_v1"
+HEARTBEAT_STALE_MS = 3_000
 FIXTURE_EVIDENCE_CLASS = "fixture_software_only"
 PRODUCTION_RUNTIME_IDENTITY = "stage18_managed_copy_runtime_v1_inactive"
 
@@ -576,7 +577,7 @@ def _current_state(receipt: dict[str, Any]) -> dict[str, Any]:
     if not _heartbeat_matches_receipt(heartbeat, receipt):
         return {"ready": False, "state": "degraded", "blocker": "runtime_heartbeat_invalid"}
     age_ms = int(time.time() * 1000) - _exact_int(heartbeat.get("observed_at_unix_ms"), minimum=1, maximum=2**63 - 1)
-    if age_ms < 0 or age_ms > 1_000:
+    if age_ms < 0 or age_ms > HEARTBEAT_STALE_MS:
         return {"ready": False, "state": "degraded", "blocker": "runtime_heartbeat_stale"}
     provision = managed_copy_provision_for_copy(
         receipt["copy_id"], provisioning_receipt_id=receipt["provisioning_receipt_id"]
