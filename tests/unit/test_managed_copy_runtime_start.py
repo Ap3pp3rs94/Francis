@@ -271,6 +271,44 @@ def test_child_exit_before_handshake_records_failure_and_leaves_no_process(
     assert not process_identity(result["receipt"]["pid"])
     assert list(runtime_fixture["tenant_root"].glob("receipts/runtime_start/*/failed.json"))
 
+    replay = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+    assert replay["error"] == "managed_copy_runtime_start_approval_already_consumed"
+
+
+def test_last_moment_approval_revocation_prevents_process_creation(
+    runtime_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = runtime_fixture["payload"]
+    approval = _approve(runtime_fixture)
+    approval_path = runtime_fixture["data_root"] / "approvals" / "approved" / f"{approval['id']}.json"
+    original_write = runtime_start._write_immutable
+
+    def revoke_after_attempt(path: Path, value: dict[str, Any]) -> None:
+        original_write(path, value)
+        if path.name == "attempt.json":
+            approval["payload"]["revoked"] = True
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+
+    monkeypatch.setattr(runtime_start, "_write_immutable", revoke_after_attempt)
+    monkeypatch.setattr(
+        runtime_start.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("revoked approval must not create a process"),
+    )
+    result = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+
+    assert result["error"] == "managed_copy_runtime_start_approval_revoked"
+    assert result["receipt"]["process_created"] is False
+    assert list(runtime_fixture["tenant_root"].glob("receipts/runtime_start/*/failed.json"))
+
 
 def test_current_fixture_startup_records_software_evidence_without_runtime_readiness(
     runtime_fixture: dict[str, Any],

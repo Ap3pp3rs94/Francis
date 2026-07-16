@@ -258,6 +258,8 @@ def start_fixture_runtime(
                 ):
                     return {"ok": True, "status": "already_started", "receipt": prior, "writes_receipt": False}
                 return _blocked(final, "managed_copy_runtime_start_approval_already_consumed")
+            if _attempt_receipt_for_approval(final["approval_id"]):
+                return _blocked(final, "managed_copy_runtime_start_approval_already_consumed")
             if _active_lease_for_copy(final["copy_id"]):
                 return _blocked(final, "managed_copy_runtime_start_active_lease_conflict")
             return _launch(final)
@@ -348,6 +350,31 @@ def _launch(plan: dict[str, Any]) -> dict[str, Any]:
         "recorded_at_unix_ms": int(time.time() * 1000),
     }
     _write_immutable(state_dir / "attempt.json", attempt)
+    approval_blocker = _approval_blocker(
+        _approved_runtime_start(plan["approval_id"]),
+        actor=plan["actor"],
+        descriptor=descriptor,
+        descriptor_fingerprint=plan["descriptor_fingerprint"],
+        action_nonce=plan["action_nonce"],
+        trace_id=plan["trace_id"],
+    )
+    if approval_blocker:
+        return _failed_before_launch(attempt, state_dir=state_dir, blocker=approval_blocker)
+    if (
+        _file_hash(_fixture_executable()) != descriptor["executable_fingerprint"]
+        or _fingerprint(
+            {
+                "program_fingerprint": _file_hash(_fixture_program()),
+                "argument_contract": "fixed_fixture_v1",
+            }
+        )
+        != descriptor["argument_fingerprint"]
+    ):
+        return _failed_before_launch(
+            attempt,
+            state_dir=state_dir,
+            blocker="managed_copy_runtime_start_fixed_program_changed_before_launch",
+        )
     command = _fixture_command(
         state_dir=state_dir,
         descriptor=descriptor,
@@ -779,6 +806,31 @@ def _startup_receipt_for_approval(approval_id: str) -> dict[str, Any]:
         if item.get("approval_id") == approval_id:
             return item
     return {}
+
+
+def _attempt_receipt_for_approval(approval_id: str) -> dict[str, Any]:
+    root = data_dir() / "managed_copies" / "tenants"
+    if not root.is_dir():
+        return {}
+    for path in root.glob("*/receipts/runtime_start/*/attempt.json"):
+        item = _read_json(path)
+        if item.get("approval_id") == approval_id and item.get("kind") == (
+            "francis.stage18.managed_copies.runtime_launch_attempt_receipt"
+        ):
+            return item
+    return {}
+
+
+def _failed_before_launch(attempt: dict[str, Any], *, state_dir: Path, blocker: str) -> dict[str, Any]:
+    failed = {
+        **attempt,
+        "kind": "francis.stage18.managed_copies.runtime_start_failed_receipt",
+        "status": "failed",
+        "error": blocker,
+        "process_created": False,
+    }
+    _write_immutable(state_dir / "failed.json", failed)
+    return {"ok": False, "status": "failed", "error": blocker, "receipt": failed}
 
 
 def _guarded_state_directory(plan: dict[str, Any], *, lease_id: str) -> Path | None:
