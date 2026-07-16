@@ -1,0 +1,262 @@
+{
+  "contract": "francis.stage18.local_pilot_authorization_package.v1",
+  "package_id": "stage18-local-pilot-001",
+  "proposal_only": true,
+  "authorization_effect": "none",
+  "execution_status": "blocked_pending_exact_operator_decisions_and_missing_producer",
+  "source_head": "5b20dc1061eb42eb85c3a7581a1f7f278a8fbc92",
+  "operator": {
+    "identity": "Austin",
+    "ownership": "local_operator_owned_pilot",
+    "must_confirm_identity_in_authorization": true
+  },
+  "actor": {
+    "identity": "codex.builder",
+    "persistent_grant_allowed": false,
+    "scope_delivery": "process_scoped_only",
+    "scope_lease_required": true
+  },
+  "purpose": {
+    "exact": "Run one non-fixture, synthetic-data, operator-owned local managed copy long enough to prove governed creation and current runtime readiness without network or external action.",
+    "production_customer": false,
+    "commercial_use": false,
+    "fixture_evidence_acceptable_for_gate": false
+  },
+  "identity": {
+    "pilot_tenant_id": "francis-local-pilot-austin-001",
+    "pilot_tenant_key": "47b5c0a36de34201ed2bde71272b781d9299d175364b4202a031993b7f77a742",
+    "pilot_copy_id": "managed_copy_47b5c0a36de34201",
+    "pilot_run_id": "stage18-local-pilot-001-run-001",
+    "runtime_identity": "stage18_managed_copy_local_pilot_v1",
+    "trace_id": "stage18-local-pilot-001-trace-001"
+  },
+  "roots": {
+    "pilot_root": "C:\\Users\\Ap3pp\\AppData\\Local\\Francis\\pilot-runs\\stage18-local-pilot-001",
+    "francis_data_dir": "C:\\Users\\Ap3pp\\AppData\\Local\\Francis\\pilot-runs\\stage18-local-pilot-001\\data",
+    "synthetic_input": "C:\\Users\\Ap3pp\\AppData\\Local\\Francis\\pilot-runs\\stage18-local-pilot-001\\input",
+    "container_state": "C:\\Users\\Ap3pp\\AppData\\Local\\Francis\\pilot-runs\\stage18-local-pilot-001\\state",
+    "receipts": "C:\\Users\\Ap3pp\\AppData\\Local\\Francis\\pilot-runs\\stage18-local-pilot-001\\receipts",
+    "allowed_mounts": [
+      {
+        "source": "synthetic_input",
+        "destination": "/francis/tenant",
+        "mode": "read_only"
+      },
+      {
+        "source": "container_state",
+        "destination": "/francis/state",
+        "mode": "read_write"
+      }
+    ],
+    "all_other_host_mounts": "denied"
+  },
+  "data_policy": {
+    "classification": "synthetic_non_sensitive_local_pilot",
+    "allowed": [
+      "operator-authored synthetic UTF-8 text",
+      "fixed runtime configuration containing no secrets",
+      "bounded heartbeat and receipt state"
+    ],
+    "excluded": [
+      "personal data",
+      "customer data",
+      "credentials, tokens, keys, cookies, or authentication material",
+      "browser profiles or sessions",
+      "email, calendar, contacts, messages, photos, or documents",
+      "OneDrive content",
+      "C:\\Users\\Ap3pp\\.codex",
+      "C:\\Users\\Ap3pp\\.ssh",
+      "C:\\Users\\Ap3pp\\AppData except the exact pilot root",
+      "D:\\Francis",
+      "D:\\Francis-support except a post-run hash-only evidence handoff",
+      "Docker socket, Docker configuration, or Docker credentials",
+      "VSC-1 files, mounts, volumes, networks, images, containers, or configuration",
+      "live Francis or Orb runtime data"
+    ]
+  },
+  "external_posture": {
+    "container_network": "none",
+    "published_ports": [],
+    "dns": "disabled_by_network_none",
+    "registry_operations": "none_during_pilot",
+    "external_actions": "none",
+    "shell_from_caller": false,
+    "desktop_input": false,
+    "orb_or_lens_access": false
+  },
+  "authority": {
+    "required_scopes": [
+      "managed_copies.copy_creation.write",
+      "managed_copies.isolation_verification.write",
+      "managed_copies.runtime_start.execute",
+      "managed_copies.container_isolation.execute",
+      "managed_copies.runtime_evidence.write"
+    ],
+    "grant_contract": {
+      "persistent": false,
+      "single_pilot_run": true,
+      "expires_after_minutes": 30,
+      "revocable_before_each_mutating_action": true,
+      "automatic_scope_inheritance": false,
+      "status": "missing_native_expiring_scope_lease_enforcement"
+    },
+    "separate_exact_action_approvals": [
+      {
+        "action": "managed_copy_provision",
+        "approval_id": "generated_after_hash_bound_creation_plan",
+        "single_use": true,
+        "expiring": true,
+        "revocable_before_consumption": true
+      },
+      {
+        "action": "managed_copies.runtime_start",
+        "approval_id": "generated_after_final_runtime_descriptor",
+        "single_use": true,
+        "expiring": true,
+        "revocable_before_launch": true
+      },
+      {
+        "action": "managed_copies.container_isolation",
+        "approval_id": "generated_after_final_container_descriptor",
+        "single_use": true,
+        "expiring": true,
+        "revocable_before_launch": true
+      },
+      {
+        "action": "managed_copies.runtime_evidence.write",
+        "approval_id": "operator_decision_required_for_non_fixture_recording",
+        "single_use": true,
+        "expiring": true,
+        "revocable_before_write": true
+      }
+    ]
+  },
+  "runtime_lineage": {
+    "backend": "docker_desktop_wsl2_linux",
+    "docker_context": "desktop-linux",
+    "container_contract": "stage18_managed_copy_docker_isolation_v1",
+    "proven_fixture_repository": "docker.io/library/busybox",
+    "proven_fixture_tag": "1.36.1",
+    "proven_manifest_digest": "sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+    "proven_platform_digest": "sha256:b7f3d86d6e84fc17718c48bcde1450807faa2d56704205c697b4bd5df7b9e29f",
+    "platform": "linux/amd64",
+    "pilot_runtime_artifact": null,
+    "pilot_runtime_artifact_status": "operator_selection_and_hash_bound_implementation_required",
+    "fixture_image_may_be_relabelled_as_pilot": false
+  },
+  "resource_contract": {
+    "user": "65532:65532",
+    "privileged": false,
+    "cap_drop": ["ALL"],
+    "cap_add": [],
+    "no_new_privileges": true,
+    "read_only_rootfs": true,
+    "network_mode": "none",
+    "restart_policy": "no",
+    "memory_bytes": 67108864,
+    "nano_cpus": 250000000,
+    "pids_limit": 32,
+    "lease_seconds": 30,
+    "writable_mount_count": 1,
+    "automatic_restart": false,
+    "persistence_after_lease": false
+  },
+  "expected_positive_behavior": [
+    "Stage 17 closure receipt remains current",
+    "the exact tenant is provisioned once under a consumed copy-creation approval",
+    "structural isolation lineage is current immediately before launch",
+    "the exact approved container starts under the fixed security profile",
+    "the runtime returns the approved identity and nonce",
+    "a current identity-correlated heartbeat reports ready",
+    "synthetic tenant input is readable",
+    "all excluded and cross-tenant roots remain absent",
+    "the exact container stops and is absent after the bounded lease",
+    "canonical non-fixture source evidence is recorded only after final current-state revalidation"
+  ],
+  "mandatory_denials": [
+    "unscoped actor before payload processing or filesystem creation",
+    "missing, expired, revoked, reused, or descriptor-mismatched approval",
+    "changed tenant, copy, provision, isolation, runtime, image, command, mount, environment, endpoint, lease, nonce, or trace",
+    "caller-selected image, command, entrypoint, argument, environment, Docker flag, or host path",
+    "network, published port, Docker socket, privileged mode, added capability, host namespace, device, GPU, or broad profile/repository mount",
+    "symlink, junction, reparse-point, traversal, or path-normalization escape",
+    "access to excluded data or any tenant other than the exact pilot tenant",
+    "stale heartbeat, PID or container-ID reuse, identity drift, changed lineage, or expired lease",
+    "runtime-evidence write from fixture-class, stale, tampered, caller-supplied, or noncanonical source evidence",
+    "any automatic Stage 18 closure or advancement of an unrelated runtime gate"
+  ],
+  "interruption_recovery": {
+    "automatic_restart": false,
+    "pre_container_id": "recover only by deterministic proof-owned name and exact labels; otherwise stop as cleanup_required",
+    "post_container_id": "revalidate full container identity before stop or removal",
+    "manager_interruption": "bounded lease remains the second line of defense; resume from immutable receipts and exact Docker identity",
+    "ambiguous_ownership": "do not terminate; preserve evidence and escalate",
+    "receipt_write_failure": "stop, clean only the exact owned container, and retain cleanup_required posture"
+  },
+  "cleanup_replacement": {
+    "cleanup": "stop and remove only the exact identity-correlated pilot container, verify post-removal absence, release locks and lease, preserve receipts",
+    "tenant_state": "seal and retain; do not delete without separate decommission authority",
+    "image": "remove only if acquired by this run, unused, and not pre-existing",
+    "replacement": "requires a new pilot package, new nonces, new approvals, and new receipts; no in-place restart or silent substitution",
+    "current_status": "pilot_stop_and_replacement_authority_not_implemented"
+  },
+  "evidence": {
+    "required_receipts": [
+      "copy request, preflight, creation plan, approval, provision, and structural-isolation receipts",
+      "runtime-start proposal, approval, launch-attempt, handshake, heartbeat/current-state, ready or failed receipt",
+      "container-isolation proposal, approval, image provenance, launch-attempt, identity, security-profile, mount/denial, ready or failed, cleanup, and post-removal absence evidence",
+      "canonical runtime-evidence receipt for copy_creation_runtime_proof"
+    ],
+    "canonical_requirement_id": "copy_creation_runtime_proof",
+    "canonical_proof_kind": "managed_copy_creation_runtime_receipt",
+    "source_must_be_non_fixture": true,
+    "fixture_receipts_satisfy_gate": false,
+    "production_customer_claim": false,
+    "stage18_closure_claim": false
+  },
+  "stage18_gate_effect": {
+    "could_advance": "copy_creation_contract",
+    "runtime_evidence_requirement": "copy_creation_runtime_proof",
+    "conditions": "only after a non-fixture pilot runtime producer and canonical current-state verifier are implemented and the exact authorized pilot succeeds",
+    "cannot_advance": {
+      "stage17_ledger_closure_backstop": "already satisfied independently and not changed by the pilot",
+      "isolation_rules_contract": "one bounded mount-denial pilot is not comprehensive customer tenant-isolation proof",
+      "safe_delta_model_contract": "the pilot exports or applies no delta",
+      "rogue_recovery_contract": "the pilot performs no rogue detection, containment, or replacement",
+      "sla_framework_contract": "a 30-second local run is not active service or SLA evidence",
+      "roles_contract": "the pilot does not prove a production role/authority matrix",
+      "decommission_contract": "bounded cleanup is not customer exit-rights or decommission proof"
+    }
+  },
+  "stop_conditions": [
+    "operator identity, actor identity, or any exact approval is absent or ambiguous",
+    "the pilot runtime artifact and fingerprints are not fixed",
+    "the native expiring scope lease is not enforceable",
+    "Docker Desktop requires restart, elevation, login, repair, settings, context, daemon, networking, storage, or WSL mutation",
+    "any non-pilot container, image, volume, network, mount, port, or process would be changed",
+    "the fixed security profile or exact mount set cannot be enforced",
+    "source lineage, current state, heartbeat, identity, receipt, or hash validation fails",
+    "excluded data is observed or could become reachable",
+    "cleanup cannot prove exact-container removal",
+    "recording would classify fixture evidence as non-fixture or advance more than copy_creation_runtime_proof"
+  ],
+  "rollback": [
+    "revoke every unconsumed pilot approval and remove the process-scoped actor scopes",
+    "stop and remove only the exact pilot container after full identity revalidation",
+    "verify the exact container, endpoint, lease, and lock are absent",
+    "preserve immutable failure and cleanup receipts plus a hash-only evidence handoff",
+    "seal provisioned tenant state without deleting it",
+    "restore no Docker setting because the pilot is forbidden from changing settings",
+    "require separate decommission authority before deleting tenant state or receipts"
+  ],
+  "operator_decisions_required": [
+    "confirm Austin as the canonical operator identity for this package",
+    "confirm codex.builder as the one-run execution actor",
+    "select and approve the fixed non-fixture pilot runtime artifact and its source/image fingerprints",
+    "approve implementation of the pilot-only runtime producer and canonical container-to-runtime evidence verifier",
+    "approve a native process-scoped expiring and revocable scope lease or choose an existing equivalent enforcement path",
+    "approve separate exact-action provisioning, runtime-start, container-isolation, and runtime-evidence decisions after their final fingerprints exist",
+    "approve the synthetic input contents and confirm they contain no sensitive data",
+    "approve pilot execution in a later instruction"
+  ]
+}
