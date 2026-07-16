@@ -45,7 +45,7 @@ web = [
   "python-multipart",
 ]
 bridge = [
-  "mcp>=1.2.0",
+  "mcp>=1.28.1",
 ]
 data = [
   "sqlalchemy",
