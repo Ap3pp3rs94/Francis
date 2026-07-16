@@ -38,11 +38,11 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the next executable Stage 18 capability after the promoted, fixture-backed rogue-signal assessment. "
-            "The assessment records one immutable, redacted evidence receipt for a structurally verified managed "
-            "copy while keeping rogue detection, containment, recovery, and general mutation authority false. "
-            "Production copy creation and incident determination still require real operator-supplied tenant, "
-            "policy, and incident facts; those facts are not inferred or fabricated."
+            "the first canonical Stage 18 runtime producer. Governed runtime-evidence recording software exists "
+            "for the copy-creation proof slot, but the canonical source receipt proving an operating managed copy "
+            "is not yet implemented. Production copy creation and incident determination still require real "
+            "operator-supplied tenant, policy, runtime, and incident facts; those facts are not inferred or "
+            "fabricated."
         ),
         "read_only_contract": True,
         "writes_repo": False,
@@ -191,7 +191,7 @@ def test_stage17_roadmap_steering_excludes_fr017_forearm_naming_collision() -> N
     matrix = (root / "docs" / "operations" / "STAGE17_CLOSURE_MATRIX.md").read_text(encoding="utf-8")
     manifest = (root / "FR-017_Stage17_Package" / "FR-017-STAGE17-PACKAGE-MANIFEST.json").read_text(encoding="utf-8")
 
-    assert "The current goal is the next executable Stage 18 capability" in ledger
+    assert "The current goal is the first canonical Stage 18 runtime producer" in ledger
     assert "stage17_capability_economy_closure_afd0fa32f7d1" in ledger
     assert "The current goal is the FR-017 operator/physical evidence boundary" not in ledger
     assert "The remaining gates are the physically present" not in matrix
