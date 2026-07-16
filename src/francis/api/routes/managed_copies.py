@@ -795,7 +795,7 @@ def runtime_evidence_readbacks(limit: int = 100) -> dict[str, Any]:
 
 @router.post("/runtime-evidence-readback")
 def runtime_evidence_readback(payload: dict[str, Any], request: Request) -> dict[str, Any]:
-    actor = _managed_copy_write_actor(payload)
+    actor = _safe_str(payload.get("request_actor")).strip()
     decision = _write_permission(
         actor,
         required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,

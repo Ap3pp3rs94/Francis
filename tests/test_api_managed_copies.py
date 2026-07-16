@@ -249,7 +249,7 @@ def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_r
     assert stage17_check["passed"] is True
     assert completion["stage18_completion_review_ready"] is False
     assert "stage17_operator_stage_closure_decision" not in completion["blockers"]
-    assert completion["next_smallest_truthful_gap"] == "stage18_copy_creation_runtime_not_implemented"
+    assert completion["next_smallest_truthful_gap"] == ("stage18_copy_creation_runtime_source_receipt_not_implemented")
 
     request = client.post(
         "/managed-copies/copy-creation-request",
@@ -2190,7 +2190,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert check_by_id["decommission_contract"]["route"] == "/managed-copies/decommission-contract"
     assert body["blockers"] == [
         "stage17_operator_stage_closure_decision",
-        "stage18_copy_creation_runtime_not_implemented",
+        "stage18_copy_creation_runtime_source_receipt_not_implemented",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
         "stage18_rogue_recovery_runtime_not_implemented",
@@ -2242,7 +2242,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert not data_root.exists()
 
 
-def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
+def test_managed_copy_runtime_evidence_contract_exposes_bounded_recorder_without_runtime_source(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -2258,8 +2258,8 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert body["source_id"] == "managed_copies"
     assert body["status"] == "blocked"
     assert body["contract_readback_ready"] is True
-    assert body["runtime_evidence_contract_ready"] is False
-    assert body["runtime_evidence_recording_enabled"] is False
+    assert body["runtime_evidence_contract_ready"] is True
+    assert body["runtime_evidence_recording_enabled"] is True
     assert body["runtime_evidence_ready"] is False
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
@@ -2284,8 +2284,13 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert all(item["status"] == "required_not_present" for item in body["requirements"])
     assert all(item["ready"] is False for item in body["requirements"])
     assert all(item["requires_receipt"] is True for item in body["requirements"])
-    assert all(item["recording_enabled"] is False for item in body["requirements"])
-    assert all(item["writes_receipt"] is False for item in body["requirements"])
+    assert requirement_by_id["copy_creation_runtime_proof"]["recording_enabled"] is True
+    assert requirement_by_id["copy_creation_runtime_proof"]["writes_receipt"] is True
+    assert all(
+        item["recording_enabled"] is False
+        for item in body["requirements"]
+        if item["id"] != "copy_creation_runtime_proof"
+    )
     assert all(item["mutates_tenant_state"] is False for item in body["requirements"])
     assert all(item["grants_execution_authority"] is False for item in body["requirements"])
     assert all(item["grants_mutation_authority"] is False for item in body["requirements"])
@@ -2296,7 +2301,7 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
 
     assert body["blockers"] == [
         "stage17_operator_stage_closure_decision",
-        "stage18_copy_creation_runtime_not_implemented",
+        "stage18_copy_creation_runtime_source_receipt_not_implemented",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
         "stage18_rogue_recovery_runtime_not_implemented",
@@ -2332,9 +2337,9 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
-    assert governance["runtime_evidence_contract_only"] is True
-    assert governance["evidence_collection_enabled"] is False
-    assert governance["does_not_record_runtime_evidence"] is True
+    assert governance["runtime_evidence_contract_only"] is False
+    assert governance["evidence_collection_enabled"] is True
+    assert governance["does_not_record_runtime_evidence"] is False
     assert governance["does_not_mark_stage_closed"] is True
     assert governance["requires_stage17_closure_receipt"] is True
     assert governance["writes_tenant_state"] is False
@@ -2366,8 +2371,8 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
     assert body["required_count"] == len(body["checks"])
     assert body["runtime_evidence_readback_ready"] is False
     assert body["runtime_evidence_ready"] is False
-    assert body["runtime_evidence_recording_enabled"] is False
-    assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence.jsonl"
+    assert body["runtime_evidence_recording_enabled"] is True
+    assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence/"
     assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
     assert body["missing_evidence"] == [
         "stage17_closure_receipt",
@@ -2381,7 +2386,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
     ]
     assert body["missing_blockers"] == [
         "stage17_operator_stage_closure_decision",
-        "stage18_copy_creation_runtime_not_implemented",
+        "stage18_copy_creation_runtime_source_receipt_not_implemented",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
         "stage18_rogue_recovery_runtime_not_implemented",
@@ -2417,7 +2422,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
     assert not data_root.exists()
 
 
-def test_managed_copy_runtime_evidence_readbacks_consume_existing_receipts_without_writing(
+def test_managed_copy_runtime_evidence_readbacks_reject_legacy_caller_assertions(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -2454,13 +2459,14 @@ def test_managed_copy_runtime_evidence_readbacks_consume_existing_receipts_witho
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "partial"
-    assert body["count"] == 1
-    assert body["receipt_ready_count"] == 1
-    assert body["ready_count"] == 1
+    assert body["status"] == "empty"
+    assert body["count"] == 0
+    assert body["receipt_ready_count"] == 0
+    assert body["ready_count"] == 0
     assert body["runtime_evidence_readback_ready"] is False
     assert body["missing_evidence"] == [
         "stage17_closure_receipt",
+        "copy_creation_runtime_proof",
         "tenant_isolation_runtime_proof",
         "safe_delta_runtime_proof",
         "rogue_recovery_runtime_proof",
@@ -2469,11 +2475,9 @@ def test_managed_copy_runtime_evidence_readbacks_consume_existing_receipts_witho
         "decommission_runtime_proof",
     ]
     check_by_id = {item["id"]: item for item in body["checks"]}
-    assert check_by_id["copy_creation_runtime_proof"]["passed"] is True
-    assert check_by_id["copy_creation_runtime_proof"]["receipt_id"] == "mc-copy-runtime-proof-1"
-    assert check_by_id["copy_creation_runtime_proof"]["proof_kind"] == "managed_copy_creation_runtime_receipt"
-    assert check_by_id["copy_creation_runtime_proof"]["trace_id"] == "trace-managed-copy-runtime-proof-1"
-    assert check_by_id["copy_creation_runtime_proof"]["status"] == "observed"
+    assert check_by_id["copy_creation_runtime_proof"]["passed"] is False
+    assert check_by_id["copy_creation_runtime_proof"]["receipt_id"] == ""
+    assert check_by_id["copy_creation_runtime_proof"]["status"] == "not_observed"
     assert body["writes_receipts"] is False
     assert body["writes_tenant_state"] is False
     assert body["grants_execution_authority"] is False
@@ -2522,6 +2526,28 @@ def test_managed_copy_runtime_evidence_readback_denies_unscoped_actor_without_wr
     assert not data_root.exists()
 
 
+def test_managed_copy_runtime_evidence_route_does_not_accept_actor_aliases(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.alias-writer"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.runtime_evidence.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/runtime-evidence-readback",
+        json={"actor": actor},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["error"] == "api_permission_denied"
+    assert not data_root.exists()
+
+
 def test_managed_copy_runtime_evidence_readback_blocks_scoped_actor_until_stage17_closes(
     monkeypatch,
     tmp_path,
@@ -2559,34 +2585,125 @@ def test_managed_copy_runtime_evidence_readback_blocks_scoped_actor_until_stage1
     assert body["expected_proof_kind"] == "managed_copy_creation_runtime_receipt"
     assert body["proof_kind_matches_requirement"] is True
     assert body["trace_id"] == "trace-managed-copy-runtime-proof-blocked"
-    assert body["evidence_summary_present"] is True
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
-    assert body["runtime_evidence_recording_enabled"] is False
+    assert body["runtime_evidence_recording_enabled"] is True
     assert body["receipt_ready"] is False
     assert body["writes_receipt"] is False
     assert body["writes_receipts"] is False
     assert body["writes_tenant_state"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
-    assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence.jsonl"
+    assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence/"
     assert body["required_scope"] == "managed_copies.runtime_evidence.write"
     assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
     assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
-    assert governance["preflight_only"] is True
+    assert governance["preflight_only"] is False
     assert governance["permission_scope"] == "managed_copies.runtime_evidence.write"
     assert governance["permission_checked"] is True
-    assert governance["runtime_evidence_recording_enabled"] is False
-    assert governance["does_not_record_runtime_evidence"] is True
+    assert governance["runtime_evidence_recording_enabled"] is True
+    assert governance["does_not_record_runtime_evidence"] is False
     assert governance["requires_stage17_closure_receipt"] is True
     assert governance["writes_receipts"] is False
     assert governance["writes_tenant_state"] is False
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
+
+
+def test_managed_copy_runtime_evidence_route_records_fixture_receipt_without_readiness(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    import hashlib
+
+    from francis import managed_copy_runtime_evidence as runtime_evidence
+    from francis.economy.stage17_closure import record_stage17_operator_stage_closure_decision
+
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.runtime-writer"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.runtime_evidence.write"]}),
+    )
+    criteria = [{"id": f"criterion_{index}", "status": "ready", "blockers": []} for index in range(1, 7)]
+    record_stage17_operator_stage_closure_decision(
+        actor="test.stage17.operator",
+        reason="validated Stage 17 closure fixture",
+        decision="close_stage17",
+        review={
+            "status": "ready",
+            "stage17_completion_review_ready": True,
+            "criteria_ready_count": 6,
+            "criteria_required_count": 6,
+            "closure_matrix": {
+                "kind": "plugin.capability_catalog.stage17_closure_matrix",
+                "status": "ready_for_closure_review",
+                "all_criteria_ready": True,
+                "criteria": criteria,
+                "source_readbacks": {"catalog_route": "/plugins/capabilities/catalog"},
+            },
+        },
+    )
+
+    def fixture_source(_: str, __: str) -> dict[str, object]:
+        return {
+            "valid": True,
+            "blocker": "",
+            "evidence_class": "fixture_software_only",
+            "source_lineage_hash": hashlib.sha256(b"lineage").hexdigest(),
+            "current_state_hash": hashlib.sha256(b"state").hexdigest(),
+        }
+
+    monkeypatch.setattr(runtime_evidence, "verify_copy_creation_runtime_source", fixture_source)
+    payload = {
+        "request_actor": actor,
+        "requirement_id": "copy_creation_runtime_proof",
+        "proof_kind": "managed_copy_creation_runtime_receipt",
+        "source_receipt_id": "fixture-runtime-source-1",
+        "source_receipt_fingerprint": hashlib.sha256(b"source").hexdigest(),
+        "trace_id": "trace-stage18-runtime-evidence-api-fixture",
+        "dry_run": True,
+        "record_fingerprint": "",
+        "confirm_runtime_evidence": False,
+    }
+    client = TestClient(create_app())
+    plan = client.post("/managed-copies/runtime-evidence-readback", json=payload).json()
+    assert plan["ok"] is True
+    assert plan["status"] == "record_ready"
+    assert plan["writes_receipt"] is False
+
+    payload.update(
+        dry_run=False,
+        record_fingerprint=plan["record_fingerprint"],
+        confirm_runtime_evidence=True,
+    )
+    recorded = client.post("/managed-copies/runtime-evidence-readback", json=payload).json()
+    assert recorded["ok"] is True
+    assert recorded["status"] == "recorded"
+    assert recorded["writes_receipt"] is True
+    assert recorded["receipt"]["evidence_class"] == "fixture_software_only"
+    assert recorded["requirement_id"] == "copy_creation_runtime_proof"
+    assert recorded["proof_kind"] == "managed_copy_creation_runtime_receipt"
+    assert recorded["trace_id"] == "trace-stage18-runtime-evidence-api-fixture"
+
+    readback = client.get("/managed-copies/runtime-evidence-readbacks").json()
+    assert readback["count"] == 1
+    assert readback["ready_count"] == 1
+    copy_check = next(item for item in readback["checks"] if item["id"] == "copy_creation_runtime_proof")
+    assert copy_check["passed"] is False
+    assert copy_check["receipt_ready"] is False
+    assert "copy_creation_runtime_proof" in readback["missing_evidence"]
+
+    completion = client.get("/managed-copies/completion-review").json()
+    assert completion["runtime_ready_count"] == 1
+    assert completion["required_count"] == 8
+    assert completion["ready_to_close"] is False
+    assert completion["next_smallest_truthful_gap"] == ("stage18_copy_creation_runtime_source_receipt_not_implemented")
 
 
 def test_managed_copy_decommission_contract_is_projection_only_and_inactive(

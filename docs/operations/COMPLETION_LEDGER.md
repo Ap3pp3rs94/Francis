@@ -60,13 +60,12 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is the next executable Stage 18 capability after the promoted,
-fixture-backed rogue-signal assessment. The assessment records one immutable,
-redacted evidence receipt for a structurally verified managed copy while keeping
-rogue detection, containment, recovery, and general mutation authority false.
-Production copy creation and incident determination still require real
-operator-supplied tenant, policy, and incident facts; those facts are not
-inferred or fabricated.
+The current goal is the first canonical Stage 18 runtime producer. Governed
+runtime-evidence recording software exists for the copy-creation proof slot, but
+the canonical source receipt proving an operating managed copy is not yet
+implemented. Production copy creation and incident determination still require
+real operator-supplied tenant, policy, runtime, and incident facts; those facts
+are not inferred or fabricated.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -127,6 +126,34 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-15 - Stage 18 runtime-evidence recorder software
+
+Current posture: Phase 2 and Stage 18 remain open. The existing
+`managed_copies.runtime_evidence.write` scope now guards an exact-schema,
+immutable recorder for `copy_creation_runtime_proof`. The recorder independently
+requires canonical source lineage, revalidates it under a cross-process write
+lock, rejects conflicting replay and tampering, and persists no caller-supplied
+evidence narrative.
+
+Evidence:
+
+- Focused recorder, complete managed-copy API, and mutation-authority tests pass.
+- Changed-path Ruff, format, targeted mypy, and repository diff checks pass.
+- Independent VERA acceptance review passed the immutable receipt, replay,
+  tamper, completion-audit, and no-side-effect contract.
+- Fixture-backed writes are labeled `fixture_software_only` and never satisfy
+  runtime readiness.
+
+Remaining truthful gap:
+
+- No canonical producer currently proves an operating managed copy. Production
+  recording therefore fails closed with
+  `stage18_copy_creation_runtime_source_receipt_not_implemented`.
+- No persistent actor received the write scope, no live route invocation
+  occurred, and no production runtime evidence was recorded.
+- The runtime-evidence completion audit remains 1 of 8; tests did not make a
+  runtime requirement ready and did not create a Stage 18 closure claim.
 
 ### 2026-07-15 - Isolated Lens runtime identity contract
 

@@ -8,7 +8,13 @@ from francis.economy.stage17_closure import (
     STAGE17_CLOSURE_DECISION_GAP,
     stage17_operator_stage_closure_decision_readback,
 )
-from francis.kernel.paths import data_dir
+from francis.managed_copy_runtime_evidence import (
+    COPY_CREATION_REQUIREMENT,
+    SOURCE_NOT_IMPLEMENTED,
+    load_runtime_evidence_receipts,
+    receipt_satisfies_runtime_requirement,
+    record_runtime_evidence,
+)
 from francis.managed_copy_creation import (
     latest_managed_copy_creation_plan_receipt_for_preflight,
     latest_managed_copy_preflight_receipt_for_request,
@@ -139,10 +145,6 @@ def _safe_limit(value: int, *, default: int = 100) -> int:
     except (TypeError, ValueError):
         parsed = default
     return min(max(parsed, 1), 500)
-
-
-def _runtime_evidence_path() -> Path:
-    return data_dir() / "logs" / "managed_copies" / "runtime_evidence.jsonl"
 
 
 def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
@@ -423,6 +425,7 @@ def _runtime_evidence_requirement(
     requires_receipt: bool = True,
     ready: bool = False,
     receipt_id: str = "",
+    recording_enabled: bool = False,
 ) -> dict[str, Any]:
     return {
         "id": requirement_id,
@@ -434,8 +437,8 @@ def _runtime_evidence_requirement(
         "blocker": "" if ready else blocker,
         "requires_receipt": requires_receipt,
         "receipt_id": receipt_id if ready else "",
-        "recording_enabled": False,
-        "writes_receipt": False,
+        "recording_enabled": recording_enabled,
+        "writes_receipt": recording_enabled,
         "mutates_tenant_state": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
@@ -443,22 +446,8 @@ def _runtime_evidence_requirement(
 
 
 def _runtime_evidence_ready(item: dict[str, Any], requirement: dict[str, Any]) -> bool:
-    raw_governance = item.get("governance")
-    governance: dict[str, Any] = raw_governance if isinstance(raw_governance, dict) else {}
-    return (
-        _safe_str(item.get("requirement_id")).strip() == requirement["id"]
-        and _safe_str(item.get("proof_kind")).strip() == requirement["proof_kind"]
-        and _safe_str(item.get("receipt_id")).strip() != ""
-        and _safe_str(item.get("trace_id")).strip() != ""
-        and _safe_str(item.get("evidence_summary")).strip() != ""
-        and bool(item.get("observed"))
-        and _safe_str(item.get("status")).strip() == "observed"
-        and bool(governance.get("runtime_evidence_receipt"))
-        and bool(governance.get("trace_linked"))
-        and bool(governance.get("redacted"))
-        and not bool(governance.get("contains_raw_private_data"))
-        and not bool(governance.get("grants_execution_authority"))
-        and not bool(governance.get("grants_mutation_authority"))
+    return _safe_str(item.get("requirement_id")).strip() == requirement["id"] and receipt_satisfies_runtime_requirement(
+        item
     )
 
 
@@ -4553,7 +4542,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
             readback_ready=bool(copy_creation["contract_readback_ready"]),
             runtime_ready=bool(copy_creation["copy_creation_allowed"]),
             route="/managed-copies/copy-creation-contract",
-            blocker="stage18_copy_creation_runtime_not_implemented",
+            blocker=SOURCE_NOT_IMPLEMENTED,
         ),
         _completion_check(
             "isolation_rules_contract",
@@ -4690,7 +4679,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
             "A governed managed copy is created with isolated state and required receipts",
             source_contract_route="/managed-copies/copy-creation-contract",
             proof_kind="managed_copy_creation_runtime_receipt",
-            blocker="stage18_copy_creation_runtime_not_implemented",
+            blocker=SOURCE_NOT_IMPLEMENTED,
+            recording_enabled=True,
         ),
         _runtime_evidence_requirement(
             "tenant_isolation_runtime_proof",
@@ -4742,8 +4732,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "source_id": "managed_copies",
         "status": "blocked",
         "contract_readback_ready": True,
-        "runtime_evidence_contract_ready": False,
-        "runtime_evidence_recording_enabled": False,
+        "runtime_evidence_contract_ready": True,
+        "runtime_evidence_recording_enabled": True,
         "runtime_evidence_ready": False,
         "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
         "stage17_blocker": status["stage17_blocker"],
@@ -4752,7 +4742,9 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "required_count": len(requirements),
         "blockers": [requirement["blocker"] for requirement in requirements if not requirement["ready"]],
         "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
-        "receipt_logical_scope": "future_managed_copy_runtime_evidence",
+        "supported_requirement_count": 1,
+        "recordable_requirement_count": 0,
+        "receipt_logical_scope": "managed_copy_runtime_evidence",
         "completion_review_route": "/managed-copies/completion-review",
         "routes": {
             **status["routes"],
@@ -4760,9 +4752,9 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         },
         "governance": {
             **governance,
-            "runtime_evidence_contract_only": True,
-            "evidence_collection_enabled": False,
-            "does_not_record_runtime_evidence": True,
+            "runtime_evidence_contract_only": False,
+            "evidence_collection_enabled": True,
+            "does_not_record_runtime_evidence": False,
             "does_not_mark_stage_closed": True,
             "requires_stage17_closure_receipt": True,
         },
@@ -4788,7 +4780,7 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
     """Return managed-copy runtime evidence receipts already present on disk."""
     governance = _governance()
     contract = managed_copy_runtime_evidence_contract_snapshot()
-    items = _read_jsonl_tail(_runtime_evidence_path(), limit=limit)
+    items = load_runtime_evidence_receipts(limit=limit)
     latest_by_requirement = _latest_runtime_evidence_by_requirement(items)
     checks: list[dict[str, Any]] = []
     for requirement in contract["requirements"]:
@@ -4816,8 +4808,11 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
                 "evidence": (
                     f"validated prerequisite receipt {receipt_id}"
                     if prerequisite_ready
-                    else _safe_str(item.get("evidence_summary")).strip()
-                    or f"no {requirement['id']} runtime evidence receipt has been recorded"
+                    else (
+                        f"validated immutable receipt {receipt_id}"
+                        if item
+                        else f"no {requirement['id']} runtime evidence receipt has been recorded"
+                    )
                 ),
             }
         )
@@ -4839,8 +4834,8 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
         "runtime_evidence_ready": ready,
         "missing_evidence": missing_evidence,
         "missing_blockers": [check["blocker"] for check in checks if not check["passed"] and check["blocker"]],
-        "expected_receipt_path": "logs/managed_copies/runtime_evidence.jsonl",
-        "runtime_evidence_recording_enabled": False,
+        "expected_receipt_path": "logs/managed_copies/runtime_evidence/",
+        "runtime_evidence_recording_enabled": True,
         "routes": {
             **contract["routes"],
             "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
@@ -4876,41 +4871,41 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed runtime-evidence write preflight without recording evidence."""
+    """Record independently verified runtime evidence or return a precise blocker."""
     governance = _governance()
     contract = managed_copy_runtime_evidence_contract_snapshot()
     blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
-    requirement_id = _safe_str(payload.get("requirement_id")).strip()
-    proof_kind = _safe_str(payload.get("proof_kind")).strip()
-    requirement_by_id = {item["id"]: item for item in contract["requirements"]}
-    requirement = requirement_by_id.get(requirement_id, {})
-    expected_proof_kind = _safe_str(requirement.get("proof_kind")).strip()
+    result = record_runtime_evidence(
+        payload,
+        actor=actor,
+        stage17_closed=bool(contract["stage17_closed_by_receipt"]),
+    )
+    requirement_id = _safe_str(result.get("requirement_id")).strip()
+    proof_kind = _safe_str(result.get("proof_kind")).strip()
     return {
-        "ok": False,
+        **result,
         "kind": MANAGED_COPIES_RUNTIME_EVIDENCE_READBACK_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": blocked_status,
-        "error": blocked_error,
+        "status": blocked_status if not contract["stage17_closed_by_receipt"] else result["status"],
+        "error": blocked_error if not contract["stage17_closed_by_receipt"] else result["error"],
         "actor": _safe_str(actor).strip(),
         "requirement_id": requirement_id,
-        "requirement_known": bool(requirement),
+        "requirement_known": requirement_id in {item["id"] for item in contract["requirements"]},
         "proof_kind": proof_kind,
-        "expected_proof_kind": expected_proof_kind,
-        "proof_kind_matches_requirement": bool(requirement) and proof_kind == expected_proof_kind,
-        "trace_id": _safe_str(payload.get("trace_id")).strip()[:240],
-        "reason": _safe_str(payload.get("reason")).strip()[:500],
-        "evidence_summary_present": bool(_safe_str(payload.get("evidence_summary")).strip()),
+        "expected_proof_kind": "managed_copy_creation_runtime_receipt"
+        if requirement_id == COPY_CREATION_REQUIREMENT
+        else "",
+        "proof_kind_matches_requirement": requirement_id == COPY_CREATION_REQUIREMENT
+        and proof_kind == "managed_copy_creation_runtime_receipt",
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
         "stage17_blocker": contract["stage17_blocker"],
-        "runtime_evidence_recording_enabled": False,
-        "receipt_ready": False,
-        "writes_receipt": False,
-        "writes_receipts": False,
+        "runtime_evidence_recording_enabled": True,
+        "writes_receipts": bool(result.get("writes_receipt")),
         "writes_tenant_state": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
-        "expected_receipt_path": "logs/managed_copies/runtime_evidence.jsonl",
+        "expected_receipt_path": "logs/managed_copies/runtime_evidence/",
         "required_scope": MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
         "routes": {
             **contract["routes"],
@@ -4919,19 +4914,21 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
         "governance": {
             **governance,
             "write_route": True,
-            "preflight_only": True,
+            "preflight_only": bool(payload.get("dry_run")),
             "permission_scope": MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
             "permission_checked": True,
-            "runtime_evidence_recording_enabled": False,
-            "does_not_record_runtime_evidence": True,
+            "runtime_evidence_recording_enabled": True,
+            "does_not_record_runtime_evidence": False,
             "does_not_mark_stage_closed": True,
             "requires_stage17_closure_receipt": True,
-            "writes_receipts": False,
+            "writes_receipts": bool(result.get("writes_receipt")),
             "writes_tenant_state": False,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "read_only": governance["read_only"],
-        "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
+        "read_only": False,
+        "projection_only": False,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"]
+        if not contract["stage17_closed_by_receipt"]
+        else SOURCE_NOT_IMPLEMENTED,
     }

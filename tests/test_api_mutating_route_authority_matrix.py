@@ -374,11 +374,11 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "Lab execution" in ingest_lab_run["denial_behavior"]
 
     managed_copy = entries["/managed-copies/runtime-evidence-readback"]
-    assert managed_copy["family"] == "managed_copies"
-    assert managed_copy["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
-    assert managed_copy["required_scope"] == "managed_copies route-specific write scope"
-    assert managed_copy["governance_maturity"] == "permission_gated"
-    assert "no-copy/no-delete" in managed_copy["notes"]
+    assert managed_copy["family"] == "managed_copies_runtime_evidence"
+    assert managed_copy["required_actor"] == "payload.request_actor"
+    assert managed_copy["required_scope"] == "managed_copies.runtime_evidence.write"
+    assert managed_copy["governance_maturity"] == ("permission_gated_one_requirement_recorder_no_runtime_producer")
+    assert "no runtime or tenant authority" in managed_copy["notes"]
 
     safe_delta_export_preflight = entries["/managed-copies/safe-delta-export-preflight"]
     assert safe_delta_export_preflight["family"] == "managed_copies_safe_delta_export_preflight"
