@@ -2519,6 +2519,37 @@ def test_managed_copy_runtime_start_contract_is_read_only_and_unscoped_start_has
     assert not data_root.exists()
 
 
+def test_managed_copy_container_isolation_contract_and_unscoped_denial_have_zero_effect(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    client = TestClient(create_app())
+
+    contract = client.get("/managed-copies/container-isolation-contract").json()
+    assert contract["required_scope"] == "managed_copies.container_isolation.execute"
+    assert contract["backend"] == "docker_desktop_wsl2_linux"
+    assert contract["caller_selected_image"] is False
+    assert contract["caller_selected_command"] is False
+    assert contract["persistent_actor_grant_present"] is False
+    assert contract["runtime_gate_ready"] is False
+    assert not data_root.exists()
+
+    denied = client.post(
+        "/managed-copies/container-isolation",
+        json={"request_actor": "stage18.unscoped", "image": "attacker/image:latest", "privileged": True},
+    ).json()
+    assert denied["ok"] is False
+    assert denied["error"] == "api_permission_denied"
+    assert denied["required_scope"] == "managed_copies.container_isolation.execute"
+    assert denied["writes_receipts"] is False
+    assert denied["writes_tenant_state"] is False
+    assert denied["grants_execution_authority"] is False
+    assert not data_root.exists()
+
+
 def test_managed_copy_runtime_evidence_readback_denies_unscoped_actor_without_writing(
     monkeypatch,
     tmp_path,

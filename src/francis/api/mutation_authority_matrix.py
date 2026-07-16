@@ -1555,6 +1555,26 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="managed_copies_container_isolation",
+        prefixes=("/managed-copies/container-isolation",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.container_isolation.execute",
+        approval_requirement=(
+            "separate unexpired exact container-isolation approval plus current runtime-start approval, both "
+            "bound to fixed fixture lineage"
+        ),
+        receipt_behavior=(
+            "exclusive-create, fsynced, hash-bound launch-attempt, identity, security-profile, mount-denial, "
+            "heartbeat, and cleanup receipts"
+        ),
+        denial_behavior="api_permission_denied before payload processing, filesystem creation, or Docker invocation",
+        governance_maturity="permission_and_dual_exact_approval_gated_fixed_docker_fixture_backend",
+        notes=(
+            "Runs only the hash-bound BusyBox fixture under the fixed Docker Desktop Linux security profile; "
+            "no caller image, command, Docker flag, persistent actor grant, or production runtime is permitted."
+        ),
+    ),
+    AuthorityRule(
         family="managed_copies_isolation_policy_decision",
         prefixes=("/managed-copies/isolation-policy-decision",),
         required_actor="none",

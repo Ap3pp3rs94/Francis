@@ -1,0 +1,706 @@
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from francis import managed_copy_container_isolation as container_isolation
+from francis import managed_copy_runtime_start as runtime_start
+
+
+@pytest.fixture
+def isolation_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT", str(tmp_path / "proofs"))
+    tenant_key = "a" * 64
+    provision = {
+        "copy_id": "managed_copy_aaaaaaaaaaaaaaaa",
+        "tenant_key": tenant_key,
+        "receipt_id": "managed_copy_provision_fixture",
+        "provision_fingerprint": "b" * 64,
+    }
+    isolation = {
+        "copy_id": provision["copy_id"],
+        "tenant_key": tenant_key,
+        "receipt_id": "managed_copy_isolation_fixture",
+        "provisioning_receipt_id": provision["receipt_id"],
+        "provision_fingerprint": provision["provision_fingerprint"],
+        "verification_fingerprint": "c" * 64,
+        "live_state_aligned": True,
+    }
+    monkeypatch.setattr(
+        container_isolation,
+        "managed_copy_provision_for_copy",
+        lambda copy_id, *, provisioning_receipt_id="": (
+            dict(provision)
+            if copy_id == provision["copy_id"] and provisioning_receipt_id == provision["receipt_id"]
+            else {}
+        ),
+    )
+    monkeypatch.setattr(
+        container_isolation,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda provision_id, *, provision_fingerprint="", copy_id="": (
+            dict(isolation)
+            if provision_id == provision["receipt_id"]
+            and provision_fingerprint == provision["provision_fingerprint"]
+            and copy_id == provision["copy_id"]
+            else {}
+        ),
+    )
+    server = {"Os": "linux", "Arch": "amd64", "Version": "fixture"}
+    image_config = {"User": ""}
+    payload = {
+        "request_actor": "stage18.container-test",
+        "approval_id": "container-isolation-approval-1",
+        "runtime_start_approval_id": "runtime-start-approval-1",
+        "copy_id": provision["copy_id"],
+        "provisioning_receipt_id": provision["receipt_id"],
+        "isolation_verification_receipt_id": isolation["receipt_id"],
+        "image_manifest_digest": container_isolation.FIXED_MANIFEST_LIST_DIGEST,
+        "image_platform_digest": container_isolation.FIXED_PLATFORM_DIGEST,
+        "image_id": container_isolation.FIXED_PLATFORM_DIGEST,
+        "image_config_fingerprint": container_isolation._fingerprint(image_config),
+        "engine_id": "engine-fixture-1",
+        "engine_server_fingerprint": container_isolation._fingerprint(server),
+        "docker_context": "desktop-linux",
+        "proof_run_id": "mciso-test-1",
+        "lease_id": "mciso-lease-1",
+        "runtime_nonce": "mciso-runtime-nonce-1",
+        "action_nonce": "mciso-action-nonce-1",
+        "trace_id": "trace-mciso-1",
+        "lease_seconds": 5,
+        "confirm_container_isolation": True,
+    }
+    return {
+        "payload": payload,
+        "provision": provision,
+        "isolation": isolation,
+        "data": tmp_path / "data",
+        "server": server,
+        "image_config": image_config,
+    }
+
+
+def _write_approval(isolation_fixture: dict[str, Any]) -> None:
+    payload = isolation_fixture["payload"]
+    root = isolation_fixture["data"] / "approvals" / "approved"
+    root.mkdir(parents=True, exist_ok=True)
+    runtime_descriptor = runtime_start._launch_descriptor(
+        provision=isolation_fixture["provision"],
+        isolation=isolation_fixture["isolation"],
+        action_nonce="runtime-start-nonce-1",
+        trace_id="trace-runtime-start-1",
+        startup_timeout_ms=3_000,
+        lease_seconds=10,
+    )
+    runtime_descriptor_fingerprint = runtime_start._fingerprint(runtime_descriptor)
+    runtime = {
+        "id": payload["runtime_start_approval_id"],
+        "ts": time.time(),
+        "action": "managed_copies.runtime_start",
+        "reason": "fixed fixture runtime",
+        "payload": {
+            "contract": runtime_start.RUNTIME_START_CONTRACT,
+            "action": runtime_start.RUNTIME_START_ACTION,
+            "request_actor": payload["request_actor"],
+            "descriptor": runtime_descriptor,
+            "descriptor_fingerprint": runtime_descriptor_fingerprint,
+            "action_nonce": "runtime-start-nonce-1",
+            "trace_id": "trace-runtime-start-1",
+            "revoked": False,
+            "expires_at_unix_ms": int(time.time() * 1000) + 60_000,
+            "proposal_lineage": runtime_descriptor["proposal_lineage"],
+        },
+        "status": "approved",
+        "decision": "approve",
+        "decision_actor": "test.operator",
+        "decided_ts": time.time(),
+    }
+    (root / f"{runtime['id']}.json").write_text(json.dumps(runtime), encoding="utf-8")
+    proposal = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    assert proposal["descriptor"]
+    approval = {
+        "id": payload["approval_id"],
+        "ts": time.time(),
+        "action": container_isolation.CONTAINER_ISOLATION_ACTION,
+        "reason": "fixed Docker isolation proof",
+        "payload": {
+            "contract": container_isolation.CONTAINER_ISOLATION_CONTRACT,
+            "action": container_isolation.CONTAINER_ISOLATION_ACTION,
+            "request_actor": payload["request_actor"],
+            "descriptor": proposal["descriptor"],
+            "descriptor_fingerprint": proposal["descriptor_fingerprint"],
+            "action_nonce": payload["action_nonce"],
+            "trace_id": payload["trace_id"],
+            "expires_at_unix_ms": int(time.time() * 1000) + 60_000,
+            "revoked": False,
+        },
+        "status": "approved",
+        "decision": "approve",
+        "decision_actor": "test.operator",
+        "decided_ts": time.time(),
+    }
+    (root / f"{approval['id']}.json").write_text(json.dumps(approval), encoding="utf-8")
+
+
+def _security_inspect() -> dict[str, Any]:
+    return {
+        "Config": {"User": "65532:65532"},
+        "HostConfig": {
+            "Privileged": False,
+            "CapDrop": ["ALL"],
+            "CapAdd": None,
+            "SecurityOpt": ["no-new-privileges:true"],
+            "ReadonlyRootfs": True,
+            "NetworkMode": "none",
+            "RestartPolicy": {"Name": "no"},
+            "Memory": 67_108_864,
+            "NanoCpus": 250_000_000,
+            "PidsLimit": 32,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("field_name", "mutate"),
+    [
+        ("Config.User", lambda item: item["Config"].__setitem__("User", "0:0")),
+        ("HostConfig.Privileged", lambda item: item["HostConfig"].__setitem__("Privileged", True)),
+        ("HostConfig.CapDrop", lambda item: item["HostConfig"].__setitem__("CapDrop", [])),
+        ("HostConfig.CapAdd", lambda item: item["HostConfig"].__setitem__("CapAdd", ["NET_RAW"])),
+        ("HostConfig.SecurityOpt", lambda item: item["HostConfig"].__setitem__("SecurityOpt", [])),
+        ("HostConfig.ReadonlyRootfs", lambda item: item["HostConfig"].__setitem__("ReadonlyRootfs", False)),
+        ("HostConfig.NetworkMode", lambda item: item["HostConfig"].__setitem__("NetworkMode", "bridge")),
+        (
+            "HostConfig.RestartPolicy.Name",
+            lambda item: item["HostConfig"]["RestartPolicy"].__setitem__("Name", "always"),
+        ),
+        ("HostConfig.Memory", lambda item: item["HostConfig"].__setitem__("Memory", 0)),
+        ("HostConfig.NanoCpus", lambda item: item["HostConfig"].__setitem__("NanoCpus", 0)),
+        ("HostConfig.PidsLimit", lambda item: item["HostConfig"].__setitem__("PidsLimit", 0)),
+    ],
+)
+def test_security_diagnostic_identifies_each_allowlisted_field(field_name: str, mutate: Any) -> None:
+    item = _security_inspect()
+    mutate(item)
+
+    diagnostics = container_isolation._security_profile_diagnostics(item)
+
+    assert [diagnostic.field_name for diagnostic in diagnostics] == [field_name]
+
+
+def test_security_diagnostics_are_normalized_and_deterministic() -> None:
+    item = _security_inspect()
+    item["HostConfig"]["CapDrop"] = ["all", "ALL"]
+    item["HostConfig"]["CapAdd"] = ["sys_admin", "NET_RAW", "net_raw"]
+    item["HostConfig"]["SecurityOpt"] = ["NO-NEW-PRIVILEGES", "no-new-privileges"]
+
+    diagnostics = container_isolation._security_profile_diagnostics(item)
+
+    assert [diagnostic.field_name for diagnostic in diagnostics] == [
+        "HostConfig.CapAdd",
+        "HostConfig.SecurityOpt",
+    ]
+    assert diagnostics[0].observed_value == [
+        f"sha256:{container_isolation._fingerprint('NET_RAW')}",
+        f"sha256:{container_isolation._fingerprint('SYS_ADMIN')}",
+    ]
+    assert diagnostics[1].observed_value == ["no-new-privileges:true"]
+    assert diagnostics[1].classification is container_isolation.SecurityComparison.EQUIVALENT
+
+
+def test_security_opt_accepts_only_proven_explicit_true_spellings() -> None:
+    for spelling in ("no-new-privileges:true", "no-new-privileges=true"):
+        item = _security_inspect()
+        item["HostConfig"]["SecurityOpt"] = [spelling]
+        assert container_isolation._security_profile_diagnostics(item) == ()
+
+    bare = _security_inspect()
+    bare["HostConfig"]["SecurityOpt"] = ["no-new-privileges"]
+    bare_diagnostic = container_isolation._security_profile_diagnostics(bare)
+    assert bare_diagnostic[0].classification is container_isolation.SecurityComparison.EQUIVALENT
+
+    unknown = _security_inspect()
+    unknown["HostConfig"]["SecurityOpt"] = ["no-new-privileges=maybe"]
+    unknown_diagnostic = container_isolation._security_profile_diagnostics(unknown)
+    assert unknown_diagnostic[0].classification is container_isolation.SecurityComparison.WEAKER
+
+
+def test_missing_malformed_and_weaker_security_values_remain_failures() -> None:
+    item = _security_inspect()
+    item["HostConfig"].pop("ReadonlyRootfs")
+    item["HostConfig"]["Memory"] = True
+    item["HostConfig"]["PidsLimit"] = 64
+
+    diagnostics = {item.field_name: item for item in container_isolation._security_profile_diagnostics(item)}
+
+    assert diagnostics["HostConfig.ReadonlyRootfs"].classification is container_isolation.SecurityComparison.INVALID
+    assert diagnostics["HostConfig.Memory"].classification is container_isolation.SecurityComparison.INVALID
+    assert diagnostics["HostConfig.PidsLimit"].classification is container_isolation.SecurityComparison.WEAKER
+
+
+def test_security_diagnostic_receipt_is_bounded_and_fingerprinted() -> None:
+    item = _security_inspect()
+    item["HostConfig"]["NetworkMode"] = "bridge"
+    item["UnexpectedSecret"] = "RAW-INSPECT-MARKER"
+    plan = {"descriptor": {"proof_run_id": "mciso-diagnostic-test"}}
+    first = container_isolation._security_profile_diagnostic_receipt(
+        plan, container_isolation._security_profile_diagnostics(item), recorded_at_unix_ms=1
+    )
+    item["HostConfig"]["NetworkMode"] = "host"
+    second = container_isolation._security_profile_diagnostic_receipt(
+        plan, container_isolation._security_profile_diagnostics(item), recorded_at_unix_ms=1
+    )
+
+    encoded = json.dumps(first, sort_keys=True)
+    assert "RAW-INSPECT-MARKER" not in encoded
+    assert "UnexpectedSecret" not in encoded
+    assert first["mismatch_count"] == 1
+    assert first["receipt_fingerprint"] != second["receipt_fingerprint"]
+
+
+def test_security_diagnostic_receipt_bounds_and_hashes_inspect_controlled_tokens() -> None:
+    item = _security_inspect()
+    secrets = [f"secret-token-{index}-" + "x" * 200 for index in range(20)]
+    item["HostConfig"]["CapAdd"] = secrets
+    plan = {"descriptor": {"proof_run_id": "mciso-bounded-diagnostic"}}
+
+    receipt = container_isolation._security_profile_diagnostic_receipt(
+        plan, container_isolation._security_profile_diagnostics(item), recorded_at_unix_ms=1
+    )
+
+    encoded = json.dumps(receipt, sort_keys=True)
+    observed = receipt["mismatches"][0]["observed_normalized_value"]
+    assert all(secret not in encoded for secret in secrets)
+    assert len(observed) == container_isolation._MAX_DIAGNOSTIC_TOKENS + 1
+    assert observed[-1].startswith("overflow:12:sha256:")
+    assert len(encoded) < 2_500
+
+
+def test_unrelated_inspect_blocker_does_not_write_security_diagnostic(tmp_path: Path) -> None:
+    receipts = tmp_path / "receipts"
+    receipts.mkdir()
+    result = container_isolation.DockerResult(("docker",), 1, "", "not found")
+
+    written = container_isolation._write_security_profile_diagnostic(
+        receipts,
+        plan={"descriptor": {"proof_run_id": "mciso-unrelated"}},
+        inspected=result,
+    )
+
+    assert written == {}
+    assert not (receipts / "security-profile-diagnostic.json").exists()
+
+
+def test_cleanup_still_executes_after_security_diagnostic_creation(
+    isolation_fixture: dict[str, Any], tmp_path: Path
+) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    assert plan["ok"] is True
+    descriptor = plan["descriptor"]
+    container_id = "7" * 64
+    name = f"francis-mciso-{payload['proof_run_id']}"
+    inspected_item = _security_inspect()
+    inspected_item.update(
+        {
+            "Id": container_id,
+            "Name": f"/{name}",
+            "Image": container_isolation.FIXED_PLATFORM_DIGEST,
+        }
+    )
+    inspected_item["Config"].update(
+        {
+            "Entrypoint": ["/bin/sh"],
+            "Cmd": ["/francis/fixture.sh"],
+            "Labels": {
+                "francis.proof_run_id": descriptor["proof_run_id"],
+                "francis.tenant_key": descriptor["tenant_key"],
+                "francis.copy_id": descriptor["copy_id"],
+                "francis.approval_id": descriptor["approval_id"],
+            },
+        }
+    )
+    inspected_item["HostConfig"]["NetworkMode"] = "bridge"
+    inspected = container_isolation.DockerResult(("docker",), 0, json.dumps([inspected_item]), "")
+    receipts = tmp_path / "receipts"
+    receipts.mkdir()
+    commands: list[list[str]] = []
+
+    def fake_cleanup(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        commands.append(argv)
+        if argv[3:5] == ["container", "inspect"]:
+            return inspected
+        if argv[3:5] in (["container", "stop"], ["container", "rm"]):
+            return container_isolation.DockerResult(tuple(argv), 0, container_id, "")
+        raise AssertionError((argv, timeout))
+
+    container_isolation._write_security_profile_diagnostic(receipts, plan=plan, inspected=inspected)
+    cleanup_status = container_isolation._cleanup_exact(
+        fake_cleanup,
+        container_id,
+        name=name,
+        receipts=receipts,
+        plan=plan,
+    )
+
+    assert cleanup_status == "removed"
+    assert (receipts / "security-profile-diagnostic.json").exists()
+    assert json.loads((receipts / "cleanup.json").read_text(encoding="utf-8"))["status"] == "removed"
+    assert any(command[3:5] == ["container", "rm"] for command in commands)
+
+
+def test_denials_happen_before_docker_or_receipt_creation(isolation_fixture: dict[str, Any]) -> None:
+    called = False
+
+    def forbidden(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        nonlocal called
+        called = True
+        raise AssertionError((argv, timeout))
+
+    payload = isolation_fixture["payload"]
+    missing = container_isolation.execute_container_isolation(
+        payload, actor=payload["request_actor"], stage17_closed=True, run=forbidden
+    )
+    assert missing["error"] == "managed_copy_container_isolation_runtime_start_approval_invalid"
+    assert called is False
+    assert not isolation_fixture["data"].exists()
+
+    malformed = dict(payload)
+    malformed["lease_seconds"] = True
+    result = container_isolation.execute_container_isolation(
+        malformed, actor=payload["request_actor"], stage17_closed=True, run=forbidden
+    )
+    assert result["error"] == "managed_copy_container_isolation_binding_invalid"
+    assert called is False
+
+
+def test_exact_approval_binding_rejects_changed_digest_and_runtime_approval(isolation_fixture: dict[str, Any]) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    ready = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    assert ready["ok"] is True
+
+    changed = dict(payload)
+    changed["image_platform_digest"] = "sha256:" + "1" * 64
+    denied = container_isolation.container_isolation_proposal(
+        changed, actor=payload["request_actor"], stage17_closed=True
+    )
+    assert denied["error"] == "managed_copy_container_isolation_fixed_image_mismatch"
+
+    runtime_path = isolation_fixture["data"] / "approvals" / "approved" / f"{payload['runtime_start_approval_id']}.json"
+    runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+    runtime["payload"]["revoked"] = True
+    runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
+    denied = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    assert "managed_copy_container_isolation_runtime_start_approval_invalid" in denied["blockers"]
+
+
+def test_runtime_start_approval_for_other_copy_cannot_be_reused(isolation_fixture: dict[str, Any]) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    runtime_path = isolation_fixture["data"] / "approvals" / "approved" / f"{payload['runtime_start_approval_id']}.json"
+    approval = json.loads(runtime_path.read_text(encoding="utf-8"))
+    approval["payload"]["descriptor"]["copy_id"] = "managed_copy_bbbbbbbbbbbbbbbb"
+    approval["payload"]["descriptor_fingerprint"] = runtime_start._fingerprint(approval["payload"]["descriptor"])
+    runtime_path.write_text(json.dumps(approval), encoding="utf-8")
+
+    denied = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+
+    assert denied["error"] == "managed_copy_container_isolation_runtime_start_approval_invalid"
+
+
+def test_daemon_identity_mismatch_blocks_before_proof_root_creation(isolation_fixture: dict[str, Any]) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    commands: list[list[str]] = []
+
+    def mismatched_daemon(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        commands.append(argv)
+        if argv[1:3] == ["context", "inspect"]:
+            return container_isolation.DockerResult(tuple(argv), 0, '[{"Name":"desktop-linux"}]', "")
+        if argv[3:5] == ["version", "--format"]:
+            return container_isolation.DockerResult(
+                tuple(argv), 0, json.dumps({"Os": "linux", "Arch": "amd64", "Version": "other"}), ""
+            )
+        if argv[3:5] == ["info", "--format"]:
+            return container_isolation.DockerResult(tuple(argv), 0, json.dumps({"ID": payload["engine_id"]}), "")
+        if argv[3:5] == ["image", "inspect"]:
+            image = [
+                {
+                    "Id": container_isolation.FIXED_PLATFORM_DIGEST,
+                    "Os": "linux",
+                    "Architecture": "amd64",
+                    "RepoDigests": [f"busybox@{container_isolation.FIXED_PLATFORM_DIGEST}"],
+                    "Config": isolation_fixture["image_config"],
+                }
+            ]
+            return container_isolation.DockerResult(tuple(argv), 0, json.dumps(image), "")
+        raise AssertionError((argv, timeout))
+
+    result = container_isolation.execute_container_isolation(
+        payload, actor=payload["request_actor"], stage17_closed=True, run=mismatched_daemon
+    )
+
+    assert result["error"] == "managed_copy_container_engine_identity_mismatch"
+    assert not (container_isolation._proof_base() / payload["proof_run_id"]).exists()
+    assert not any("create" in command for command in commands)
+
+
+@pytest.mark.parametrize(
+    ("remove_exit", "expected_status", "expected_error"),
+    [
+        (0, "failed", "managed_copy_container_create_failed"),
+        (1, "cleanup_required", "managed_copy_container_create_failed_cleanup_failed"),
+    ],
+)
+def test_create_timeout_recovers_only_proof_owned_container_and_surfaces_cleanup(
+    isolation_fixture: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    remove_exit: int,
+    expected_status: str,
+    expected_error: str,
+) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    container_id = "8" * 64
+    commands: list[list[str]] = []
+    monkeypatch.setattr(container_isolation, "_docker_preflight", lambda run, descriptor: "")
+
+    owned = [
+        {
+            "Id": container_id,
+            "Name": f"/francis-mciso-{payload['proof_run_id']}",
+            "Image": container_isolation.FIXED_PLATFORM_DIGEST,
+            "Config": {
+                "Entrypoint": ["/bin/sh"],
+                "Cmd": ["/francis/fixture.sh"],
+                "Labels": {
+                    "francis.proof_run_id": payload["proof_run_id"],
+                    "francis.tenant_key": isolation_fixture["provision"]["tenant_key"],
+                    "francis.copy_id": payload["copy_id"],
+                    "francis.approval_id": payload["approval_id"],
+                },
+            },
+        }
+    ]
+
+    def timed_out_create(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        commands.append(argv)
+        if argv[3:5] == ["container", "create"]:
+            return container_isolation.DockerResult(tuple(argv), 124, "", "", timed_out=True)
+        if argv[3:5] == ["container", "inspect"]:
+            return container_isolation.DockerResult(tuple(argv), 0, json.dumps(owned), "")
+        if argv[3:5] == ["container", "stop"]:
+            return container_isolation.DockerResult(tuple(argv), 0, container_id, "")
+        if argv[3:5] == ["container", "rm"]:
+            return container_isolation.DockerResult(tuple(argv), remove_exit, container_id, "")
+        raise AssertionError((argv, timeout))
+
+    result = container_isolation.execute_container_isolation(
+        payload, actor=payload["request_actor"], stage17_closed=True, run=timed_out_create
+    )
+
+    assert result["status"] == expected_status
+    assert result["error"] == expected_error
+    assert any(command[3:5] == ["container", "rm"] for command in commands)
+
+
+def test_create_timeout_without_recoverable_identity_is_cleanup_required(
+    isolation_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    monkeypatch.setattr(container_isolation, "_docker_preflight", lambda run, descriptor: "")
+
+    def unresolved(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        if argv[3:5] == ["container", "create"]:
+            return container_isolation.DockerResult(tuple(argv), 124, "", "", timed_out=True)
+        if argv[3:5] == ["container", "inspect"]:
+            return container_isolation.DockerResult(tuple(argv), 1, "", "not found")
+        raise AssertionError((argv, timeout))
+
+    result = container_isolation.execute_container_isolation(
+        payload, actor=payload["request_actor"], stage17_closed=True, run=unresolved
+    )
+
+    assert result["status"] == "cleanup_required"
+    assert result["error"] == "managed_copy_container_create_timeout_cleanup_unverified"
+
+
+def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: dict[str, Any]) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    container_id = "9" * 64
+    commands: list[list[str]] = []
+    created_argv: list[str] = []
+
+    def inspect_payload(running: bool) -> str:
+        root = container_isolation._proof_base() / payload["proof_run_id"]
+        mounts = [
+            {
+                "Source": str((root / "fixture.sh").resolve()),
+                "Destination": "/francis/fixture.sh",
+                "RW": False,
+            },
+            {
+                "Source": str((root / "runtime-config.json").resolve()),
+                "Destination": "/francis/runtime-config.json",
+                "RW": False,
+            },
+            {"Source": str((root / "tenant-a").resolve()), "Destination": "/francis/tenant", "RW": False},
+            {"Source": str((root / "state").resolve()), "Destination": "/francis/state", "RW": True},
+        ]
+        value = [
+            {
+                "Id": container_id,
+                "Name": f"/francis-mciso-{payload['proof_run_id']}",
+                "Image": payload["image_id"],
+                "Config": {
+                    "User": "65532:65532",
+                    "Entrypoint": ["/bin/sh"],
+                    "Cmd": ["/francis/fixture.sh"],
+                    "Labels": {
+                        "francis.proof_run_id": payload["proof_run_id"],
+                        "francis.tenant_key": isolation_fixture["provision"]["tenant_key"],
+                        "francis.copy_id": payload["copy_id"],
+                        "francis.approval_id": payload["approval_id"],
+                    },
+                },
+                "HostConfig": {
+                    "Privileged": False,
+                    "CapDrop": ["ALL"],
+                    "CapAdd": None,
+                    "SecurityOpt": ["no-new-privileges:true"],
+                    "ReadonlyRootfs": True,
+                    "NetworkMode": "none",
+                    "RestartPolicy": {"Name": "no", "MaximumRetryCount": 0},
+                    "Memory": 67_108_864,
+                    "NanoCpus": 250_000_000,
+                    "PidsLimit": 32,
+                    "Tmpfs": {"/tmp": "rw,noexec,nodev,nosuid,size=1m"},
+                },
+                "Mounts": mounts,
+                "State": {"Running": running},
+            }
+        ]
+        return json.dumps(value)
+
+    running = False
+
+    def fake_run(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        nonlocal running, created_argv
+        commands.append(argv)
+        if argv[1:3] == ["context", "inspect"]:
+            return container_isolation.DockerResult(tuple(argv), 0, '[{"Name":"desktop-linux"}]', "")
+        if argv[3:5] == ["version", "--format"]:
+            return container_isolation.DockerResult(tuple(argv), 0, json.dumps(isolation_fixture["server"]), "")
+        if argv[3:5] == ["info", "--format"]:
+            return container_isolation.DockerResult(tuple(argv), 0, json.dumps({"ID": payload["engine_id"]}), "")
+        if argv[3:5] == ["image", "inspect"]:
+            image = [
+                {
+                    "Id": container_isolation.FIXED_PLATFORM_DIGEST,
+                    "Os": "linux",
+                    "Architecture": "amd64",
+                    "RepoDigests": [f"busybox@{container_isolation.FIXED_PLATFORM_DIGEST}"],
+                    "Config": isolation_fixture["image_config"],
+                }
+            ]
+            return container_isolation.DockerResult(tuple(argv), 0, json.dumps(image), "")
+        if argv[3:5] == ["container", "create"]:
+            created_argv = argv
+            return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
+        if argv[3:5] == ["container", "start"]:
+            running = True
+            root = container_isolation._proof_base() / payload["proof_run_id"]
+            heartbeat = {
+                "runtime_identity": "stage18_managed_copy_docker_fixture_v1",
+                "runtime_nonce": payload["runtime_nonce"],
+                "lease_id": payload["lease_id"],
+                "tenant_key": isolation_fixture["provision"]["tenant_key"],
+                "copy_id": payload["copy_id"],
+                "uid": "65532",
+                "cap_eff": "0000000000000000",
+                "tenant_a_readable": True,
+                "tenant_b_visible": False,
+                "sequence": 1,
+                "recorded_at_unix_ms": int(time.time() * 1000),
+            }
+            (root / "state" / "heartbeat.json").write_text(json.dumps(heartbeat), encoding="utf-8")
+            return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
+        if argv[3:5] == ["container", "inspect"]:
+            return container_isolation.DockerResult(tuple(argv), 0, inspect_payload(running), "")
+        if argv[3:5] == ["container", "stop"]:
+            running = False
+            return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
+        if argv[3:5] == ["container", "rm"]:
+            return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
+        raise AssertionError((argv, timeout))
+
+    result = container_isolation.execute_container_isolation(
+        payload, actor=payload["request_actor"], stage17_closed=True, run=fake_run
+    )
+    assert result["ok"] is True, result
+    assert result["receipt"]["bounded_cross_tenant_mount_denial"] is True
+    assert result["receipt"]["cross_tenant_production_isolation_proven"] is False
+    assert result["receipt"]["runtime_gate_ready"] is False
+    assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
+    assert "--read-only" in created_argv
+    assert ["--cap-drop", "ALL"] == created_argv[
+        created_argv.index("--cap-drop") : created_argv.index("--cap-drop") + 2
+    ]
+    assert "--privileged" not in created_argv and "docker.sock" not in " ".join(created_argv)
+    assert any(command[3:5] == ["container", "rm"] for command in commands)
+    cleanup = Path(result["proof_root"]) / "receipts" / "cleanup.json"
+    assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"
+
+
+@pytest.mark.skipif(
+    os.environ.get("FRANCIS_RUN_REAL_DOCKER_PROOF") != "1",
+    reason="requires the explicitly authorized isolated Docker Desktop proof",
+)
+def test_real_fixed_docker_fixture_proof(isolation_fixture: dict[str, Any]) -> None:
+    os.environ["FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT"] = os.environ["FRANCIS_DOCKER_PROOF_BASE"]
+    payload = isolation_fixture["payload"]
+    payload["image_manifest_digest"] = os.environ["FRANCIS_DOCKER_MANIFEST_DIGEST"]
+    payload["image_platform_digest"] = os.environ["FRANCIS_DOCKER_PLATFORM_DIGEST"]
+    payload["image_id"] = os.environ["FRANCIS_DOCKER_IMAGE_ID"]
+    payload["image_config_fingerprint"] = os.environ["FRANCIS_DOCKER_IMAGE_CONFIG_FINGERPRINT"]
+    payload["engine_id"] = os.environ["FRANCIS_DOCKER_ENGINE_ID"]
+    payload["engine_server_fingerprint"] = os.environ["FRANCIS_DOCKER_ENGINE_SERVER_FINGERPRINT"]
+    payload["proof_run_id"] = os.environ["FRANCIS_DOCKER_PROOF_RUN_ID"]
+    _write_approval(isolation_fixture)
+
+    result = container_isolation.execute_container_isolation(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+
+    assert result["ok"] is True, result
+    assert result["receipt"]["bounded_cross_tenant_mount_denial"] is True
+    assert result["receipt"]["fixture_only"] is True
+    assert result["receipt"]["runtime_gate_ready"] is False
+    cleanup = Path(result["proof_root"]) / "receipts" / "cleanup.json"
+    assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"
+    inspected = container_isolation.default_docker_runner(
+        [*container_isolation._docker_prefix(), "container", "inspect", result["receipt"]["container_id"]], 10.0
+    )
+    assert inspected.exit_code != 0

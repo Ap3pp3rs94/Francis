@@ -74,6 +74,11 @@ from francis.managed_copy_runtime_start import (
     runtime_start_status_snapshot,
     start_fixture_runtime,
 )
+from francis.managed_copy_container_isolation import (
+    CONTAINER_ISOLATION_SCOPE,
+    container_isolation_contract_snapshot,
+    execute_container_isolation,
+)
 
 router = APIRouter()
 
@@ -271,6 +276,34 @@ def runtime_start(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         )
     managed_status = managed_copies_status_snapshot()
     return start_fixture_runtime(
+        payload,
+        actor=actor,
+        stage17_closed=bool(managed_status["stage17_closed_by_receipt"]),
+    )
+
+
+@router.get("/container-isolation-contract")
+def container_isolation_contract() -> dict[str, Any]:
+    return container_isolation_contract_snapshot()
+
+
+@router.post("/container-isolation")
+def container_isolation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=CONTAINER_ISOLATION_SCOPE,
+        route="/managed-copies/container-isolation",
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=CONTAINER_ISOLATION_SCOPE,
+            next_step="configure_exact_managed_copy_container_isolation_scope_and_approval",
+        )
+    managed_status = managed_copies_status_snapshot()
+    return execute_container_isolation(
         payload,
         actor=actor,
         stage17_closed=bool(managed_status["stage17_closed_by_receipt"]),

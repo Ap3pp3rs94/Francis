@@ -128,6 +128,43 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-16 - Fixed-image Docker managed-copy isolation fixture
+
+Current posture: Phase 2 and Stage 18 remain open. Francis now has a dedicated
+`managed_copies.container_isolation.execute` authority contract for one fixed,
+digest-pinned BusyBox fixture container on Docker Desktop's WSL2 Linux engine.
+The launch is bound to separate runtime-start and container-isolation approvals,
+fixed mounts and command fingerprints, a non-root identity, no network, a
+read-only root filesystem, dropped capabilities, no-new-privileges, bounded
+resources, exact container identity, heartbeat, and cleanup receipts.
+
+Evidence:
+
+- Real fixture proof `mciso-verify-20260716t173418z` passed against the frozen
+  linux/amd64 image digest and produced hash-bound ready and cleanup receipts.
+- The proof demonstrated bounded tenant-A fixture access and tenant-B mount
+  denial, then removed the exact proof container. A post-run exact-container
+  inspect confirmed absence; the pre-existing VSC-1 container identities,
+  running/health states, mount fingerprints, and configuration fingerprints
+  remained unchanged.
+- Focused container-isolation, complete managed-copy API/runtime evidence/runtime
+  start/completion-review tests, changed-path Ruff, format, targeted mypy, and
+  repository diff checks pass.
+- Independent authority review passed the fixed security profile and bounded
+  diagnostic receipt. Independent acceptance review accepted the fixture proof,
+  receipt lineage, and cleanup evidence.
+
+Remaining truthful gap:
+
+- This is isolated fixture evidence only. No persistent actor received either
+  authority scope, no production tenant or managed copy was created, and no live
+  or production runtime evidence was recorded.
+- The bounded tenant-B mount denial is not comprehensive production tenant
+  isolation. The completion audit remains 1 of 8, and no Stage 18 closure,
+  FR-018 clearance, or physical-validation claim is made.
+- The next meaningful milestone requires an explicitly authorized operator-owned
+  local pilot managed copy and canonical non-fixture runtime evidence.
+
 ### 2026-07-16 - Stage 18 completion audit consumes canonical runtime evidence
 
 Current posture: Phase 2 and Stage 18 remain open. Each Stage 18 completion

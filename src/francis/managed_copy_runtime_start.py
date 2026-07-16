@@ -340,6 +340,53 @@ def verify_runtime_startup_source(source_receipt_id: str, source_receipt_fingerp
     }
 
 
+def validate_runtime_start_approval_reference(
+    approval_id: str,
+    *,
+    actor: str,
+    copy_id: str,
+    provisioning_receipt_id: str,
+    provision_fingerprint: str,
+    isolation_verification_receipt_id: str,
+    isolation_verification_fingerprint: str,
+) -> dict[str, Any]:
+    """Validate an existing runtime-start approval without consuming it."""
+    approval = _approved_runtime_start(_identifier(approval_id))
+    raw_payload = approval.get("payload")
+    payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
+    raw_descriptor = payload.get("descriptor")
+    descriptor: dict[str, Any] = raw_descriptor if isinstance(raw_descriptor, dict) else {}
+    blocker = _approval_blocker(
+        approval,
+        actor=_identifier(actor),
+        descriptor=descriptor,
+        descriptor_fingerprint=_text(payload.get("descriptor_fingerprint")),
+        action_nonce=_text(payload.get("action_nonce")),
+        trace_id=_text(payload.get("trace_id")),
+    )
+    if blocker:
+        return {"valid": False, "blocker": blocker, "approval_fingerprint": ""}
+    expected = {
+        "copy_id": _identifier(copy_id),
+        "provisioning_receipt_id": _identifier(provisioning_receipt_id),
+        "provision_fingerprint": _text(provision_fingerprint),
+        "isolation_verification_receipt_id": _identifier(isolation_verification_receipt_id),
+        "isolation_verification_fingerprint": _text(isolation_verification_fingerprint),
+    }
+    if any(descriptor.get(key) != value for key, value in expected.items()):
+        return {
+            "valid": False,
+            "blocker": "managed_copy_runtime_start_approval_lineage_mismatch",
+            "approval_fingerprint": "",
+        }
+    return {
+        "valid": True,
+        "blocker": "",
+        "approval_fingerprint": _fingerprint(approval),
+        "descriptor_fingerprint": _text(payload.get("descriptor_fingerprint")),
+    }
+
+
 def cleanup_fixture_runtime(startup_receipt: dict[str, Any], *, timeout_seconds: float = 3.0) -> dict[str, Any]:
     state_dir = _state_dir_from_receipt(startup_receipt)
     process = _owned_process(startup_receipt)
