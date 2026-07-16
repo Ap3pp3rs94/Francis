@@ -194,7 +194,7 @@ def test_fixed_fixture_startup_current_verification_and_exact_cleanup(runtime_fi
         assert observed["parent_pid"] == receipt["parent_pid"]
 
         source = runtime_start.verify_runtime_startup_source(receipt["receipt_id"], runtime_start._fingerprint(receipt))
-        assert source["valid"] is True
+        assert source["valid"] is True, source
         assert source["evidence_class"] == "fixture_software_only"
 
         replay = runtime_start.start_fixture_runtime(
@@ -202,7 +202,7 @@ def test_fixed_fixture_startup_current_verification_and_exact_cleanup(runtime_fi
             actor=payload["request_actor"],
             stage17_closed=True,
         )
-        assert replay["ok"] is True
+        assert replay["ok"] is True, replay
         assert replay["status"] == "already_started"
         assert replay["receipt"]["receipt_id"] == receipt["receipt_id"]
     finally:
@@ -303,6 +303,32 @@ def test_child_exit_before_handshake_records_failure_and_leaves_no_process(
     assert replay["error"] == "managed_copy_runtime_start_approval_already_consumed"
 
 
+def test_process_creation_failure_records_failed_attempt_and_consumes_approval(
+    runtime_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = runtime_fixture["payload"]
+    _approve(runtime_fixture)
+    monkeypatch.setattr(
+        runtime_start.subprocess,
+        "Popen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("fixture launch denied")),
+    )
+
+    result = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+    assert result["error"] == "managed_copy_runtime_start_process_creation_failed"
+    assert result["receipt"]["process_created"] is False
+    replay = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+    assert replay["error"] == "managed_copy_runtime_start_approval_already_consumed"
+
+
 def test_last_moment_approval_revocation_prevents_process_creation(
     runtime_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -380,3 +406,25 @@ def test_current_fixture_startup_records_software_evidence_without_runtime_readi
         assert runtime_evidence.receipt_satisfies_runtime_requirement(recorded["receipt"]) is False
     finally:
         assert runtime_start.cleanup_fixture_runtime(startup)["ok"] is True
+
+
+def test_startup_receipt_rejects_injected_fields_even_with_recomputed_fingerprint(
+    runtime_fixture: dict[str, Any],
+) -> None:
+    payload = runtime_fixture["payload"]
+    _approve(runtime_fixture)
+    started = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+    assert started["ok"] is True, started
+    receipt = started["receipt"]
+    try:
+        injected = {**receipt, "unexpected": "field"}
+        without_fingerprint = {key: value for key, value in injected.items() if key != "startup_fingerprint"}
+        injected["startup_fingerprint"] = runtime_start._fingerprint(without_fingerprint)
+        assert runtime_start._valid_startup_receipt(injected) is False
+        assert runtime_start._current_state(injected)["blocker"] == "runtime_startup_receipt_invalid"
+    finally:
+        assert runtime_start.cleanup_fixture_runtime(receipt)["ok"] is True

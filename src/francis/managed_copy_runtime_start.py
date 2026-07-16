@@ -88,6 +88,41 @@ _DESCRIPTOR_FIELDS = frozenset(
         "fixture_runtime",
     }
 )
+_STARTUP_RECEIPT_FIELDS = frozenset(
+    {
+        "kind",
+        "contract",
+        "receipt_id",
+        "status",
+        "actor",
+        "approval_id",
+        "copy_id",
+        "tenant_key",
+        "provisioning_receipt_id",
+        "provision_fingerprint",
+        "isolation_verification_receipt_id",
+        "isolation_verification_fingerprint",
+        "descriptor_fingerprint",
+        "runtime_identity",
+        "executable_fingerprint",
+        "argument_fingerprint",
+        "lease_id",
+        "runtime_nonce_hash",
+        "pid",
+        "process_creation_token",
+        "parent_pid",
+        "handshake_identity",
+        "heartbeat_identity",
+        "state_path",
+        "trace_id",
+        "evidence_class",
+        "fixture_runtime",
+        "runtime_gate_ready",
+        "stage18_ready",
+        "recorded_at_unix_ms",
+        "startup_fingerprint",
+    }
+)
 _START_LOCK = threading.Lock()
 _IDENTIFIER_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
 
@@ -395,16 +430,23 @@ def _launch(plan: dict[str, Any]) -> dict[str, Any]:
         runtime_nonce=runtime_nonce,
     )
     environment = {"PYTHONNOUSERSITE": "1", "PYTHONUTF8": "1"}
-    process = subprocess.Popen(
-        command,
-        cwd=tenant_root,
-        env=environment,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        shell=False,
-        close_fds=True,
-    )
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=tenant_root,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            shell=False,
+            close_fds=True,
+        )
+    except (OSError, ValueError):
+        return _failed_before_launch(
+            attempt,
+            state_dir=state_dir,
+            blocker="managed_copy_runtime_start_process_creation_failed",
+        )
     observed_process = process_identity(process.pid)
     creation_token = _exact_int(observed_process.get("creation_token"), minimum=1, maximum=2**127)
     if not creation_token:
@@ -613,8 +655,8 @@ def _current_state(receipt: dict[str, Any]) -> dict[str, Any]:
     state_dir = _state_dir_from_receipt(receipt)
     if process is None or state_dir is None:
         return {"ready": False, "state": "exited", "blocker": "runtime_process_identity_mismatch"}
-    heartbeat = _read_json(state_dir / "heartbeat.json")
-    if not _heartbeat_matches_receipt(heartbeat, receipt):
+    heartbeat = _current_heartbeat(state_dir, receipt)
+    if not heartbeat:
         return {"ready": False, "state": "degraded", "blocker": "runtime_heartbeat_invalid"}
     age_ms = int(time.time() * 1000) - _exact_int(heartbeat.get("observed_at_unix_ms"), minimum=1, maximum=2**63 - 1)
     if age_ms < 0 or age_ms > HEARTBEAT_STALE_MS:
@@ -654,7 +696,8 @@ def _valid_startup_receipt(receipt: dict[str, Any]) -> bool:
     fingerprint = receipt.get("startup_fingerprint")
     without = {key: value for key, value in receipt.items() if key != "startup_fingerprint"}
     return bool(
-        receipt.get("kind") == "francis.stage18.managed_copies.runtime_startup_receipt"
+        set(receipt) == _STARTUP_RECEIPT_FIELDS
+        and receipt.get("kind") == "francis.stage18.managed_copies.runtime_startup_receipt"
         and receipt.get("contract") == RUNTIME_START_CONTRACT
         and receipt.get("status") == "ready"
         and receipt.get("fixture_runtime") is True
@@ -666,6 +709,15 @@ def _valid_startup_receipt(receipt: dict[str, Any]) -> bool:
         and _is_hash(fingerprint)
         and fingerprint == _fingerprint(without)
     )
+
+
+def _current_heartbeat(state_dir: Path, receipt: dict[str, Any]) -> dict[str, Any]:
+    for _ in range(5):
+        heartbeat = _read_json(state_dir / "heartbeat.json")
+        if _heartbeat_matches_receipt(heartbeat, receipt):
+            return heartbeat
+        time.sleep(0.025)
+    return {}
 
 
 def _owned_process(receipt: dict[str, Any]) -> dict[str, Any] | None:
