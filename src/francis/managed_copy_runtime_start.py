@@ -288,7 +288,20 @@ def verify_runtime_startup_source(source_receipt_id: str, source_receipt_fingerp
                 "descriptor_fingerprint": receipt["descriptor_fingerprint"],
             }
         ),
-        "current_state_hash": _fingerprint(state),
+        "current_state_hash": _fingerprint(
+            {
+                key: state[key]
+                for key in (
+                    "ready",
+                    "state",
+                    "pid",
+                    "process_creation_token",
+                    "lease_id",
+                    "fixture_runtime",
+                    "runtime_gate_ready",
+                )
+            }
+        ),
     }
 
 
@@ -871,23 +884,33 @@ def _guarded_state_directory(plan: dict[str, Any], *, lease_id: str) -> Path | N
 
 def _state_dir_from_receipt(receipt: dict[str, Any]) -> Path | None:
     relative = receipt.get("state_path")
-    if not isinstance(relative, str) or Path(relative).is_absolute() or ".." in Path(relative).parts:
+    expected = (
+        f"managed_copies/tenants/{receipt.get('tenant_key', '')}/receipts/runtime_start/{receipt.get('lease_id', '')}"
+    )
+    if relative != expected:
         return None
-    path = data_dir() / relative
-    try:
-        resolved = path.resolve(strict=True)
-        tenant_root = _tenant_root(receipt["tenant_key"]).resolve(strict=True)
-    except (OSError, KeyError):
-        return None
-    if not resolved.is_dir() or tenant_root not in resolved.parents:
-        return None
-    if any(
-        part.is_symlink()
-        for part in [resolved, *resolved.parents]
-        if part == tenant_root or tenant_root in part.parents
+    provision = managed_copy_provision_for_copy(
+        receipt.get("copy_id", ""),
+        provisioning_receipt_id=receipt.get("provisioning_receipt_id", ""),
+    )
+    isolation = latest_managed_copy_isolation_verification_for_provision(
+        receipt.get("provisioning_receipt_id", ""),
+        provision_fingerprint=receipt.get("provision_fingerprint", ""),
+        copy_id=receipt.get("copy_id", ""),
+    )
+    if (
+        not provision
+        or not isolation
+        or isolation.get("receipt_id") != receipt.get("isolation_verification_receipt_id")
+        or isolation.get("verification_fingerprint") != receipt.get("isolation_verification_fingerprint")
     ):
         return None
-    return resolved
+    return managed_copy_isolation_guarded_subpath(
+        provision,
+        isolation,
+        domain="tenant_receipts",
+        relative_parts=("runtime_start", receipt["lease_id"]),
+    )
 
 
 def _tenant_root(tenant_key: str) -> Path:

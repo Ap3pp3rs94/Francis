@@ -189,7 +189,9 @@ def test_fixed_fixture_startup_current_verification_and_exact_cleanup(runtime_fi
         assert receipt["fixture_runtime"] is True
         assert receipt["evidence_class"] == "fixture_software_only"
         assert receipt["runtime_gate_ready"] is False
-        assert process_identity(receipt["pid"])
+        observed = process_identity(receipt["pid"])
+        assert observed
+        assert observed["parent_pid"] == receipt["parent_pid"]
 
         source = runtime_start.verify_runtime_startup_source(receipt["receipt_id"], runtime_start._fingerprint(receipt))
         assert source["valid"] is True
@@ -249,6 +251,28 @@ def test_pid_identity_and_stale_heartbeat_collapse_readiness(
         assert runtime_start._current_state(receipt)["blocker"] == "runtime_heartbeat_stale"
     finally:
         runtime_start.cleanup_fixture_runtime(receipt)
+
+
+def test_current_state_and_cleanup_fail_closed_when_guarded_path_is_rejected(
+    runtime_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = runtime_fixture["payload"]
+    _approve(runtime_fixture)
+    result = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+    assert result["ok"] is True, result
+    receipt = result["receipt"]
+    guarded_subpath = runtime_start.managed_copy_isolation_guarded_subpath
+    try:
+        monkeypatch.setattr(runtime_start, "managed_copy_isolation_guarded_subpath", lambda *args, **kwargs: None)
+        assert runtime_start._current_state(receipt)["blocker"] == "runtime_process_identity_mismatch"
+        assert runtime_start.cleanup_fixture_runtime(receipt)["error"] == "fixture_runtime_identity_mismatch"
+    finally:
+        monkeypatch.setattr(runtime_start, "managed_copy_isolation_guarded_subpath", guarded_subpath)
+        assert runtime_start.cleanup_fixture_runtime(receipt)["ok"] is True
 
 
 def test_child_exit_before_handshake_records_failure_and_leaves_no_process(

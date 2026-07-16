@@ -80,6 +80,30 @@ def _windows_process_identity(pid: int) -> dict[str, Any]:
     query_name = kernel32.QueryFullProcessImageNameW
     query_name.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
     query_name.restype = wintypes.BOOL
+    create_snapshot = kernel32.CreateToolhelp32Snapshot
+    create_snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    create_snapshot.restype = wintypes.HANDLE
+    process_first = kernel32.Process32FirstW
+    process_next = kernel32.Process32NextW
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    process_first.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
+    process_first.restype = wintypes.BOOL
+    process_next.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
+    process_next.restype = wintypes.BOOL
     handle = open_process(0x1000, False, pid)
     if not handle:
         return {}
@@ -95,9 +119,25 @@ def _windows_process_identity(pid: int) -> dict[str, Any]:
         if not query_name(handle, 0, buffer, ctypes.byref(size)):
             return {}
         token = (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
+        parent_pid = 0
+        snapshot = create_snapshot(0x00000002, 0)
+        if snapshot and snapshot != wintypes.HANDLE(-1).value:
+            try:
+                entry = ProcessEntry()
+                entry.dwSize = ctypes.sizeof(ProcessEntry)
+                present = bool(process_first(snapshot, ctypes.byref(entry)))
+                while present:
+                    if int(entry.th32ProcessID) == pid:
+                        parent_pid = int(entry.th32ParentProcessID)
+                        break
+                    present = bool(process_next(snapshot, ctypes.byref(entry)))
+            finally:
+                close_handle(snapshot)
+        if parent_pid <= 0:
+            return {}
         return {
             "pid": pid,
-            "parent_pid": 0,
+            "parent_pid": parent_pid,
             "creation_token": token,
             "executable_path": buffer.value,
             "command_line": [],
