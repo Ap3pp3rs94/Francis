@@ -297,6 +297,8 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
     command = [
         str(executable),
         str(_runtime_program()),
+        "--tenant-root",
+        str(data_dir() / descriptor["working_directory_identity"]),
         "--state-dir",
         str(state_dir),
         "--input-path",

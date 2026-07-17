@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -46,6 +48,105 @@ def test_work_briefing_is_deterministic_and_actionable() -> None:
     }
     assert len(result["input_fingerprint"]) == 64
     assert len(result["output_fingerprint"]) == 64
+
+
+def test_container_entrypoint_layout_executes_real_francis_operation(tmp_path: Path) -> None:
+    tenant_root = tmp_path / "tenant"
+    input_path = tenant_root / "data" / "work_items.json"
+    state_dir = tenant_root / "receipts" / "runtime"
+    input_path.parent.mkdir(parents=True)
+    state_dir.mkdir(parents=True)
+    input_path.write_text(json.dumps(_input()), encoding="utf-8")
+    program = Path(pilot.__file__).with_name("managed_copy_runtime.py")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(program),
+            "--tenant-root",
+            str(tenant_root),
+            "--state-dir",
+            str(state_dir),
+            "--input-path",
+            str(input_path),
+            "--copy-id",
+            "managed_copy_container_layout",
+            "--tenant-key",
+            "c" * 64,
+            "--pilot-run-id",
+            "container-layout-run",
+            "--runtime-nonce",
+            "container-layout-nonce",
+            "--lease-seconds",
+            "1",
+        ],
+        cwd=tmp_path,
+        env={"PYTHONNOUSERSITE": "1", "PYTHONUTF8": "1"},
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(errors="replace")
+    briefing = json.loads((state_dir / "briefing.json").read_text(encoding="utf-8"))
+    operation = json.loads((state_dir / "operation.json").read_text(encoding="utf-8"))
+    assert briefing["next_action"]["id"] == "work-1"
+    assert operation["status"] == "completed"
+    assert operation["fixture_runtime"] is False
+
+
+def test_runtime_rejects_paths_outside_explicit_tenant_root(tmp_path: Path) -> None:
+    tenant_root = tmp_path / "tenant"
+    state_dir = tenant_root / "receipts"
+    outside_input = tmp_path / "outside.json"
+    tenant_root.mkdir()
+    state_dir.mkdir()
+    outside_input.write_text(json.dumps(_input()), encoding="utf-8")
+    program = Path(pilot.__file__).with_name("managed_copy_runtime.py")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(program),
+            "--tenant-root",
+            str(tenant_root),
+            "--state-dir",
+            str(state_dir),
+            "--input-path",
+            str(outside_input),
+            "--copy-id",
+            "managed_copy_container_layout",
+            "--tenant-key",
+            "c" * 64,
+            "--pilot-run-id",
+            "container-layout-run",
+            "--runtime-nonce",
+            "container-layout-nonce",
+            "--lease-seconds",
+            "1",
+        ],
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 2
+    assert not (state_dir / "handshake.json").exists()
+
+
+def test_managed_copy_runtime_image_is_fixed_to_real_francis_entrypoint() -> None:
+    dockerfile = Path(pilot.__file__).parents[2] / "infra" / "managed-copy-runtime" / "Dockerfile"
+    lines = dockerfile.read_text(encoding="utf-8").splitlines()
+
+    assert lines == [
+        "FROM python:3.12-alpine@sha256:dbb1970cc04ce7d381c65efe8309c0c03d463e5b35c88f14d721796ad24cfbfd",
+        "",
+        "COPY --chown=65532:65532 src/francis/managed_copy_runtime.py /opt/francis/managed_copy_runtime.py",
+        "",
+        "USER 65532:65532",
+        'ENTRYPOINT ["python", "/opt/francis/managed_copy_runtime.py"]',
+    ]
+    assert not any(token in dockerfile.read_text(encoding="utf-8") for token in ("busybox", "sh -c", "latest"))
 
 
 @pytest.fixture

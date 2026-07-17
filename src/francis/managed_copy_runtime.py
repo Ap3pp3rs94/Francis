@@ -56,7 +56,15 @@ def build_work_briefing(payload: object) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
-    for name in ("state-dir", "input-path", "copy-id", "tenant-key", "pilot-run-id", "runtime-nonce"):
+    for name in (
+        "tenant-root",
+        "state-dir",
+        "input-path",
+        "copy-id",
+        "tenant-key",
+        "pilot-run-id",
+        "runtime-nonce",
+    ):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--lease-seconds", required=True, type=int)
     return parser
@@ -64,9 +72,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
-    tenant_root = Path.cwd().resolve(strict=True)
-    state_dir = Path(args.state_dir).resolve(strict=True)
-    input_path = Path(args.input_path).resolve(strict=True)
+    try:
+        tenant_root = Path(args.tenant_root).resolve(strict=True)
+        state_dir = Path(args.state_dir).resolve(strict=True)
+        input_path = Path(args.input_path).resolve(strict=True)
+    except OSError:
+        return 2
     try:
         state_dir.relative_to(tenant_root)
         input_path.relative_to(tenant_root)
