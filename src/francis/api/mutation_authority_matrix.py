@@ -1572,17 +1572,18 @@ _RULES: tuple[AuthorityRule, ...] = (
         required_scope="managed_copies.container_isolation.execute",
         approval_requirement=(
             "separate unexpired exact container-isolation approval plus current runtime-start approval, both "
-            "bound to fixed fixture lineage"
+            "bound to fixed Francis runtime image, operation, tenant, and launch lineage"
         ),
         receipt_behavior=(
-            "exclusive-create, fsynced, hash-bound launch-attempt, identity, security-profile, mount-denial, "
-            "heartbeat, and cleanup receipts"
+            "exclusive-create, fsynced, hash-bound launch-attempt, container identity, security-profile, "
+            "runtime handshake, heartbeat, operation, output, and cleanup receipts"
         ),
         denial_behavior="api_permission_denied before payload processing, filesystem creation, or Docker invocation",
-        governance_maturity="permission_and_dual_exact_approval_gated_fixed_docker_fixture_backend",
+        governance_maturity="permission_and_dual_exact_approval_gated_fixed_francis_runtime_container_adapter",
         notes=(
-            "Runs only the hash-bound BusyBox fixture under the fixed Docker Desktop Linux security profile; "
-            "no caller image, command, Docker flag, persistent actor grant, or production runtime is permitted."
+            "Runs only the hash-bound Francis tenant-work-briefing runtime under the fixed Docker Desktop Linux "
+            "security profile; no caller image, command, argument, mount, environment, Docker flag, persistent "
+            "actor grant, or production runtime is permitted."
         ),
     ),
     AuthorityRule(

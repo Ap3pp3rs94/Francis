@@ -2656,6 +2656,7 @@ def test_managed_copy_container_isolation_contract_and_unscoped_denial_have_zero
     assert contract["backend"] == "docker_desktop_wsl2_linux"
     assert contract["caller_selected_image"] is False
     assert contract["caller_selected_command"] is False
+    assert contract["fixture_only"] is False
     assert contract["persistent_actor_grant_present"] is False
     assert contract["runtime_gate_ready"] is False
     assert not data_root.exists()
@@ -2670,6 +2671,19 @@ def test_managed_copy_container_isolation_contract_and_unscoped_denial_have_zero
     assert denied["writes_receipts"] is False
     assert denied["writes_tenant_state"] is False
     assert denied["grants_execution_authority"] is False
+    assert not data_root.exists()
+
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"stage18.scoped": ["managed_copies.container_isolation.execute"]}),
+    )
+    missing_lease = client.post(
+        "/managed-copies/container-isolation",
+        json={"request_actor": "stage18.scoped", "lease_id": "missing-pilot-lease"},
+    ).json()
+    assert missing_lease["error"] == "api_permission_denied"
+    assert missing_lease["writes_receipts"] is False
+    assert missing_lease["writes_tenant_state"] is False
     assert not data_root.exists()
 
 

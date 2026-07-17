@@ -128,6 +128,37 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-17 - Real Francis runtime composed with governed Docker lifecycle
+
+Current posture: Phase 2 and Stage 18 remain open. The fixed Docker lifecycle
+now composes the non-fixture Francis managed-copy runtime instead of the BusyBox
+fixture. The governed path binds a process-local pilot lease, separate exact
+runtime-start and container-isolation approvals, provisioned and structurally
+verified tenant lineage, fixed image and runtime fingerprints, constrained
+mounts, container identity, runtime handshake and heartbeat, the bounded
+`tenant_work_briefing` operation, independently recomputed output, and exact
+container cleanup.
+
+Evidence:
+
+- Focused lifecycle tests exercise the complete adapter through a fixed fake
+  Docker transport and verify the generated security profile, image identity,
+  mount set, useful operation, output fingerprint, PID correlation, failure
+  cleanup, and exact removal behavior.
+- Permission and mutation-authority tests prove an exact pilot-lease binding is
+  consumed before payload processing or filesystem and Docker effects.
+- Changed-path Ruff, formatting, mypy, and diff checks pass.
+
+Remaining truthful gap:
+
+- Classification is `INTEGRATED CAPABILITY`, not `PROVEN CAPABILITY`. No real
+  Docker image was built and no container was launched in this slice; fake
+  transport tests prove composition logic, not Docker runtime behavior.
+- No persistent actor grant, live invocation, production evidence, or canonical
+  runtime evidence was recorded. The completion audit remains 1 of 8 and Stage
+  18, FR-018, production, customer, and physical-validation claims remain
+  prohibited.
+
 ### 2026-07-17 - Non-fixture managed-copy local process vertical
 
 Current posture: Phase 2 and Stage 18 remain open. Francis now has an internal

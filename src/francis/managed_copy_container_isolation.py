@@ -16,18 +16,26 @@ from typing import Any, Callable
 from francis.kernel.paths import data_dir, repo_root
 from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
 from francis.managed_copy_provisioning import managed_copy_provision_for_copy
+from francis.managed_copy_runtime import (
+    HEARTBEAT_IDENTITY,
+    INPUT_CONTRACT,
+    OUTPUT_CONTRACT,
+    RUNTIME_IDENTITY,
+    build_work_briefing,
+)
 from francis.managed_copy_runtime_start import validate_runtime_start_approval_reference
 
 CONTAINER_ISOLATION_SCOPE = "managed_copies.container_isolation.execute"
 CONTAINER_ISOLATION_ACTION = "managed_copies.container_isolation"
-CONTAINER_ISOLATION_CONTRACT = "stage18_managed_copy_docker_isolation_v1"
-FIXED_IMAGE_REPOSITORY = "docker.io/library/busybox"
-FIXED_IMAGE_TAG = "1.36.1"
+CONTAINER_ISOLATION_ROUTE = "/managed-copies/container-isolation"
+CONTAINER_ISOLATION_CONTRACT = "stage18_managed_copy_docker_isolation_v2"
+FIXED_IMAGE_REPOSITORY = "francis/managed-copy-runtime"
+FIXED_IMAGE_TAG = "stage18-v1"
 FIXED_PLATFORM = "linux/amd64"
-FIXED_MANIFEST_LIST_DIGEST = "sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
-FIXED_PLATFORM_DIGEST = "sha256:b7f3d86d6e84fc17718c48bcde1450807faa2d56704205c697b4bd5df7b9e29f"
 FIXED_CONTAINER_USER = "65532:65532"
-FIXTURE_SCRIPT = repo_root() / "scripts" / "fixtures" / "managed-copy-container-fixture.sh"
+RUNTIME_PROGRAM = repo_root() / "src" / "francis" / "managed_copy_runtime.py"
+RUNTIME_DOCKERFILE = repo_root() / "infra" / "managed-copy-runtime" / "Dockerfile"
+RUNTIME_PROGRAM_CONTAINER_PATH = "/opt/francis/managed_copy_runtime.py"
 SECURITY_PROFILE_DIAGNOSTIC_CONTRACT = "stage18_managed_copy_docker_security_profile_diagnostic_v1"
 DIAGNOSTIC_PREDECESSOR_PROOF_RUN_ID = "mciso-20260716t170613z"
 DIAGNOSTIC_PREDECESSOR_FAILED_RECEIPT_FINGERPRINT = "1add7aa3607770bc7e034c29edbe2252e2ea87ad516b0fa46b852c7393cdb006"
@@ -55,6 +63,7 @@ _PAYLOAD_FIELDS = frozenset(
         "trace_id",
         "lease_seconds",
         "confirm_container_isolation",
+        "operation_input",
     }
 )
 _APPROVAL_FIELDS = frozenset(
@@ -130,20 +139,23 @@ def container_isolation_contract_snapshot() -> dict[str, Any]:
         "ok": True,
         "kind": "francis.stage18.managed_copies.container_isolation_contract",
         "contract": CONTAINER_ISOLATION_CONTRACT,
-        "status": "fixed_docker_fixture_backend_available",
+        "status": "fixed_francis_runtime_container_adapter_available",
         "required_scope": CONTAINER_ISOLATION_SCOPE,
         "approval_action": CONTAINER_ISOLATION_ACTION,
         "runtime_start_approval_also_required": True,
+        "pilot_lease_required": True,
         "backend": "docker_desktop_wsl2_linux",
         "fixed_image_repository": FIXED_IMAGE_REPOSITORY,
         "fixed_image_tag": FIXED_IMAGE_TAG,
-        "fixed_manifest_list_digest": FIXED_MANIFEST_LIST_DIGEST,
-        "fixed_platform_digest": FIXED_PLATFORM_DIGEST,
         "fixed_platform": FIXED_PLATFORM,
+        "runtime_identity": RUNTIME_IDENTITY,
+        "operation": "tenant_work_briefing",
+        "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
+        "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
         "caller_selected_image": False,
         "caller_selected_command": False,
         "network": "none",
-        "fixture_only": True,
+        "fixture_only": False,
         "persistent_actor_grant_present": False,
         "runtime_gate_ready": False,
         "stage18_ready": False,
@@ -187,12 +199,20 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         blockers.append("managed_copy_container_isolation_binding_invalid")
     if values.get("docker_context") != "desktop-linux":
         blockers.append("managed_copy_container_isolation_context_invalid")
+    lease_context = _pilot_lease_context(values.get("lease_id", ""))
     if (
-        digests.get("image_manifest_digest") != FIXED_MANIFEST_LIST_DIGEST
-        or digests.get("image_platform_digest") != FIXED_PLATFORM_DIGEST
-        or digests.get("image_id") != FIXED_PLATFORM_DIGEST
+        not lease_context
+        or lease_context.get("actor_id") != safe_actor
+        or lease_context.get("pilot_run_id") != values.get("proof_run_id")
     ):
+        blockers.append("managed_copy_container_isolation_pilot_lease_lineage_invalid")
+    if len(set(digests.get(key) for key in ("image_manifest_digest", "image_platform_digest", "image_id"))) != 1:
         blockers.append("managed_copy_container_isolation_fixed_image_mismatch")
+    try:
+        operation_preview = build_work_briefing(payload.get("operation_input"))
+    except ValueError as exc:
+        blockers.append(str(exc))
+        operation_preview = {}
 
     provision: dict[str, Any] = {}
     isolation: dict[str, Any] = {}
@@ -239,6 +259,8 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
             provision=provision,
             isolation=isolation,
             runtime_approval=runtime_approval,
+            operation_preview=operation_preview,
+            lease_context=lease_context,
         )
         descriptor_fingerprint = _fingerprint(descriptor)
         approval = _approval(values["approval_id"])
@@ -263,7 +285,7 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         "descriptor_fingerprint": descriptor_fingerprint,
         "writes_receipt": False,
         "starts_container": False,
-        "fixture_only": True,
+        "fixture_only": False,
         "runtime_gate_ready": False,
         "stage18_ready": False,
     }
@@ -285,10 +307,10 @@ def execute_container_isolation(
         final = container_isolation_proposal(payload, actor=actor, stage17_closed=stage17_closed)
         if not final["ok"] or final["descriptor_fingerprint"] != initial["descriptor_fingerprint"]:
             return _blocked(initial, "managed_copy_container_isolation_changed_under_lock")
-        return _execute(final, run=run)
+        return _execute(final, operation_input=payload["operation_input"], run=run)
 
 
-def _execute(plan: dict[str, Any], *, run: DockerRunner) -> dict[str, Any]:
+def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner) -> dict[str, Any]:
     d = plan["descriptor"]
     preflight = _docker_preflight(run, d)
     if preflight:
@@ -298,25 +320,12 @@ def _execute(plan: dict[str, Any], *, run: DockerRunner) -> dict[str, Any]:
         return _blocked(plan, "managed_copy_container_proof_root_unsafe_or_in_use")
     receipts = root / "receipts"
     state = root / "state"
-    tenant_a = root / "tenant-a"
-    tenant_b = root / "tenant-b"
-    for path in (receipts, state, tenant_a, tenant_b):
+    tenant = root / "tenant"
+    for path in (receipts, state, tenant):
         path.mkdir()
-    _write_bytes_immutable(root / "fixture.sh", FIXTURE_SCRIPT.read_bytes())
-    _write_text_immutable(tenant_a / "authorized.txt", "authorized fixture\n")
-    _write_text_immutable(tenant_b / "forbidden.txt", "unauthorized fixture\n")
-    config = {
-        "runtime_identity": d["runtime_identity"],
-        "runtime_nonce": d["runtime_nonce"],
-        "lease_id": d["lease_id"],
-        "tenant_key": d["tenant_key"],
-        "copy_id": d["copy_id"],
-        "lease_seconds": d["lease_seconds"],
-    }
-    config_path = root / "runtime-config.json"
-    _write_text_immutable(config_path, json.dumps(config, sort_keys=True) + "\n")
+    _write_text_immutable(tenant / "work_items.json", json.dumps(operation_input, sort_keys=True) + "\n")
     name = f"francis-mciso-{d['proof_run_id'].lower()}"
-    image = f"{FIXED_IMAGE_REPOSITORY}@{FIXED_PLATFORM_DIGEST}"
+    image = f"{FIXED_IMAGE_REPOSITORY}:{FIXED_IMAGE_TAG}"
     create_argv = _create_argv(d, name=name, image=image, root=root)
     source_snapshot = _mount_source_snapshot(root, descriptor=d)
     if not source_snapshot:
@@ -382,22 +391,29 @@ def _execute(plan: dict[str, Any], *, run: DockerRunner) -> dict[str, Any]:
         if started.exit_code != 0:
             return _fail(plan, receipts, "managed_copy_container_start_failed", started)
         deadline = time.monotonic() + min(10.0, float(d["lease_seconds"]))
-        heartbeat: dict[str, Any] = {}
+        records: dict[str, dict[str, Any]] = {}
         while time.monotonic() < deadline:
-            heartbeat = _read_json(state / "heartbeat.json")
-            if _heartbeat_valid(heartbeat, d):
+            records = {
+                name: _read_json(state / f"{name}.json") for name in ("handshake", "heartbeat", "operation", "briefing")
+            }
+            if not _runtime_records_blocker(records, d, operation_input=operation_input):
                 break
             time.sleep(0.1)
-        if not _heartbeat_valid(heartbeat, d):
-            return _fail(plan, receipts, "managed_copy_container_heartbeat_missing", started)
+        records_blocker = _runtime_records_blocker(records, d, operation_input=operation_input)
+        if records_blocker:
+            return _fail(plan, receipts, records_blocker, started)
         inspected = _inspect(run, container_id)
         blocker = _inspect_blocker(inspected, d, name=name, root=root, require_running=True)
         if blocker:
             if blocker == "managed_copy_container_security_profile_mismatch":
                 _write_security_profile_diagnostic(receipts, plan=plan, inspected=inspected)
             return _fail(plan, receipts, blocker, inspected)
-        if (state / "tenant-b-visible").exists():
-            return _fail(plan, receipts, "managed_copy_container_cross_tenant_denial_failed", inspected)
+        runtime_pid = _container_runtime_pid(inspected)
+        records_blocker = _runtime_records_blocker(
+            records, d, operation_input=operation_input, expected_pid=runtime_pid
+        )
+        if records_blocker:
+            return _fail(plan, receipts, records_blocker, inspected)
         proof = _receipt(
             plan,
             "ready",
@@ -408,16 +424,26 @@ def _execute(plan: dict[str, Any], *, run: DockerRunner) -> dict[str, Any]:
                 "image_platform_digest": d["image_platform_digest"],
                 "mount_set_fingerprint": d["mount_set_fingerprint"],
                 "security_profile_fingerprint": d["security_profile_fingerprint"],
-                "heartbeat_fingerprint": _fingerprint(heartbeat),
+                "handshake_fingerprint": _fingerprint(records["handshake"]),
+                "heartbeat_fingerprint": _fingerprint(records["heartbeat"]),
+                "operation_receipt_fingerprint": records["operation"]["receipt_fingerprint"],
+                "output_fingerprint": records["briefing"]["output_fingerprint"],
                 "bounded_cross_tenant_mount_denial": True,
                 "cross_tenant_production_isolation_proven": False,
-                "fixture_only": True,
+                "fixture_only": False,
+                "evidence_class": "isolated_non_fixture_francis_runtime",
                 "runtime_gate_ready": False,
                 "stage18_ready": False,
             },
         )
         _write_immutable(receipts / "ready.json", proof)
-        return {"ok": True, "status": "fixture_ready", "receipt": proof, "proof_root": str(root)}
+        return {
+            "ok": True,
+            "status": "runtime_ready",
+            "receipt": proof,
+            "output": records["briefing"],
+            "proof_root": str(root),
+        }
     finally:
         cleanup_status = _cleanup_exact(run, container_id, name=name, receipts=receipts, plan=plan)
         if cleanup_status != "removed":
@@ -430,9 +456,7 @@ def _execute(plan: dict[str, Any], *, run: DockerRunner) -> dict[str, Any]:
 
 
 def _create_argv(d: dict[str, Any], *, name: str, image: str, root: Path) -> list[str]:
-    script = str((root / "fixture.sh").resolve())
-    config = str((root / "runtime-config.json").resolve())
-    tenant_a = str((root / "tenant-a").resolve())
+    tenant = str((root / "tenant").resolve())
     state = str((root / "state").resolve())
     return [
         *_docker_prefix(),
@@ -472,17 +496,32 @@ def _create_argv(d: dict[str, Any], *, name: str, image: str, root: Path) -> lis
         "--tmpfs",
         "/tmp:rw,noexec,nodev,nosuid,size=1m",
         "--mount",
-        f"type=bind,src={script},dst=/francis/fixture.sh,readonly",
-        "--mount",
-        f"type=bind,src={config},dst=/francis/runtime-config.json,readonly",
-        "--mount",
-        f"type=bind,src={tenant_a},dst=/francis/tenant,readonly",
+        f"type=bind,src={tenant},dst=/francis/tenant,readonly",
         "--mount",
         f"type=bind,src={state},dst=/francis/state",
-        "--entrypoint",
-        "/bin/sh",
         image,
-        "/francis/fixture.sh",
+        *_runtime_cmd(d),
+    ]
+
+
+def _runtime_cmd(d: dict[str, Any]) -> list[str]:
+    return [
+        "--tenant-root",
+        "/francis",
+        "--state-dir",
+        "/francis/state",
+        "--input-path",
+        "/francis/tenant/work_items.json",
+        "--copy-id",
+        d["copy_id"],
+        "--tenant-key",
+        d["tenant_key"],
+        "--pilot-run-id",
+        d["proof_run_id"],
+        "--runtime-nonce",
+        d["runtime_nonce"],
+        "--lease-seconds",
+        str(d["lease_seconds"]),
     ]
 
 
@@ -491,8 +530,11 @@ def _docker_prefix() -> list[str]:
 
 
 def _docker_preflight(run: DockerRunner, descriptor: dict[str, Any]) -> str:
-    if _file_sha256(FIXTURE_SCRIPT) != descriptor["fixture_script_fingerprint"]:
-        return "managed_copy_container_fixture_changed_before_launch"
+    if (
+        _file_sha256(RUNTIME_PROGRAM) != descriptor["runtime_program_fingerprint"]
+        or _file_sha256(RUNTIME_DOCKERFILE) != descriptor["runtime_dockerfile_fingerprint"]
+    ):
+        return "managed_copy_container_runtime_image_source_changed_before_launch"
     context = run(["docker", "context", "inspect", "desktop-linux"], 10.0)
     if context.exit_code != 0:
         return "managed_copy_container_context_unavailable"
@@ -505,7 +547,7 @@ def _docker_preflight(run: DockerRunner, descriptor: dict[str, Any]) -> str:
     version = run([*_docker_prefix(), "version", "--format", "{{json .Server}}"], 10.0)
     info = run([*_docker_prefix(), "info", "--format", "{{json .}}"], 10.0)
     image = run(
-        [*_docker_prefix(), "image", "inspect", f"{FIXED_IMAGE_REPOSITORY}@{FIXED_PLATFORM_DIGEST}"],
+        [*_docker_prefix(), "image", "inspect", f"{FIXED_IMAGE_REPOSITORY}:{FIXED_IMAGE_TAG}"],
         10.0,
     )
     if any(result.exit_code != 0 for result in (version, info, image)):
@@ -525,13 +567,16 @@ def _docker_preflight(run: DockerRunner, descriptor: dict[str, Any]) -> str:
         or engine.get("ID") != descriptor["engine_id"]
     ):
         return "managed_copy_container_engine_identity_mismatch"
-    repo_digests = inspected_image.get("RepoDigests") or []
+    image_labels = (inspected_image.get("Config") or {}).get("Labels") or {}
     if (
-        inspected_image.get("Id") != FIXED_PLATFORM_DIGEST
+        inspected_image.get("Id") != descriptor["image_id"]
         or inspected_image.get("Os") != "linux"
         or inspected_image.get("Architecture") != "amd64"
-        or not any(_text(value).endswith(f"@{FIXED_PLATFORM_DIGEST}") for value in repo_digests)
         or _fingerprint(inspected_image.get("Config")) != descriptor["image_config_fingerprint"]
+        or image_labels.get("francis.runtime.contract") != RUNTIME_IDENTITY
+        or image_labels.get("francis.runtime.program_sha256") != descriptor["runtime_program_fingerprint"]
+        or (inspected_image.get("Config") or {}).get("User") != FIXED_CONTAINER_USER
+        or (inspected_image.get("Config") or {}).get("Entrypoint") != ["python", RUNTIME_PROGRAM_CONTAINER_PATH]
     ):
         return "managed_copy_container_image_identity_mismatch"
     return ""
@@ -584,9 +629,7 @@ def _safe_existing_chain(path: Path) -> bool:
 
 def _mount_source_snapshot(root: Path, *, descriptor: dict[str, Any]) -> dict[str, tuple[Any, ...]]:
     sources = {
-        "fixture": root / "fixture.sh",
-        "config": root / "runtime-config.json",
-        "tenant": root / "tenant-a",
+        "tenant": root / "tenant",
         "state": root / "state",
     }
     snapshot: dict[str, tuple[Any, ...]] = {}
@@ -595,7 +638,7 @@ def _mount_source_snapshot(root: Path, *, descriptor: dict[str, Any]) -> dict[st
         for key, path in sources.items():
             if not _safe_existing_chain(path) or path.resolve(strict=True).parent not in {
                 resolved_root,
-                (resolved_root / "tenant-a"),
+                (resolved_root / "tenant"),
             }:
                 return {}
             stat = path.lstat()
@@ -608,7 +651,7 @@ def _mount_source_snapshot(root: Path, *, descriptor: dict[str, Any]) -> dict[st
                 stat.st_mtime_ns,
                 getattr(stat, "st_file_attributes", 0),
             )
-        if _file_sha256(root / "fixture.sh") != descriptor["fixture_script_fingerprint"]:
+        if _file_sha256(root / "tenant" / "work_items.json") != descriptor["operation_input_file_fingerprint"]:
             return {}
     except OSError:
         return {}
@@ -644,6 +687,8 @@ def _descriptor(
     provision: dict[str, Any],
     isolation: dict[str, Any],
     runtime_approval: dict[str, Any],
+    operation_preview: dict[str, Any],
+    lease_context: dict[str, str],
 ) -> dict[str, Any]:
     security = {
         "network": "none",
@@ -656,7 +701,7 @@ def _descriptor(
         "pids_limit": 32,
         "restart": "no",
     }
-    mounts = ["fixture_script:ro", "runtime_config:ro", "tenant_a:ro", "proof_state:rw"]
+    mounts = ["tenant_input:ro", "runtime_state:rw"]
     return {
         "contract": CONTAINER_ISOLATION_CONTRACT,
         "approval_id": values["approval_id"],
@@ -678,18 +723,28 @@ def _descriptor(
         "image_id": digests["image_id"],
         "image_config_fingerprint": digests["image_config_fingerprint"],
         "platform": FIXED_PLATFORM,
-        "fixture_script_fingerprint": _file_sha256(FIXTURE_SCRIPT),
-        "entrypoint_fingerprint": _fingerprint(["/bin/sh", "/francis/fixture.sh"]),
+        "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
+        "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
+        "entrypoint_fingerprint": _fingerprint(["python", RUNTIME_PROGRAM_CONTAINER_PATH]),
         "mount_set_fingerprint": _fingerprint(mounts),
         "security_profile_fingerprint": _fingerprint(security),
-        "runtime_identity": "stage18_managed_copy_docker_fixture_v1",
+        "runtime_identity": RUNTIME_IDENTITY,
+        "heartbeat_identity": HEARTBEAT_IDENTITY,
+        "input_contract": INPUT_CONTRACT,
+        "output_contract": OUTPUT_CONTRACT,
+        "operation": "tenant_work_briefing",
+        "operation_input_fingerprint": operation_preview["input_fingerprint"],
+        "operation_input_file_fingerprint": _sha256_text(json.dumps(payload["operation_input"], sort_keys=True) + "\n"),
         "proof_run_id": values["proof_run_id"],
         "lease_id": values["lease_id"],
+        "pilot_package_id": lease_context["package_id"],
+        "pilot_package_fingerprint": lease_context["package_fingerprint"],
+        "pilot_operator_decision_fingerprint": lease_context["operator_decision_fingerprint"],
         "runtime_nonce": values["runtime_nonce"],
         "action_nonce": values["action_nonce"],
         "trace_id": values["trace_id"],
         "lease_seconds": _exact_int(payload["lease_seconds"], minimum=2, maximum=30),
-        "fixture_only": True,
+        "fixture_only": False,
     }
 
 
@@ -953,7 +1008,7 @@ def _inspect_blocker(
         return "managed_copy_container_label_mismatch"
     if _security_profile_diagnostics(item):
         return "managed_copy_container_security_profile_mismatch"
-    if config.get("Entrypoint") != ["/bin/sh"] or config.get("Cmd") != ["/francis/fixture.sh"]:
+    if config.get("Entrypoint") != ["python", RUNTIME_PROGRAM_CONTAINER_PATH] or config.get("Cmd") != _runtime_cmd(d):
         return "managed_copy_container_command_mismatch"
     tmpfs = host.get("Tmpfs") or {}
     if set(tmpfs) != {"/tmp"} or set(_text(tmpfs.get("/tmp")).split(",")) != {
@@ -967,15 +1022,12 @@ def _inspect_blocker(
     mounts = item.get("Mounts") or []
     destinations = {m.get("Destination"): bool(m.get("RW")) for m in mounts}
     if destinations != {
-        "/francis/fixture.sh": False,
-        "/francis/runtime-config.json": False,
         "/francis/tenant": False,
         "/francis/state": True,
     }:
         return "managed_copy_container_mount_set_mismatch"
     sources = {str(Path(_text(m.get("Source"))).resolve()).casefold() for m in mounts}
-    allowed = {str((root / p).resolve()).casefold() for p in ("runtime-config.json", "tenant-a", "state")}
-    allowed.add(str((root / "fixture.sh").resolve()).casefold())
+    allowed = {str((root / p).resolve()).casefold() for p in ("tenant", "state")}
     if sources != allowed or any("docker.sock" in source for source in sources):
         return "managed_copy_container_mount_source_mismatch"
     if require_running and state.get("Running") is not True:
@@ -1026,47 +1078,85 @@ def _cleanup_identity_matches(
     return bool(
         _text(item.get("Id")) == container_id
         and _text(item.get("Name")).lstrip("/") == name
-        and _text(item.get("Image")) == FIXED_PLATFORM_DIGEST
-        and config.get("Entrypoint") == ["/bin/sh"]
-        and config.get("Cmd") == ["/francis/fixture.sh"]
+        and _text(item.get("Image")) == descriptor["image_id"]
+        and config.get("Entrypoint") == ["python", RUNTIME_PROGRAM_CONTAINER_PATH]
+        and config.get("Cmd") == _runtime_cmd(descriptor)
         and all(labels.get(key) == value for key, value in expected_labels.items())
     )
 
 
-def _heartbeat_valid(value: dict[str, Any], d: dict[str, Any]) -> bool:
-    return (
-        set(value)
-        == {
-            "runtime_identity",
-            "runtime_nonce",
-            "lease_id",
-            "tenant_key",
-            "copy_id",
-            "uid",
-            "cap_eff",
-            "tenant_a_readable",
-            "tenant_b_visible",
-            "sequence",
-            "recorded_at_unix_ms",
-        }
-        and value.get("runtime_identity") == d["runtime_identity"]
-        and value.get("runtime_nonce") == d["runtime_nonce"]
-        and value.get("lease_id") == d["lease_id"]
-        and value.get("tenant_key") == d["tenant_key"]
-        and value.get("copy_id") == d["copy_id"]
-        and value.get("uid") == "65532"
-        and value.get("cap_eff") == "0000000000000000"
-        and value.get("tenant_a_readable") is True
-        and value.get("tenant_b_visible") is False
-        and type(value.get("sequence")) is int
-        and value["sequence"] > 0
-        and type(value.get("recorded_at_unix_ms")) is int
-        and 0 <= int(time.time() * 1000) - value["recorded_at_unix_ms"] <= 3_000
-    )
+def _container_runtime_pid(result: DockerResult) -> int:
+    try:
+        items = json.loads(result.stdout)
+        value = items[0]["State"]["Pid"] if result.exit_code == 0 and len(items) == 1 else 0
+    except (json.JSONDecodeError, KeyError, TypeError, IndexError):
+        return 0
+    return value if type(value) is int and value > 0 else 0
+
+
+def _runtime_records_blocker(
+    records: dict[str, dict[str, Any]],
+    d: dict[str, Any],
+    *,
+    operation_input: object,
+    expected_pid: int = 0,
+) -> str:
+    handshake = records.get("handshake") or {}
+    heartbeat = records.get("heartbeat") or {}
+    operation = records.get("operation") or {}
+    briefing = records.get("briefing") or {}
+    common = {
+        "copy_id": d["copy_id"],
+        "tenant_key": d["tenant_key"],
+        "pilot_run_id": d["proof_run_id"],
+        "runtime_nonce_hash": _sha256_text(d["runtime_nonce"]),
+    }
+    if handshake.get("runtime_identity") != RUNTIME_IDENTITY or handshake.get("fixture_runtime") is not False:
+        return "managed_copy_container_runtime_handshake_missing_or_invalid"
+    if any(handshake.get(key) != value for key, value in common.items()):
+        return "managed_copy_container_runtime_handshake_lineage_mismatch"
+    if expected_pid and handshake.get("pid") != expected_pid:
+        return "managed_copy_container_runtime_process_identity_mismatch"
+    observed_at = heartbeat.get("observed_at_unix_ms")
+    if (
+        heartbeat.get("heartbeat_identity") != HEARTBEAT_IDENTITY
+        or heartbeat.get("ready") is not True
+        or heartbeat.get("operation_completed") is not True
+        or type(heartbeat.get("sequence")) is not int
+        or heartbeat["sequence"] <= 0
+        or type(observed_at) is not int
+        or not 0 <= int(time.time() * 1000) - observed_at <= 3_000
+    ):
+        return "managed_copy_container_runtime_heartbeat_missing_or_invalid"
+    if any(heartbeat.get(key) != value for key, value in common.items()):
+        return "managed_copy_container_runtime_heartbeat_lineage_mismatch"
+    expected_briefing = build_work_briefing(operation_input)
+    if briefing != expected_briefing or briefing.get("input_fingerprint") != d["operation_input_fingerprint"]:
+        return "managed_copy_container_runtime_output_invalid"
+    receipt_fingerprint = operation.get("receipt_fingerprint")
+    if (
+        operation.get("operation") != "tenant_work_briefing"
+        or operation.get("status") != "completed"
+        or operation.get("fixture_runtime") is not False
+        or operation.get("input_fingerprint") != briefing.get("input_fingerprint")
+        or operation.get("output_fingerprint") != briefing.get("output_fingerprint")
+        or any(operation.get(key) != value for key, value in common.items())
+        or not isinstance(receipt_fingerprint, str)
+        or receipt_fingerprint
+        != _fingerprint({key: value for key, value in operation.items() if key != "receipt_fingerprint"})
+    ):
+        return "managed_copy_container_runtime_operation_invalid"
+    return ""
 
 
 def _approval(approval_id: str) -> dict[str, Any]:
     return _read_json(data_dir() / "approvals" / "approved" / f"{approval_id}.json")
+
+
+def _pilot_lease_context(lease_id: str) -> dict[str, str]:
+    from francis.managed_copy_pilot_runtime import PILOT_RUNTIME_LEASES
+
+    return PILOT_RUNTIME_LEASES.lease_context(lease_id)
 
 
 def _approval_blocker(
@@ -1255,6 +1345,10 @@ def _text(value: Any) -> str:
 def _fingerprint(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _file_sha256(path: Path) -> str:

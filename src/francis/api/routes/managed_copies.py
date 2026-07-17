@@ -75,6 +75,8 @@ from francis.managed_copy_runtime_start import (
     start_fixture_runtime,
 )
 from francis.managed_copy_container_isolation import (
+    CONTAINER_ISOLATION_ACTION,
+    CONTAINER_ISOLATION_ROUTE,
     CONTAINER_ISOLATION_SCOPE,
     container_isolation_contract_snapshot,
     execute_container_isolation,
@@ -363,11 +365,16 @@ def container_isolation_contract() -> dict[str, Any]:
 @router.post("/container-isolation")
 def container_isolation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     actor = _managed_copy_write_actor(payload)
-    decision = _write_permission(
-        actor,
-        required_scope=CONTAINER_ISOLATION_SCOPE,
-        route="/managed-copies/container-isolation",
+    decision = ApiPermissionGate.from_env(
+        pilot_lease_registry=PILOT_RUNTIME_LEASES,
+        require_pilot_lease=True,
+    ).check(
+        actor_id=actor,
+        required_scopes=[CONTAINER_ISOLATION_SCOPE],
+        route=CONTAINER_ISOLATION_ROUTE,
         method=request.method,
+        action=CONTAINER_ISOLATION_ACTION,
+        pilot_lease_id=payload.get("lease_id"),
     )
     if not decision.allowed:
         return _permission_denied(
