@@ -35,6 +35,7 @@ FIXED_PLATFORM = "linux/amd64"
 FIXED_CONTAINER_USER = "65532:65532"
 RUNTIME_PROGRAM = repo_root() / "src" / "francis" / "managed_copy_runtime.py"
 RUNTIME_DOCKERFILE = repo_root() / "infra" / "managed-copy-runtime" / "Dockerfile"
+CONTROLLER_VERIFIER = Path(__file__).resolve()
 RUNTIME_PROGRAM_CONTAINER_PATH = "/opt/francis/managed_copy_runtime.py"
 SECURITY_PROFILE_DIAGNOSTIC_CONTRACT = "stage18_managed_copy_docker_security_profile_diagnostic_v1"
 DIAGNOSTIC_PREDECESSOR_PROOF_RUN_ID = "mciso-20260716t170613z"
@@ -152,6 +153,7 @@ def container_isolation_contract_snapshot() -> dict[str, Any]:
         "operation": "tenant_work_briefing",
         "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
         "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
+        "controller_verifier_fingerprint": _file_sha256(CONTROLLER_VERIFIER),
         "caller_selected_image": False,
         "caller_selected_command": False,
         "network": "none",
@@ -390,15 +392,7 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
         started = run([*_docker_prefix(), "container", "start", container_id], 15.0)
         if started.exit_code != 0:
             return _fail(plan, receipts, "managed_copy_container_start_failed", started)
-        deadline = time.monotonic() + min(10.0, float(d["lease_seconds"]))
-        records: dict[str, dict[str, Any]] = {}
-        while time.monotonic() < deadline:
-            records = {
-                name: _read_json(state / f"{name}.json") for name in ("handshake", "heartbeat", "operation", "briefing")
-            }
-            if not _runtime_records_blocker(records, d, operation_input=operation_input):
-                break
-            time.sleep(0.1)
+        records = _wait_for_runtime_records(state, d, operation_input=operation_input)
         records_blocker = _runtime_records_blocker(records, d, operation_input=operation_input)
         if records_blocker:
             return _fail(plan, receipts, records_blocker, started)
@@ -408,12 +402,9 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
             if blocker == "managed_copy_container_security_profile_mismatch":
                 _write_security_profile_diagnostic(receipts, plan=plan, inspected=inspected)
             return _fail(plan, receipts, blocker, inspected)
-        runtime_pid = _container_runtime_pid(inspected)
-        records_blocker = _runtime_records_blocker(
-            records, d, operation_input=operation_input, expected_pid=runtime_pid
-        )
-        if records_blocker:
-            return _fail(plan, receipts, records_blocker, inspected)
+        container_host_pid = _container_host_pid(inspected)
+        if container_host_pid == 0:
+            return _fail(plan, receipts, "managed_copy_container_runtime_process_identity_mismatch", inspected)
         proof = _receipt(
             plan,
             "ready",
@@ -428,6 +419,10 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
                 "heartbeat_fingerprint": _fingerprint(records["heartbeat"]),
                 "operation_receipt_fingerprint": records["operation"]["receipt_fingerprint"],
                 "output_fingerprint": records["briefing"]["output_fingerprint"],
+                "controller_verifier_fingerprint": d["controller_verifier_fingerprint"],
+                "container_host_pid": container_host_pid,
+                "runtime_namespace_pid": records["handshake"]["pid"],
+                "runtime_namespace_parent_pid": records["handshake"]["parent_pid"],
                 "bounded_cross_tenant_mount_denial": True,
                 "cross_tenant_production_isolation_proven": False,
                 "fixture_only": False,
@@ -533,6 +528,7 @@ def _docker_preflight(run: DockerRunner, descriptor: dict[str, Any]) -> str:
     if (
         _file_sha256(RUNTIME_PROGRAM) != descriptor["runtime_program_fingerprint"]
         or _file_sha256(RUNTIME_DOCKERFILE) != descriptor["runtime_dockerfile_fingerprint"]
+        or _file_sha256(CONTROLLER_VERIFIER) != descriptor["controller_verifier_fingerprint"]
     ):
         return "managed_copy_container_runtime_image_source_changed_before_launch"
     context = run(["docker", "context", "inspect", "desktop-linux"], 10.0)
@@ -725,6 +721,7 @@ def _descriptor(
         "platform": FIXED_PLATFORM,
         "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
         "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
+        "controller_verifier_fingerprint": _file_sha256(CONTROLLER_VERIFIER),
         "entrypoint_fingerprint": _fingerprint(["python", RUNTIME_PROGRAM_CONTAINER_PATH]),
         "mount_set_fingerprint": _fingerprint(mounts),
         "security_profile_fingerprint": _fingerprint(security),
@@ -1030,8 +1027,11 @@ def _inspect_blocker(
     allowed = {str((root / p).resolve()).casefold() for p in ("tenant", "state")}
     if sources != allowed or any("docker.sock" in source for source in sources):
         return "managed_copy_container_mount_source_mismatch"
-    if require_running and state.get("Running") is not True:
-        return "managed_copy_container_not_running"
+    if require_running:
+        if state.get("Running") is not True:
+            return "managed_copy_container_not_running"
+        if not _valid_docker_started_at(state.get("StartedAt")):
+            return "managed_copy_container_start_identity_invalid"
     return ""
 
 
@@ -1085,7 +1085,7 @@ def _cleanup_identity_matches(
     )
 
 
-def _container_runtime_pid(result: DockerResult) -> int:
+def _container_host_pid(result: DockerResult) -> int:
     try:
         items = json.loads(result.stdout)
         value = items[0]["State"]["Pid"] if result.exit_code == 0 and len(items) == 1 else 0
@@ -1094,12 +1094,50 @@ def _container_runtime_pid(result: DockerResult) -> int:
     return value if type(value) is int and value > 0 else 0
 
 
+def _valid_docker_started_at(value: object) -> bool:
+    if not isinstance(value, str) or not value or value.startswith("0001-01-01T00:00:00"):
+        return False
+    try:
+        parsed = time.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return False
+    return parsed.tm_year >= 2000
+
+
+def _readiness_seconds(value: object) -> int:
+    return _exact_int(value, minimum=2, maximum=30)
+
+
+def _wait_for_runtime_records(
+    state: Path,
+    descriptor: dict[str, Any],
+    *,
+    operation_input: object,
+    clock: Callable[[], float] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+) -> dict[str, dict[str, Any]]:
+    now = clock or time.monotonic
+    sleep = sleeper or time.sleep
+    readiness_seconds = _readiness_seconds(descriptor.get("lease_seconds"))
+    if readiness_seconds == 0:
+        return {}
+    deadline = now() + float(readiness_seconds)
+    records: dict[str, dict[str, Any]] = {}
+    while now() < deadline:
+        records = {
+            name: _read_json(state / f"{name}.json") for name in ("handshake", "heartbeat", "operation", "briefing")
+        }
+        if not _runtime_records_blocker(records, descriptor, operation_input=operation_input):
+            break
+        sleep(0.1)
+    return records
+
+
 def _runtime_records_blocker(
     records: dict[str, dict[str, Any]],
     d: dict[str, Any],
     *,
     operation_input: object,
-    expected_pid: int = 0,
 ) -> str:
     handshake = records.get("handshake") or {}
     heartbeat = records.get("heartbeat") or {}
@@ -1115,7 +1153,7 @@ def _runtime_records_blocker(
         return "managed_copy_container_runtime_handshake_missing_or_invalid"
     if any(handshake.get(key) != value for key, value in common.items()):
         return "managed_copy_container_runtime_handshake_lineage_mismatch"
-    if expected_pid and handshake.get("pid") != expected_pid:
+    if handshake.get("pid") != 1 or handshake.get("parent_pid") != 0:
         return "managed_copy_container_runtime_process_identity_mismatch"
     observed_at = heartbeat.get("observed_at_unix_ms")
     if (
@@ -1126,6 +1164,8 @@ def _runtime_records_blocker(
         or heartbeat["sequence"] <= 0
         or type(observed_at) is not int
         or not 0 <= int(time.time() * 1000) - observed_at <= 3_000
+        or heartbeat.get("pid") != 1
+        or heartbeat.get("parent_pid") != 0
     ):
         return "managed_copy_container_runtime_heartbeat_missing_or_invalid"
     if any(heartbeat.get(key) != value for key, value in common.items()):

@@ -7,9 +7,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 
 from francis import managed_copy_container_isolation as container_isolation
+from francis import managed_copy_pilot_runtime as pilot_runtime
 from francis import managed_copy_runtime_start as runtime_start
+from francis.api.app import create_app
+from francis.api.routes import managed_copies as managed_copy_routes
+from francis.governance.pilot_scope_lease import (
+    PilotLeaseBinding,
+    PilotLeaseState,
+    PilotScopeLease,
+    PilotScopeLeaseRegistry,
+)
+
+_REAL_PILOT_LEASE_CONTEXT = container_isolation._pilot_lease_context
 
 
 @pytest.fixture
@@ -200,7 +212,41 @@ def _security_inspect() -> dict[str, Any]:
     }
 
 
-def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str, *, pid: int) -> None:
+def _owned_inspect_item(descriptor: dict[str, Any], root: Path, *, host_pid: object = 65532) -> dict[str, Any]:
+    item = _security_inspect()
+    item.update(
+        {
+            "Id": "9" * 64,
+            "Name": f"/francis-mciso-{descriptor['proof_run_id']}",
+            "Image": descriptor["image_id"],
+            "Mounts": [
+                {"Source": str((root / "tenant").resolve()), "Destination": "/francis/tenant", "RW": False},
+                {"Source": str((root / "state").resolve()), "Destination": "/francis/state", "RW": True},
+            ],
+            "State": {
+                "Running": True,
+                "Pid": host_pid,
+                "StartedAt": "2026-07-17T19:42:36.000000000Z",
+            },
+        }
+    )
+    item["Config"].update(
+        {
+            "Entrypoint": ["python", container_isolation.RUNTIME_PROGRAM_CONTAINER_PATH],
+            "Cmd": container_isolation._runtime_cmd(descriptor),
+            "Labels": {
+                "francis.proof_run_id": descriptor["proof_run_id"],
+                "francis.tenant_key": descriptor["tenant_key"],
+                "francis.copy_id": descriptor["copy_id"],
+                "francis.approval_id": descriptor["approval_id"],
+            },
+        }
+    )
+    item["HostConfig"]["Tmpfs"] = {"/tmp": "rw,noexec,nodev,nosuid,size=1m"}
+    return item
+
+
+def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str, *, pid: int = 1) -> None:
     state = root / "state"
     common = {
         "copy_id": payload["copy_id"],
@@ -214,7 +260,7 @@ def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str,
         "runtime_identity": container_isolation.RUNTIME_IDENTITY,
         "fixture_runtime": False,
         "pid": pid,
-        "parent_pid": 1,
+        "parent_pid": 0,
         **common,
     }
     heartbeat = {
@@ -549,6 +595,36 @@ def test_daemon_identity_mismatch_blocks_before_proof_root_creation(isolation_fi
     assert not any("create" in command for command in commands)
 
 
+def test_controller_verifier_change_blocks_before_docker_invocation(
+    isolation_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    original_hash = container_isolation._file_sha256
+    called = False
+
+    def changed_hash(path: Path) -> str:
+        if path == container_isolation.CONTROLLER_VERIFIER:
+            return "0" * 64
+        return original_hash(path)
+
+    def forbidden(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        nonlocal called
+        called = True
+        raise AssertionError((argv, timeout))
+
+    monkeypatch.setattr(container_isolation, "_file_sha256", changed_hash)
+
+    assert (
+        container_isolation._docker_preflight(forbidden, plan["descriptor"])
+        == "managed_copy_container_runtime_image_source_changed_before_launch"
+    )
+    assert called is False
+
+
 @pytest.mark.parametrize(
     ("remove_exit", "expected_status", "expected_error"),
     [
@@ -681,7 +757,11 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: d
                     "Tmpfs": {"/tmp": "rw,noexec,nodev,nosuid,size=1m"},
                 },
                 "Mounts": mounts,
-                "State": {"Running": running, "Pid": 65532 if running else 0},
+                "State": {
+                    "Running": running,
+                    "Pid": 65532 if running else 0,
+                    "StartedAt": "2026-07-17T19:42:36.000000000Z" if running else "0001-01-01T00:00:00Z",
+                },
             }
         ]
         return json.dumps(value)
@@ -713,7 +793,7 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: d
         if argv[3:5] == ["container", "start"]:
             running = True
             root = container_isolation._proof_base() / payload["proof_run_id"]
-            _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"], pid=65532)
+            _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"])
             return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
         if argv[3:5] == ["container", "inspect"]:
             return container_isolation.DockerResult(tuple(argv), 0, inspect_payload(running), "")
@@ -732,6 +812,12 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: d
     assert result["receipt"]["cross_tenant_production_isolation_proven"] is False
     assert result["receipt"]["runtime_gate_ready"] is False
     assert result["receipt"]["fixture_only"] is False
+    assert result["receipt"]["container_host_pid"] == 65532
+    assert result["receipt"]["runtime_namespace_pid"] == 1
+    assert result["receipt"]["runtime_namespace_parent_pid"] == 0
+    assert result["receipt"]["controller_verifier_fingerprint"] == container_isolation._file_sha256(
+        container_isolation.CONTROLLER_VERIFIER
+    )
     assert result["output"]["next_action"]["id"] == "work-1"
     assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
     assert "--read-only" in created_argv
@@ -752,7 +838,7 @@ def test_runtime_records_reject_tampered_useful_output(isolation_fixture: dict[s
     )
     root = tmp_path / "proof"
     (root / "state").mkdir(parents=True)
-    _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"], pid=65532)
+    _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"])
     briefing_path = root / "state" / "briefing.json"
     briefing = json.loads(briefing_path.read_text(encoding="utf-8"))
     briefing["next_action"]["id"] = "attacker-selected"
@@ -767,9 +853,216 @@ def test_runtime_records_reject_tampered_useful_output(isolation_fixture: dict[s
             records,
             plan["descriptor"],
             operation_input=payload["operation_input"],
-            expected_pid=65532,
         )
         == "managed_copy_container_runtime_output_invalid"
+    )
+
+
+def test_readiness_uses_full_authorized_lease_after_ten_seconds(
+    isolation_fixture: dict[str, Any], tmp_path: Path
+) -> None:
+    payload = isolation_fixture["payload"]
+    payload["lease_seconds"] = 30
+    _write_approval(isolation_fixture)
+    state = tmp_path / "state"
+    state.mkdir()
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    descriptor = plan["descriptor"]
+    elapsed = 0.0
+
+    def clock() -> float:
+        return elapsed
+
+    def sleep(seconds: float) -> None:
+        nonlocal elapsed
+        elapsed += seconds
+        if elapsed >= 10.5 and not (state / "handshake.json").exists():
+            _write_runtime_records(tmp_path, payload, isolation_fixture["provision"]["tenant_key"])
+
+    records = container_isolation._wait_for_runtime_records(
+        state,
+        descriptor,
+        operation_input=payload["operation_input"],
+        clock=clock,
+        sleeper=sleep,
+    )
+
+    assert elapsed >= 10.5
+    assert elapsed < 30
+    assert (
+        container_isolation._runtime_records_blocker(records, descriptor, operation_input=payload["operation_input"])
+        == ""
+    )
+
+
+def test_readiness_after_authorized_deadline_fails(isolation_fixture: dict[str, Any], tmp_path: Path) -> None:
+    payload = isolation_fixture["payload"]
+    _write_approval(isolation_fixture)
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    state = tmp_path / "state"
+    state.mkdir()
+    elapsed = 0.0
+
+    def clock() -> float:
+        return elapsed
+
+    def sleep(seconds: float) -> None:
+        nonlocal elapsed
+        elapsed += seconds
+
+    records = container_isolation._wait_for_runtime_records(
+        state,
+        plan["descriptor"],
+        operation_input=payload["operation_input"],
+        clock=clock,
+        sleeper=sleep,
+    )
+
+    assert elapsed >= payload["lease_seconds"]
+    assert (
+        container_isolation._runtime_records_blocker(
+            records, plan["descriptor"], operation_input=payload["operation_input"]
+        )
+        == "managed_copy_container_runtime_handshake_missing_or_invalid"
+    )
+
+
+def test_readiness_above_thirty_seconds_is_rejected(isolation_fixture: dict[str, Any]) -> None:
+    payload = dict(isolation_fixture["payload"])
+    payload["lease_seconds"] = 31
+
+    denied = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+
+    assert denied["error"] == "managed_copy_container_isolation_binding_invalid"
+
+
+@pytest.mark.parametrize("host_pid", [0, -1, True, None, "65532"])
+def test_container_host_pid_rejects_non_positive_or_non_integer_values(host_pid: object) -> None:
+    result = container_isolation.DockerResult(("docker",), 0, json.dumps([{"State": {"Pid": host_pid}}]), "")
+
+    assert container_isolation._container_host_pid(result) == 0
+
+
+@pytest.mark.parametrize(("pid", "parent_pid"), [(2, 0), (1, 1), (65532, 0)])
+def test_runtime_namespace_identity_is_exact(
+    isolation_fixture: dict[str, Any], tmp_path: Path, pid: int, parent_pid: int
+) -> None:
+    payload = isolation_fixture["payload"]
+    _write_approval(isolation_fixture)
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    (tmp_path / "state").mkdir()
+    _write_runtime_records(tmp_path, payload, isolation_fixture["provision"]["tenant_key"])
+    records = {
+        name: json.loads((tmp_path / "state" / f"{name}.json").read_text(encoding="utf-8"))
+        for name in ("handshake", "heartbeat", "operation", "briefing")
+    }
+    records["handshake"]["pid"] = pid
+    records["handshake"]["parent_pid"] = parent_pid
+
+    assert (
+        container_isolation._runtime_records_blocker(
+            records, plan["descriptor"], operation_input=payload["operation_input"]
+        )
+        == "managed_copy_container_runtime_process_identity_mismatch"
+    )
+
+
+def test_different_host_and_namespace_pids_are_valid(isolation_fixture: dict[str, Any], tmp_path: Path) -> None:
+    payload = isolation_fixture["payload"]
+    _write_approval(isolation_fixture)
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    (tmp_path / "tenant").mkdir()
+    (tmp_path / "state").mkdir()
+    inspected = container_isolation.DockerResult(
+        ("docker",), 0, json.dumps([_owned_inspect_item(plan["descriptor"], tmp_path)]), ""
+    )
+    _write_runtime_records(tmp_path, payload, isolation_fixture["provision"]["tenant_key"])
+    records = {
+        name: json.loads((tmp_path / "state" / f"{name}.json").read_text(encoding="utf-8"))
+        for name in ("handshake", "heartbeat", "operation", "briefing")
+    }
+
+    assert (
+        container_isolation._inspect_blocker(
+            inspected,
+            plan["descriptor"],
+            name=f"francis-mciso-{payload['proof_run_id']}",
+            root=tmp_path,
+            require_running=True,
+        )
+        == ""
+    )
+    assert container_isolation._container_host_pid(inspected) == 65532
+    assert records["handshake"]["pid"] == 1
+    assert records["handshake"]["parent_pid"] == 0
+    assert (
+        container_isolation._runtime_records_blocker(
+            records, plan["descriptor"], operation_input=payload["operation_input"]
+        )
+        == ""
+    )
+
+
+@pytest.mark.parametrize("tamper", ["container_id", "label", "command"])
+def test_container_identity_tampering_is_denied(isolation_fixture: dict[str, Any], tmp_path: Path, tamper: str) -> None:
+    payload = isolation_fixture["payload"]
+    _write_approval(isolation_fixture)
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    (tmp_path / "tenant").mkdir()
+    (tmp_path / "state").mkdir()
+    item = _owned_inspect_item(plan["descriptor"], tmp_path)
+    if tamper == "container_id":
+        item["Image"] = "sha256:" + "0" * 64
+    elif tamper == "label":
+        item["Config"]["Labels"]["francis.proof_run_id"] = "other-run"
+    else:
+        item["Config"]["Cmd"] = ["--unapproved"]
+    inspected = container_isolation.DockerResult(("docker",), 0, json.dumps([item]), "")
+
+    assert (
+        container_isolation._inspect_blocker(
+            inspected,
+            plan["descriptor"],
+            name=f"francis-mciso-{payload['proof_run_id']}",
+            root=tmp_path,
+            require_running=True,
+        )
+        != ""
+    )
+
+
+@pytest.mark.parametrize("field", ["runtime_nonce_hash", "copy_id", "tenant_key", "pilot_run_id"])
+def test_runtime_lineage_tampering_is_denied(isolation_fixture: dict[str, Any], tmp_path: Path, field: str) -> None:
+    payload = isolation_fixture["payload"]
+    _write_approval(isolation_fixture)
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    (tmp_path / "state").mkdir()
+    _write_runtime_records(tmp_path, payload, isolation_fixture["provision"]["tenant_key"])
+    records = {
+        name: json.loads((tmp_path / "state" / f"{name}.json").read_text(encoding="utf-8"))
+        for name in ("handshake", "heartbeat", "operation", "briefing")
+    }
+    records["handshake"][field] = "tampered"
+
+    assert (
+        container_isolation._runtime_records_blocker(
+            records, plan["descriptor"], operation_input=payload["operation_input"]
+        )
+        == "managed_copy_container_runtime_handshake_lineage_mismatch"
     )
 
 
@@ -777,7 +1070,10 @@ def test_runtime_records_reject_tampered_useful_output(isolation_fixture: dict[s
     os.environ.get("FRANCIS_RUN_REAL_DOCKER_PROOF") != "1",
     reason="requires the explicitly authorized isolated Docker Desktop proof",
 )
-def test_real_fixed_docker_fixture_proof(isolation_fixture: dict[str, Any]) -> None:
+def test_real_fixed_docker_fixture_proof(
+    isolation_fixture: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     os.environ["FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT"] = os.environ["FRANCIS_DOCKER_PROOF_BASE"]
     payload = isolation_fixture["payload"]
     payload["image_manifest_digest"] = os.environ["FRANCIS_DOCKER_MANIFEST_DIGEST"]
@@ -787,21 +1083,93 @@ def test_real_fixed_docker_fixture_proof(isolation_fixture: dict[str, Any]) -> N
     payload["engine_id"] = os.environ["FRANCIS_DOCKER_ENGINE_ID"]
     payload["engine_server_fingerprint"] = os.environ["FRANCIS_DOCKER_ENGINE_SERVER_FINGERPRINT"]
     payload["proof_run_id"] = os.environ["FRANCIS_DOCKER_PROOF_RUN_ID"]
+    payload["lease_seconds"] = 30
+    payload["lease_id"] = f"lease-{payload['proof_run_id']}"
+    payload["runtime_nonce"] = f"nonce-{payload['proof_run_id']}"
+    payload["operation_input"] = {
+        "contract": container_isolation.INPUT_CONTRACT,
+        "items": [
+            {
+                "id": "pilot-001",
+                "title": "Verify governed managed-copy runtime lifecycle",
+                "priority": "critical",
+                "status": "open",
+            },
+            {
+                "id": "pilot-002",
+                "title": "Confirm exact cleanup and container absence",
+                "priority": "high",
+                "status": "open",
+            },
+            {
+                "id": "pilot-003",
+                "title": "Preserve fixture and canonical evidence separation",
+                "priority": "normal",
+                "status": "done",
+            },
+        ],
+    }
+
+    now_ms = int(time.time() * 1000)
+    registry = PilotScopeLeaseRegistry()
+    registry.issue(
+        PilotScopeLease(
+            lease_id=payload["lease_id"],
+            actor_id=payload["request_actor"],
+            package_id="stage18-container-pilot-package",
+            package_fingerprint="e" * 64,
+            pilot_run_id=payload["proof_run_id"],
+            bindings=(
+                PilotLeaseBinding(
+                    container_isolation.CONTAINER_ISOLATION_SCOPE,
+                    container_isolation.CONTAINER_ISOLATION_ROUTE,
+                    "POST",
+                    container_isolation.CONTAINER_ISOLATION_ACTION,
+                ),
+            ),
+            issued_at_ms=now_ms - 1_000,
+            expires_at_ms=now_ms + 120_000,
+            runtime_nonce=payload["runtime_nonce"],
+            operator_decision_fingerprint="f" * 64,
+        )
+    )
+    monkeypatch.setattr(pilot_runtime, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(managed_copy_routes, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(container_isolation, "_pilot_lease_context", _REAL_PILOT_LEASE_CONTEXT)
+    monkeypatch.setattr(
+        managed_copy_routes,
+        "managed_copies_status_snapshot",
+        lambda: {"stage17_closed_by_receipt": True},
+    )
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                payload["request_actor"]: [
+                    container_isolation.CONTAINER_ISOLATION_SCOPE,
+                ]
+            }
+        ),
+    )
     _write_approval(isolation_fixture)
 
-    result = container_isolation.execute_container_isolation(
-        payload,
-        actor=payload["request_actor"],
-        stage17_closed=True,
-    )
+    client = TestClient(create_app())
+    result = client.post(container_isolation.CONTAINER_ISOLATION_ROUTE, json=payload).json()
 
     assert result["ok"] is True, result
+    assert registry.state(payload["lease_id"]) is PilotLeaseState.CONSUMED
     assert result["receipt"]["bounded_cross_tenant_mount_denial"] is True
     assert result["receipt"]["fixture_only"] is False
     assert result["receipt"]["runtime_gate_ready"] is False
+    assert result["output"]["next_action"]["id"] == "pilot-001"
     cleanup = Path(result["proof_root"]) / "receipts" / "cleanup.json"
     assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"
     inspected = container_isolation.default_docker_runner(
         [*container_isolation._docker_prefix(), "container", "inspect", result["receipt"]["container_id"]], 10.0
     )
     assert inspected.exit_code != 0
+
+    replay = client.post(container_isolation.CONTAINER_ISOLATION_ROUTE, json=payload).json()
+    assert replay["ok"] is False
+    assert replay["error"] == "api_permission_denied"
+    assert registry.state(payload["lease_id"]) is PilotLeaseState.CONSUMED
