@@ -128,6 +128,36 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-17 - Current-evidence rogue-recovery plan preflight
+
+Current posture: Phase 2 and Stage 18 remain open. The governed
+`/managed-copies/rogue-recovery-review` route now produces a deterministic,
+read-only recovery plan only when the scoped actor supplies exact current owned
+lineage, the latest integrity evidence still matches live drift, and the latest
+linked triage disposition is `containment_authorization_required`.
+
+Evidence:
+
+- Focused planner, rogue-recovery, integrity, permission-gate, managed-copy API,
+  and mutation-authority matrix tests pass.
+- Static malformed or injected payloads fail before owned lineage reads. Stale,
+  substituted, duplicate, cross-evidence, and non-containment inputs fail
+  closed; changed-path Ruff, format, targeted mypy, and diff checks pass.
+- Independent authority/security and acceptance reviews found no blocking
+  issues in the exact affected delta.
+
+Remaining truthful gap:
+
+- The plan is operator-review preparation only. It does not declare the copy
+  rogue, open or resolve an incident, halt or quarantine a runtime, preserve
+  evidence, replace a copy, restore continuity, write a recovery receipt, or
+  grant execution or mutation authority.
+- The first executable boundary is a separately governed exact runtime-halt
+  action and operator approval. No such authority or approval was created.
+- No tenant, runtime, Docker, Orb, VSC-1, or production state changed. The
+  completion audit remains 1 of 8; Stage 18 closure, FR-018 clearance, and
+  physical-validation claims remain prohibited.
+
 ### 2026-07-16 - Safe-delta runtime-evidence verifier software
 
 Current posture: Phase 2 and Stage 18 remain open. The Stage 18 runtime-evidence

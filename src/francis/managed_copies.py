@@ -86,6 +86,7 @@ from francis.managed_copy_integrity_triage_disposition import (
     managed_copy_integrity_triage_dispositions_readback,
     record_managed_copy_integrity_triage_disposition,
 )
+from francis.managed_copy_rogue_recovery_plan import managed_copy_rogue_recovery_plan
 from francis.managed_copy_tenant_access import (
     ISOLATION_DOMAINS,
     ISOLATION_POLICY_DECISION_CONTRACT,
@@ -3624,6 +3625,41 @@ def managed_copy_rogue_recovery_review_blocked_snapshot(
     governance = _governance()
     contract = managed_copy_rogue_recovery_contract_snapshot()
     blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
+    if bool(contract["stage17_closed_by_receipt"]):
+        plan = managed_copy_rogue_recovery_plan(payload, actor=actor)
+        return {
+            **plan,
+            "stage": STAGE18_MANAGED_COPIES_STAGE,
+            "source_id": "managed_copies",
+            "rogue_recovery_review_enabled": True,
+            "rogue_recovery_ready": False,
+            "required_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+            "routes": {
+                **contract["routes"],
+                "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+            },
+            "governance": {
+                "write_route": True,
+                "preflight_only": True,
+                "permission_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+                "permission_checked": True,
+                "rogue_recovery_review_enabled": True,
+                "does_not_detect_rogue_copy": True,
+                "does_not_halt_copy": True,
+                "does_not_quarantine_copy": True,
+                "does_not_replace_copy": True,
+                "does_not_restore_copy": True,
+                "does_not_record_rogue_recovery_receipt": True,
+                "does_not_mutate_copy_state": True,
+                "requires_current_integrity_evidence": True,
+                "requires_containment_disposition": True,
+                "requires_operator_halt_approval": True,
+                "writes_receipts": False,
+                "writes_tenant_state": False,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+        }
     signal_id = _safe_str(payload.get("signal_id") or payload.get("detection_signal")).strip()
     signal_by_id = {item["id"]: item for item in contract["detection_signals"]}
     signal = signal_by_id.get(signal_id, {})

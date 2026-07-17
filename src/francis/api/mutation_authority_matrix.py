@@ -1475,6 +1475,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Never declares rogue detection or grants halt, quarantine, replacement, restore, execution, or mutation authority.",
     ),
     AuthorityRule(
+        family="managed_copies_rogue_recovery_plan",
+        prefixes=("/managed-copies/rogue-recovery-review",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.rogue_recovery.write",
+        approval_requirement="current integrity evidence plus latest containment-authorization-required disposition",
+        receipt_behavior="none; deterministic read-only recovery plan",
+        denial_behavior="api_permission_denied before provision, isolation, evidence, or disposition inspection",
+        governance_maturity="permission_gated_recovery_preflight_only",
+        notes="Produces no halt, quarantine, evidence-preservation, replacement, restore, incident, or runtime receipt.",
+    ),
+    AuthorityRule(
         family="managed_copies_safe_delta_export_artifact_plan",
         prefixes=("/managed-copies/safe-delta-export-artifact-plan",),
         required_actor="payload.request_actor",

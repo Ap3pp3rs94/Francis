@@ -19,6 +19,7 @@ import francis.managed_copy_rogue_detection_assessment as rogue_detection_assess
 import francis.managed_copy_integrity_scan as integrity_scan
 import francis.managed_copy_integrity_evidence as integrity_evidence
 import francis.managed_copy_integrity_triage_disposition as integrity_triage
+import francis.managed_copy_rogue_recovery_plan as rogue_recovery_plan
 import francis.managed_copies as managed_copies
 import francis.managed_copy_tenant_access as tenant_access
 from francis.api.app import create_app
@@ -3901,6 +3902,110 @@ def test_managed_copy_rogue_recovery_review_blocks_scoped_actor_until_stage17_cl
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
+
+
+def test_managed_copy_rogue_recovery_review_projects_current_containment_plan(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    actor = "stage18.rogue-reviewer"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "rogue-recovery-plan"))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.rogue_recovery.write"]}),
+    )
+    monkeypatch.setattr(
+        managed_copies,
+        "managed_copy_rogue_recovery_contract_snapshot",
+        lambda: {
+            "stage17_closed_by_receipt": True,
+            "routes": {"rogue_recovery_review": "/managed-copies/rogue-recovery-review"},
+        },
+    )
+    monkeypatch.setattr(
+        rogue_recovery_plan,
+        "managed_copy_provision_for_copy",
+        lambda *args, **kwargs: {
+            "copy_id": "copy-001",
+            "receipt_id": "provision-001",
+            "tenant_key": "d" * 64,
+            "provision_fingerprint": "e" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        rogue_recovery_plan,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda *args, **kwargs: {
+            "receipt_id": "isolation-001",
+            "verification_fingerprint": "f" * 64,
+            "live_state_aligned": True,
+        },
+    )
+    monkeypatch.setattr(
+        rogue_recovery_plan,
+        "managed_copy_integrity_evidence_readback",
+        lambda **kwargs: {
+            "latest_receipt_id": "evidence-001",
+            "latest_evidence_fingerprint": "a" * 64,
+            "live_drift_matches_latest": True,
+            "items": [
+                {
+                    "receipt_id": "evidence-001",
+                    "evidence_fingerprint": "a" * 64,
+                    "scan_fingerprint": "1" * 64,
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        rogue_recovery_plan,
+        "managed_copy_integrity_triage_dispositions_readback",
+        lambda **kwargs: {
+            "ok": True,
+            "latest_receipt_id": "disposition-001",
+            "latest_disposition_fingerprint": "b" * 64,
+            "latest_disposition": "containment_authorization_required",
+            "items": [
+                {
+                    "receipt_id": "disposition-001",
+                    "disposition_fingerprint": "b" * 64,
+                    "integrity_evidence_receipt_id": "evidence-001",
+                    "integrity_evidence_fingerprint": "a" * 64,
+                }
+            ],
+        },
+    )
+    payload = {
+        "request_actor": actor,
+        "copy_id": "copy-001",
+        "provisioning_receipt_id": "provision-001",
+        "isolation_verification_receipt_id": "isolation-001",
+        "integrity_evidence_receipt_id": "evidence-001",
+        "integrity_evidence_fingerprint": "a" * 64,
+        "disposition_receipt_id": "disposition-001",
+        "disposition_fingerprint": "b" * 64,
+        "replacement_source": "clean_core_baseline",
+        "recovery_intent_fingerprint": "c" * 64,
+        "dry_run": True,
+    }
+
+    body = TestClient(create_app()).post("/managed-copies/rogue-recovery-review", json=payload).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "ready_for_operator_review"
+    assert len(body["plan_fingerprint"]) == 64
+    assert body["rogue_recovery_review_enabled"] is True
+    assert body["rogue_recovery_ready"] is False
+    assert body["operator_approval_required"] is True
+    assert body["next_operator_boundary"] == "approve_exact_managed_copy_runtime_halt_action"
+    assert body["halts_copy"] is False
+    assert body["quarantines_copy"] is False
+    assert body["replaces_copy"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["requires_operator_halt_approval"] is True
 
 
 def _rogue_assessment_fixture(monkeypatch, tmp_path):
