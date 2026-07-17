@@ -5,7 +5,7 @@ import threading
 import time
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import Iterable
+from typing import Callable, Iterable
 
 __all__ = [
     "PilotLeaseBinding",
@@ -141,9 +141,15 @@ class PilotScopeLeaseRegistry:
     empty, so a prior lease cannot silently rehydrate after restart.
     """
 
-    def __init__(self, leases: Iterable[PilotScopeLease] = ()) -> None:
+    def __init__(
+        self,
+        leases: Iterable[PilotScopeLease] = (),
+        *,
+        clock_ms: Callable[[], int] | None = None,
+    ) -> None:
         self._lock = threading.RLock()
         self._leases: dict[str, PilotScopeLease] = {}
+        self._clock_ms = clock_ms or _now_ms
         for lease in leases:
             self.issue(lease)
 
@@ -156,7 +162,7 @@ class PilotScopeLeaseRegistry:
                 current.actor_id == validated.actor_id
                 and current.package_id == validated.package_id
                 and current.pilot_run_id == validated.pilot_run_id
-                and self._effective_state(current, _now_ms()) is PilotLeaseState.ACTIVE
+                and self._effective_state(current, self._now()) is PilotLeaseState.ACTIVE
                 for current in self._leases.values()
             ):
                 raise ValueError("conflicting_active_pilot_lease")
@@ -170,7 +176,7 @@ class PilotScopeLeaseRegistry:
         check: PilotLeaseCheck,
         now_ms: int | None = None,
     ) -> PilotLeaseDecision:
-        now = _now_ms() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
+        now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
         with self._lock:
             lease = self._leases.get(str(check.lease_id or "").strip())
             if lease is None:
@@ -208,7 +214,7 @@ class PilotScopeLeaseRegistry:
             )
 
     def revoke(self, lease_id: str, *, now_ms: int | None = None) -> PilotLeaseDecision:
-        now = _now_ms() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
+        now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
         with self._lock:
             lease = self._leases.get(str(lease_id or "").strip())
             if lease is None:
@@ -220,7 +226,7 @@ class PilotScopeLeaseRegistry:
             return PilotLeaseDecision(True, "pilot_lease_revoked", PilotLeaseState.REVOKED, {"lease_state": "revoked"})
 
     def seal(self, lease_id: str, *, now_ms: int | None = None) -> PilotLeaseDecision:
-        now = _now_ms() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
+        now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
         with self._lock:
             lease = self._leases.get(str(lease_id or "").strip())
             if lease is None:
@@ -232,7 +238,7 @@ class PilotScopeLeaseRegistry:
             return PilotLeaseDecision(True, "pilot_lease_sealed", PilotLeaseState.SEALED, {"lease_state": "sealed"})
 
     def state(self, lease_id: str, *, now_ms: int | None = None) -> PilotLeaseState | None:
-        now = _now_ms() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
+        now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
         with self._lock:
             lease = self._leases.get(str(lease_id or "").strip())
             return self._effective_state(lease, now) if lease else None
@@ -248,6 +254,9 @@ class PilotScopeLeaseRegistry:
         if len(lease.consumed_bindings) == len(lease.bindings):
             return PilotLeaseState.CONSUMED
         return PilotLeaseState.ACTIVE
+
+    def _now(self) -> int:
+        return _timestamp(self._clock_ms(), field_name="clock_ms")
 
 
 def _binding_mismatch(

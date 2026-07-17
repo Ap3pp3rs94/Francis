@@ -71,8 +71,12 @@ def _check(binding: PilotLeaseBinding = _CREATE, **changes: object) -> PilotLeas
     return PilotLeaseCheck(**values)  # type: ignore[arg-type]
 
 
+def _registry(*leases: PilotScopeLease) -> PilotScopeLeaseRegistry:
+    return PilotScopeLeaseRegistry(leases, clock_ms=lambda: _NOW)
+
+
 def test_exact_run_sequence_consumes_each_binding_once_then_seals() -> None:
-    registry = PilotScopeLeaseRegistry([_lease()])
+    registry = _registry(_lease())
 
     first = registry.authorize_and_consume(actor_id=_ACTOR, check=_check(_CREATE), now_ms=_NOW)
     second = registry.authorize_and_consume(actor_id=_ACTOR, check=_check(_START), now_ms=_NOW)
@@ -88,7 +92,7 @@ def test_exact_run_sequence_consumes_each_binding_once_then_seals() -> None:
 
 
 def test_binding_sequence_rejects_out_of_order_action() -> None:
-    registry = PilotScopeLeaseRegistry([_lease()])
+    registry = _registry(_lease())
 
     out_of_order = registry.authorize_and_consume(actor_id=_ACTOR, check=_check(_START), now_ms=_NOW)
     assert out_of_order.reason == "pilot_lease_binding_out_of_order"
@@ -97,14 +101,14 @@ def test_binding_sequence_rejects_out_of_order_action() -> None:
 
 
 def test_expiry_boundary_and_revocation_between_actions_fail_closed() -> None:
-    expired = PilotScopeLeaseRegistry([_lease()]).authorize_and_consume(
+    expired = _registry(_lease()).authorize_and_consume(
         actor_id=_ACTOR,
         check=_check(),
         now_ms=_NOW + 10_000,
     )
     assert expired.reason == "pilot_lease_expired"
 
-    registry = PilotScopeLeaseRegistry([_lease()])
+    registry = _registry(_lease())
     assert registry.authorize_and_consume(actor_id=_ACTOR, check=_check(_CREATE), now_ms=_NOW).allowed
     assert registry.revoke("pilot-lease-001", now_ms=_NOW).allowed
     denied = registry.authorize_and_consume(actor_id=_ACTOR, check=_check(_START), now_ms=_NOW)
@@ -112,7 +116,7 @@ def test_expiry_boundary_and_revocation_between_actions_fail_closed() -> None:
 
 
 def test_issuance_boundary_fails_closed_until_exact_issue_time() -> None:
-    registry = PilotScopeLeaseRegistry([_lease(issued_at_ms=_NOW, expires_at_ms=_NOW + 10_000)])
+    registry = _registry(_lease(issued_at_ms=_NOW, expires_at_ms=_NOW + 10_000))
 
     before = registry.authorize_and_consume(actor_id=_ACTOR, check=_check(), now_ms=_NOW - 1)
     at_issue = registry.authorize_and_consume(actor_id=_ACTOR, check=_check(), now_ms=_NOW)
@@ -137,7 +141,7 @@ def test_issuance_boundary_fails_closed_until_exact_issue_time() -> None:
     ],
 )
 def test_exact_binding_mismatches_are_denied(actor: str, changes: dict[str, object], reason: str) -> None:
-    decision = PilotScopeLeaseRegistry([_lease()]).authorize_and_consume(
+    decision = _registry(_lease()).authorize_and_consume(
         actor_id=actor,
         check=_check(**changes),
         now_ms=_NOW,
@@ -147,7 +151,7 @@ def test_exact_binding_mismatches_are_denied(actor: str, changes: dict[str, obje
 
 
 def test_scope_subset_does_not_merge_with_wildcard_static_grant() -> None:
-    registry = PilotScopeLeaseRegistry([_lease(bindings=(_START,))])
+    registry = _registry(_lease(bindings=(_START,)))
     gate = ApiPermissionGate({_ACTOR: ["*"]}, pilot_lease_registry=registry, require_pilot_lease=True)
 
     wildcard = gate.check(
@@ -179,12 +183,12 @@ def test_scope_subset_does_not_merge_with_wildcard_static_grant() -> None:
 
 
 def test_process_restart_loses_registry_and_gate_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    first_registry = PilotScopeLeaseRegistry([_lease()])
+    first_registry = _registry(_lease())
     assert first_registry.state("pilot-lease-001", now_ms=_NOW) is PilotLeaseState.ACTIVE
     monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", '{"pilot.actor":["managed_copies.copy_creation.write"]}')
 
     restarted_gate = ApiPermissionGate.from_env(
-        pilot_lease_registry=PilotScopeLeaseRegistry(),
+        pilot_lease_registry=_registry(),
         require_pilot_lease=True,
     )
     decision = restarted_gate.check(
@@ -215,7 +219,7 @@ def test_gate_correlates_lease_binding_to_actual_action_route_and_method(
 ) -> None:
     gate = ApiPermissionGate(
         {_ACTOR: [_CREATE.scope]},
-        pilot_lease_registry=PilotScopeLeaseRegistry([_lease()]),
+        pilot_lease_registry=_registry(_lease()),
         require_pilot_lease=True,
     )
     decision = gate.check(
@@ -244,11 +248,11 @@ def test_gate_correlates_lease_binding_to_actual_action_route_and_method(
 )
 def test_malformed_lease_fields_are_rejected(changes: dict[str, object]) -> None:
     with pytest.raises(ValueError):
-        PilotScopeLeaseRegistry([_lease(**changes)])
+        _registry(_lease(**changes))
 
 
 def test_concurrent_checks_consume_one_binding_at_most_once() -> None:
-    registry = PilotScopeLeaseRegistry([_lease(bindings=(_CREATE,))])
+    registry = _registry(_lease(bindings=(_CREATE,)))
     barrier = Barrier(3)
     results = []
 
@@ -281,7 +285,7 @@ def test_api_permission_gate_remains_compatible_without_lease_mode() -> None:
 def test_lease_denial_evidence_does_not_leak_bindings_or_fingerprints() -> None:
     gate = ApiPermissionGate(
         {_ACTOR: [_CREATE.scope]},
-        pilot_lease_registry=PilotScopeLeaseRegistry([_lease()]),
+        pilot_lease_registry=_registry(_lease()),
         require_pilot_lease=True,
     )
     decision = gate.check(
