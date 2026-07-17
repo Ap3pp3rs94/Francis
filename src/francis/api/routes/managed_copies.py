@@ -79,6 +79,18 @@ from francis.managed_copy_container_isolation import (
     container_isolation_contract_snapshot,
     execute_container_isolation,
 )
+from francis.managed_copy_pilot_runtime import (
+    PILOT_RUNTIME_LEASES,
+    PILOT_RUNTIME_SCOPE,
+    PILOT_RUNTIME_START_ACTION,
+    PILOT_RUNTIME_START_ROUTE,
+    PILOT_RUNTIME_STOP_ACTION,
+    PILOT_RUNTIME_STOP_ROUTE,
+    pilot_runtime_contract_snapshot,
+    pilot_runtime_status_snapshot,
+    start_pilot_runtime,
+    stop_pilot_runtime,
+)
 
 router = APIRouter()
 
@@ -257,6 +269,67 @@ def runtime_start_contract() -> dict[str, Any]:
 @router.get("/runtime-start-status")
 def runtime_start_status(copy_id: str = "") -> dict[str, Any]:
     return runtime_start_status_snapshot(copy_id=copy_id)
+
+
+@router.get("/pilot-runtime-contract")
+def pilot_runtime_contract() -> dict[str, Any]:
+    return pilot_runtime_contract_snapshot()
+
+
+@router.get("/pilot-runtime-status")
+def pilot_runtime_status(copy_id: str = "") -> dict[str, Any]:
+    return pilot_runtime_status_snapshot(copy_id=copy_id)
+
+
+@router.post("/pilot-runtime-start")
+def pilot_runtime_start(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = ApiPermissionGate.from_env(
+        pilot_lease_registry=PILOT_RUNTIME_LEASES,
+        require_pilot_lease=True,
+    ).check(
+        actor_id=actor,
+        required_scopes=[PILOT_RUNTIME_SCOPE],
+        route=PILOT_RUNTIME_START_ROUTE,
+        method=request.method,
+        action=PILOT_RUNTIME_START_ACTION,
+        pilot_lease_id=payload.get("pilot_lease_id"),
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=PILOT_RUNTIME_SCOPE,
+            next_step="attach_exact_active_pilot_runtime_lease",
+        )
+    managed_status = managed_copies_status_snapshot()
+    return start_pilot_runtime(
+        payload,
+        actor=actor,
+        stage17_closed=bool(managed_status["stage17_closed_by_receipt"]),
+    )
+
+
+@router.post("/pilot-runtime-stop")
+def pilot_runtime_stop(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = ApiPermissionGate.from_env(
+        pilot_lease_registry=PILOT_RUNTIME_LEASES,
+        require_pilot_lease=True,
+    ).check(
+        actor_id=actor,
+        required_scopes=[PILOT_RUNTIME_SCOPE],
+        route=PILOT_RUNTIME_STOP_ROUTE,
+        method=request.method,
+        action=PILOT_RUNTIME_STOP_ACTION,
+        pilot_lease_id=payload.get("pilot_lease_id"),
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=PILOT_RUNTIME_SCOPE,
+            next_step="attach_exact_active_pilot_runtime_stop_lease_binding",
+        )
+    return stop_pilot_runtime(payload, actor=actor)
 
 
 @router.post("/runtime-start")

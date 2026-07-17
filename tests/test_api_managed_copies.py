@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,12 @@ import francis.managed_copy_integrity_triage_disposition as integrity_triage
 import francis.managed_copy_rogue_recovery_plan as rogue_recovery_plan
 import francis.managed_copies as managed_copies
 import francis.managed_copy_tenant_access as tenant_access
+import francis.managed_copy_pilot_runtime as pilot_runtime
+import francis.api.routes.managed_copies as managed_copy_routes
 from francis.api.app import create_app
+from francis.governance.pilot_scope_lease import PilotLeaseBinding, PilotScopeLease, PilotScopeLeaseRegistry
+from francis.managed_copy_runtime import INPUT_CONTRACT
+from francis.process_identity import process_identity
 
 
 def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
@@ -93,6 +99,10 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "runtime_start_contract": "/managed-copies/runtime-start-contract",
         "runtime_start_status": "/managed-copies/runtime-start-status",
         "runtime_start": "/managed-copies/runtime-start",
+        "pilot_runtime_contract": "/managed-copies/pilot-runtime-contract",
+        "pilot_runtime_status": "/managed-copies/pilot-runtime-status",
+        "pilot_runtime_start": "/managed-copies/pilot-runtime-start",
+        "pilot_runtime_stop": "/managed-copies/pilot-runtime-stop",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
         "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
         "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
@@ -831,6 +841,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
                     "managed_copies.isolation_verification.write",
                     "managed_copies.safe_delta.write",
                     "managed_copies.rogue_recovery.write",
+                    "managed_copies.pilot_runtime.execute",
                 ],
                 decision_actor: ["approvals.decide"],
             }
@@ -1575,6 +1586,103 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     assert verified_step_by_id["verify"]["status"] == "structural_complete"
     assert structurally_verified_contract["state_machine"]["current_state"] == "structurally_verified"
     assert structurally_verified_contract["state_machine"]["enabled_transitions"] == []
+
+    pilot_run_id = "pilot-run-real-lineage-001"
+    pilot_lease_id = "pilot-lease-real-lineage-001"
+    pilot_approval_id = "pilot-approval-real-lineage-001"
+    pilot_registry = PilotScopeLeaseRegistry()
+    monkeypatch.setattr(pilot_runtime, "PILOT_RUNTIME_LEASES", pilot_registry)
+    monkeypatch.setattr(managed_copy_routes, "PILOT_RUNTIME_LEASES", pilot_registry)
+    now_ms = int(time.time() * 1000)
+    pilot_registry.issue(
+        PilotScopeLease(
+            lease_id=pilot_lease_id,
+            actor_id=actor,
+            package_id="stage18-local-pilot-real-lineage",
+            package_fingerprint="a" * 64,
+            pilot_run_id=pilot_run_id,
+            bindings=(
+                PilotLeaseBinding(
+                    pilot_runtime.PILOT_RUNTIME_SCOPE,
+                    pilot_runtime.PILOT_RUNTIME_START_ROUTE,
+                    "POST",
+                    pilot_runtime.PILOT_RUNTIME_START_ACTION,
+                ),
+                PilotLeaseBinding(
+                    pilot_runtime.PILOT_RUNTIME_SCOPE,
+                    pilot_runtime.PILOT_RUNTIME_STOP_ROUTE,
+                    "POST",
+                    pilot_runtime.PILOT_RUNTIME_STOP_ACTION,
+                ),
+            ),
+            issued_at_ms=now_ms - 1_000,
+            expires_at_ms=now_ms + 60_000,
+            runtime_nonce="runtime-nonce-real-lineage-001",
+            operator_decision_fingerprint="b" * 64,
+        )
+    )
+    pilot_payload = {
+        "request_actor": actor,
+        "pilot_lease_id": pilot_lease_id,
+        "approval_id": pilot_approval_id,
+        "copy_id": provisioned["copy_id"],
+        "provisioning_receipt_id": provisioned["receipt_id"],
+        "isolation_verification_receipt_id": isolation_recorded["receipt_id"],
+        "pilot_run_id": pilot_run_id,
+        "trace_id": "trace-real-lineage-pilot-001",
+        "startup_timeout_ms": 5_000,
+        "lease_seconds": 30,
+        "operation_input": {
+            "contract": INPUT_CONTRACT,
+            "items": [
+                {"id": "tenant-work-2", "title": "Prepare report", "priority": "normal", "status": "open"},
+                {"id": "tenant-work-1", "title": "Resolve intake", "priority": "critical", "status": "open"},
+            ],
+        },
+        "confirm_start": True,
+    }
+    pilot_proposal = pilot_runtime.pilot_runtime_proposal(pilot_payload, actor=actor, stage17_closed=True)
+    assert pilot_proposal["ok"] is True
+    pilot_approval = {
+        "id": pilot_approval_id,
+        "ts": time.time(),
+        "action": pilot_runtime.PILOT_RUNTIME_START_ACTION,
+        "reason": "isolated real-lineage managed-copy process proof",
+        "payload": {
+            "contract": pilot_runtime.PILOT_RUNTIME_CONTRACT,
+            "descriptor": pilot_proposal["descriptor"],
+            "descriptor_fingerprint": pilot_proposal["descriptor_fingerprint"],
+            "expires_at_unix_ms": now_ms + 60_000,
+            "revoked": False,
+        },
+        "status": "approved",
+        "decision": "approve",
+        "decision_actor": decision_actor,
+        "decided_ts": time.time(),
+    }
+    pilot_approval_path = data_root / "approvals" / "approved" / f"{pilot_approval_id}.json"
+    pilot_approval_path.write_text(json.dumps(pilot_approval), encoding="utf-8")
+
+    pilot_started = client.post(pilot_runtime.PILOT_RUNTIME_START_ROUTE, json=pilot_payload).json()
+    assert pilot_started["ok"] is True, pilot_started
+    pilot_receipt = pilot_started["receipt"]
+    assert pilot_receipt["fixture_runtime"] is False
+    assert pilot_receipt["canonical_runtime_evidence_recorded"] is False
+    assert pilot_started["output"]["next_action"]["id"] == "tenant-work-1"
+    assert process_identity(pilot_receipt["pid"])["creation_token"] == pilot_receipt["process_creation_token"]
+
+    pilot_stopped = client.post(
+        pilot_runtime.PILOT_RUNTIME_STOP_ROUTE,
+        json={
+            "request_actor": actor,
+            "pilot_lease_id": pilot_lease_id,
+            "startup_receipt_id": pilot_receipt["receipt_id"],
+            "confirm_stop": True,
+        },
+    ).json()
+    assert pilot_stopped["ok"] is True, pilot_stopped
+    assert process_identity(pilot_receipt["pid"]) == {}
+    assert pilot_registry.state(pilot_lease_id).value == "sealed"
 
     integrity_payload = {
         "request_actor": actor,

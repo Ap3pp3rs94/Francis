@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import argparse
+import ctypes
+import hashlib
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+RUNTIME_IDENTITY = "stage18_managed_copy_runtime_v1"
+HEARTBEAT_IDENTITY = "stage18_managed_copy_runtime_heartbeat_v1"
+INPUT_CONTRACT = "stage18_managed_copy_work_briefing_input_v1"
+OUTPUT_CONTRACT = "stage18_managed_copy_work_briefing_output_v1"
+_PRIORITIES = ("critical", "high", "normal", "low")
+_STATUSES = ("open", "blocked", "done")
+
+
+def build_work_briefing(payload: object) -> dict[str, Any]:
+    if not isinstance(payload, dict) or set(payload) != {"contract", "items"}:
+        raise ValueError("managed_copy_work_briefing_input_schema_invalid")
+    if payload.get("contract") != INPUT_CONTRACT:
+        raise ValueError("managed_copy_work_briefing_contract_invalid")
+    items = payload.get("items")
+    if not isinstance(items, list) or not 1 <= len(items) <= 100:
+        raise ValueError("managed_copy_work_briefing_items_invalid")
+    normalized: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict) or set(item) != {"id", "title", "priority", "status"}:
+            raise ValueError("managed_copy_work_briefing_item_schema_invalid")
+        item_id = _bounded(item.get("id"), 80)
+        title = _bounded(item.get("title"), 240)
+        priority = _bounded(item.get("priority"), 16)
+        status = _bounded(item.get("status"), 16)
+        if not item_id or item_id in seen or not title or priority not in _PRIORITIES or status not in _STATUSES:
+            raise ValueError("managed_copy_work_briefing_item_invalid")
+        seen.add(item_id)
+        normalized.append({"id": item_id, "title": title, "priority": priority, "status": status})
+    candidates = sorted(
+        (item for item in normalized if item["status"] == "open"),
+        key=lambda item: (_PRIORITIES.index(item["priority"]), item["id"]),
+    )
+    result = {
+        "contract": OUTPUT_CONTRACT,
+        "item_count": len(normalized),
+        "status_counts": {status: sum(item["status"] == status for item in normalized) for status in _STATUSES},
+        "priority_counts": {
+            priority: sum(item["priority"] == priority for item in normalized) for priority in _PRIORITIES
+        },
+        "next_action": candidates[0] if candidates else None,
+        "input_fingerprint": _fingerprint(payload),
+    }
+    return {**result, "output_fingerprint": _fingerprint(result)}
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+    for name in ("state-dir", "input-path", "copy-id", "tenant-key", "pilot-run-id", "runtime-nonce"):
+        parser.add_argument(f"--{name}", required=True)
+    parser.add_argument("--lease-seconds", required=True, type=int)
+    return parser
+
+
+def main() -> int:
+    args = _parser().parse_args()
+    tenant_root = Path.cwd().resolve(strict=True)
+    state_dir = Path(args.state_dir).resolve(strict=True)
+    input_path = Path(args.input_path).resolve(strict=True)
+    try:
+        state_dir.relative_to(tenant_root)
+        input_path.relative_to(tenant_root)
+    except ValueError:
+        return 2
+    creation_token = _creation_token()
+    if not creation_token:
+        return 3
+    identity = {
+        "kind": "francis.stage18.managed_copies.runtime_handshake",
+        "runtime_identity": RUNTIME_IDENTITY,
+        "fixture_runtime": False,
+        "pid": os.getpid(),
+        "parent_pid": os.getppid(),
+        "process_creation_token": creation_token,
+        "copy_id": args.copy_id,
+        "tenant_key": args.tenant_key,
+        "pilot_run_id": args.pilot_run_id,
+        "runtime_nonce_hash": hashlib.sha256(args.runtime_nonce.encode()).hexdigest(),
+    }
+    _write_atomic(state_dir / "handshake.json", identity)
+    try:
+        source = json.loads(input_path.read_text(encoding="utf-8"))
+        output = build_work_briefing(source)
+        _write_atomic(state_dir / "briefing.json", output)
+        operation = {
+            "kind": "francis.stage18.managed_copies.runtime_operation_receipt",
+            "operation": "tenant_work_briefing",
+            "status": "completed",
+            "copy_id": args.copy_id,
+            "tenant_key": args.tenant_key,
+            "pilot_run_id": args.pilot_run_id,
+            "runtime_nonce_hash": identity["runtime_nonce_hash"],
+            "input_fingerprint": output["input_fingerprint"],
+            "output_fingerprint": output["output_fingerprint"],
+            "fixture_runtime": False,
+            "recorded_at_unix_ms": int(time.time() * 1000),
+        }
+        operation["receipt_fingerprint"] = _fingerprint(operation)
+        _write_atomic(state_dir / "operation.json", operation)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return 4
+    deadline = time.monotonic() + args.lease_seconds
+    sequence = 0
+    while time.monotonic() < deadline and not (state_dir / "stop.signal").exists():
+        sequence += 1
+        _write_atomic(
+            state_dir / "heartbeat.json",
+            {
+                **identity,
+                "kind": "francis.stage18.managed_copies.runtime_heartbeat",
+                "heartbeat_identity": HEARTBEAT_IDENTITY,
+                "ready": True,
+                "operation_completed": True,
+                "sequence": sequence,
+                "observed_at_unix_ms": int(time.time() * 1000),
+            },
+        )
+        time.sleep(0.1)
+    return 0
+
+
+def _creation_token() -> int:
+    if os.name != "nt":
+        stat = Path("/proc/self/stat").read_text(encoding="utf-8")
+        return int(stat[stat.rfind(")") + 2 :].split()[19])
+    windll_type = getattr(ctypes, "WinDLL", None)
+    if windll_type is None:
+        return 0
+    from ctypes import wintypes
+
+    kernel32 = windll_type("kernel32", use_last_error=True)
+    get_times = kernel32.GetProcessTimes
+    get_times.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    ]
+    get_times.restype = wintypes.BOOL
+    creation, exit_time, kernel_time, user_time = (wintypes.FILETIME() for _ in range(4))
+    if not get_times(
+        kernel32.GetCurrentProcess(),
+        ctypes.byref(creation),
+        ctypes.byref(exit_time),
+        ctypes.byref(kernel_time),
+        ctypes.byref(user_time),
+    ):
+        return 0
+    return (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
+
+
+def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _fingerprint(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _bounded(value: object, limit: int) -> str:
+    return value.strip() if isinstance(value, str) and 0 < len(value.strip()) <= limit else ""
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

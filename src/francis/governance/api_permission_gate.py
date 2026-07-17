@@ -112,6 +112,7 @@ class ApiPermissionGate:
         action: object = "",
         actor_scopes: Iterable[str] | None = None,
         pilot_lease_check: PilotLeaseCheck | None = None,
+        pilot_lease_id: object = "",
     ) -> ApiPermissionDecision:
         """Evaluate a privileged API action without leaking scope names."""
         actor = _safe_text(actor_id).strip()
@@ -161,13 +162,37 @@ class ApiPermissionGate:
         if not static_decision.allowed:
             return static_decision
 
-        lease_required = self._require_pilot_lease or pilot_lease_check is not None
+        lease_required = (
+            self._require_pilot_lease or pilot_lease_check is not None or bool(_safe_text(pilot_lease_id).strip())
+        )
         if not lease_required:
             return static_decision
         if self._pilot_lease_registry is None:
             return ApiPermissionDecision(False, "pilot_lease_registry_unavailable", static_decision.evidence)
-        if pilot_lease_check is None:
+        if pilot_lease_check is None and not _safe_text(pilot_lease_id).strip():
             return ApiPermissionDecision(False, "missing_pilot_lease", static_decision.evidence)
+        if pilot_lease_check is None:
+            if len(required) != 1:
+                return ApiPermissionDecision(False, "pilot_lease_scope_mismatch", static_decision.evidence)
+            lease_decision = self._pilot_lease_registry.authorize_binding(
+                lease_id=pilot_lease_id,
+                actor_id=actor,
+                scope=required[0],
+                route=_safe_text(route).strip(),
+                method=_safe_text(method).strip().upper(),
+                action=_safe_text(action).strip(),
+            )
+            lease_evidence = {
+                key: value
+                for key, value in lease_decision.evidence.items()
+                if key
+                in {"lease_bound", "binding_consumed", "consumed_binding_count", "allowed_binding_count", "lease_state"}
+            }
+            return ApiPermissionDecision(
+                lease_decision.allowed,
+                lease_decision.reason,
+                {**static_decision.evidence, "pilot_lease": lease_evidence},
+            )
         if len(required) != 1 or pilot_lease_check.scope != required[0]:
             return ApiPermissionDecision(False, "pilot_lease_scope_mismatch", static_decision.evidence)
         if pilot_lease_check.route != _safe_text(route).strip():

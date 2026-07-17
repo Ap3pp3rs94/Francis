@@ -1,0 +1,616 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Any
+
+from francis.governance.pilot_scope_lease import PilotScopeLeaseRegistry
+from francis.kernel.paths import data_dir, repo_root
+from francis.managed_copy_isolation import (
+    latest_managed_copy_isolation_verification_for_provision,
+    managed_copy_isolation_guarded_subpath,
+)
+from francis.managed_copy_provisioning import managed_copy_provision_for_copy
+from francis.managed_copy_runtime import HEARTBEAT_IDENTITY, INPUT_CONTRACT, RUNTIME_IDENTITY
+from francis.process_identity import process_identity, terminate_owned_process
+
+PILOT_RUNTIME_SCOPE = "managed_copies.pilot_runtime.execute"
+PILOT_RUNTIME_START_ACTION = "managed_copies.pilot_runtime.start"
+PILOT_RUNTIME_STOP_ACTION = "managed_copies.pilot_runtime.stop"
+PILOT_RUNTIME_CONTRACT = "stage18_managed_copy_pilot_runtime_v1"
+PILOT_RUNTIME_START_ROUTE = "/managed-copies/pilot-runtime-start"
+PILOT_RUNTIME_STOP_ROUTE = "/managed-copies/pilot-runtime-stop"
+PILOT_RUNTIME_EVIDENCE_CLASS = "local_non_fixture_runtime"
+
+PILOT_RUNTIME_LEASES = PilotScopeLeaseRegistry()
+_LOCK = threading.RLock()
+_PAYLOAD_FIELDS = {
+    "request_actor",
+    "pilot_lease_id",
+    "approval_id",
+    "copy_id",
+    "provisioning_receipt_id",
+    "isolation_verification_receipt_id",
+    "pilot_run_id",
+    "trace_id",
+    "startup_timeout_ms",
+    "lease_seconds",
+    "operation_input",
+    "confirm_start",
+}
+_APPROVAL_FIELDS = {"id", "ts", "action", "reason", "payload", "status", "decision", "decision_actor", "decided_ts"}
+_APPROVAL_PAYLOAD_FIELDS = {
+    "contract",
+    "descriptor",
+    "descriptor_fingerprint",
+    "expires_at_unix_ms",
+    "revoked",
+}
+
+
+def pilot_runtime_contract_snapshot() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "kind": "francis.stage18.managed_copies.pilot_runtime_contract",
+        "contract": PILOT_RUNTIME_CONTRACT,
+        "status": "local_process_software_available",
+        "required_scope": PILOT_RUNTIME_SCOPE,
+        "start_action": PILOT_RUNTIME_START_ACTION,
+        "stop_action": PILOT_RUNTIME_STOP_ACTION,
+        "runtime_identity": RUNTIME_IDENTITY,
+        "operation": "tenant_work_briefing",
+        "fixture_runtime": False,
+        "docker_isolation": False,
+        "persistent_actor_grant_present": False,
+        "canonical_runtime_evidence_recorded": False,
+        "stage18_ready": False,
+    }
+
+
+def pilot_runtime_proposal(payload: dict[str, Any], *, actor: str, stage17_closed: bool) -> dict[str, Any]:
+    blockers: list[str] = []
+    if set(payload) != _PAYLOAD_FIELDS:
+        blockers.append("managed_copy_pilot_runtime_payload_schema_invalid")
+    if _identifier(payload.get("request_actor")) != _identifier(actor):
+        blockers.append("managed_copy_pilot_runtime_actor_mismatch")
+    if not stage17_closed:
+        blockers.append("stage17_prerequisite_not_closed")
+    if type(payload.get("confirm_start")) is not bool:
+        blockers.append("managed_copy_pilot_runtime_confirmation_invalid")
+    copy_id = _identifier(payload.get("copy_id"))
+    provision_id = _identifier(payload.get("provisioning_receipt_id"))
+    isolation_id = _identifier(payload.get("isolation_verification_receipt_id"))
+    run_id = _identifier(payload.get("pilot_run_id"))
+    trace_id = _identifier(payload.get("trace_id"))
+    lease_id = _identifier(payload.get("pilot_lease_id"))
+    approval_id = _identifier(payload.get("approval_id"))
+    timeout_ms = _exact_int(payload.get("startup_timeout_ms"), 250, 10_000)
+    lease_seconds = _exact_int(payload.get("lease_seconds"), 1, 60)
+    if not all((copy_id, provision_id, isolation_id, run_id, trace_id, lease_id, approval_id)):
+        blockers.append("managed_copy_pilot_runtime_binding_missing")
+    if not timeout_ms or not lease_seconds:
+        blockers.append("managed_copy_pilot_runtime_timing_invalid")
+    operation_input = payload.get("operation_input")
+    try:
+        from francis.managed_copy_runtime import build_work_briefing
+
+        preview = build_work_briefing(operation_input)
+    except ValueError as exc:
+        blockers.append(str(exc))
+        preview = {}
+    provision = managed_copy_provision_for_copy(copy_id, provisioning_receipt_id=provision_id)
+    if not provision:
+        blockers.append("managed_copy_pilot_runtime_provision_invalid")
+    isolation = (
+        latest_managed_copy_isolation_verification_for_provision(
+            provision_id,
+            provision_fingerprint=_text(provision.get("provision_fingerprint")),
+            copy_id=copy_id,
+        )
+        if provision
+        else {}
+    )
+    if _text(isolation.get("receipt_id")) != isolation_id or isolation.get("live_state_aligned") is not True:
+        blockers.append("managed_copy_pilot_runtime_isolation_invalid")
+    lease_context = PILOT_RUNTIME_LEASES.lease_context(lease_id)
+    if not lease_context:
+        blockers.append("managed_copy_pilot_runtime_lease_missing")
+    elif lease_context.get("actor_id") != _identifier(actor) or lease_context.get("pilot_run_id") != run_id:
+        blockers.append("managed_copy_pilot_runtime_lease_lineage_mismatch")
+    descriptor = (
+        _descriptor(
+            actor=_identifier(actor),
+            provision=provision,
+            isolation=isolation,
+            lease_context=lease_context,
+            trace_id=trace_id,
+            timeout_ms=timeout_ms,
+            lease_seconds=lease_seconds,
+            input_fingerprint=_text(preview.get("input_fingerprint")),
+        )
+        if not blockers
+        else {}
+    )
+    descriptor_fingerprint = _fingerprint(descriptor) if descriptor else ""
+    approval = _read_json(data_dir() / "approvals" / "approved" / f"{approval_id}.json")
+    if descriptor and approval and _approval_blocker(approval, descriptor, descriptor_fingerprint):
+        blockers.append(_approval_blocker(approval, descriptor, descriptor_fingerprint))
+    return {
+        "ok": not blockers,
+        "status": "ready" if not blockers else "blocked",
+        "error": blockers[0] if blockers else "",
+        "blockers": sorted(set(blockers)),
+        "actor": _identifier(actor),
+        "copy_id": copy_id,
+        "pilot_run_id": run_id,
+        "approval_id": approval_id,
+        "descriptor": descriptor,
+        "descriptor_fingerprint": descriptor_fingerprint,
+        "operation_preview": preview if not blockers else {},
+        "starts_runtime": False,
+    }
+
+
+def start_pilot_runtime(payload: dict[str, Any], *, actor: str, stage17_closed: bool) -> dict[str, Any]:
+    plan = pilot_runtime_proposal(payload, actor=actor, stage17_closed=stage17_closed)
+    if not plan["ok"]:
+        PILOT_RUNTIME_LEASES.seal(_identifier(payload.get("pilot_lease_id")))
+        return plan
+    if payload.get("confirm_start") is not True:
+        PILOT_RUNTIME_LEASES.seal(_identifier(payload.get("pilot_lease_id")))
+        return _blocked("managed_copy_pilot_runtime_confirmation_required")
+    approval = _read_json(data_dir() / "approvals" / "approved" / f"{plan['approval_id']}.json")
+    blocker = _approval_blocker(approval, plan["descriptor"], plan["descriptor_fingerprint"])
+    if blocker:
+        PILOT_RUNTIME_LEASES.seal(_identifier(payload.get("pilot_lease_id")))
+        return _blocked(blocker)
+    with _LOCK:
+        approval = _read_json(data_dir() / "approvals" / "approved" / f"{plan['approval_id']}.json")
+        blocker = _approval_blocker(approval, plan["descriptor"], plan["descriptor_fingerprint"])
+        if blocker:
+            PILOT_RUNTIME_LEASES.seal(_identifier(payload.get("pilot_lease_id")))
+            return _blocked(blocker)
+        if any(
+            item.get("current_state", {}).get("ready")
+            for item in pilot_runtime_status_snapshot(plan["copy_id"])["items"]
+        ):
+            return _blocked("managed_copy_pilot_runtime_active_conflict")
+        result = _launch(plan, payload["operation_input"])
+        if result.get("ok") is not True:
+            PILOT_RUNTIME_LEASES.seal(_identifier(payload.get("pilot_lease_id")))
+        return result
+
+
+def pilot_runtime_status_snapshot(copy_id: str = "") -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    root = data_dir() / "managed_copies" / "tenants"
+    for path in root.glob("*/receipts/pilot_runtime/*/startup.json"):
+        receipt = _read_json(path)
+        if _valid_startup_receipt(receipt) and (not copy_id or receipt.get("copy_id") == copy_id):
+            items.append({**receipt, "current_state": _current_state(receipt)})
+    return {
+        "ok": True,
+        "kind": "francis.stage18.managed_copies.pilot_runtime_status",
+        "count": len(items),
+        "ready_count": sum(item["current_state"].get("ready") is True for item in items),
+        "items": items,
+        "fixture_runtime": False,
+        "canonical_runtime_evidence_recorded": False,
+        "stage18_ready": False,
+    }
+
+
+def stop_pilot_runtime(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    if set(payload) != {"request_actor", "pilot_lease_id", "startup_receipt_id", "confirm_stop"}:
+        return _blocked("managed_copy_pilot_runtime_stop_payload_schema_invalid")
+    if _identifier(payload.get("request_actor")) != _identifier(actor) or payload.get("confirm_stop") is not True:
+        return _blocked("managed_copy_pilot_runtime_stop_confirmation_invalid")
+    receipt = _startup_receipt(_identifier(payload.get("startup_receipt_id")))
+    if not receipt or receipt.get("actor") != actor or receipt.get("pilot_lease_id") != payload.get("pilot_lease_id"):
+        return _blocked("managed_copy_pilot_runtime_stop_identity_mismatch")
+    state_dir = _state_dir(receipt)
+    identity = process_identity(_exact_int(receipt.get("pid"), 1, 2**31 - 1))
+    if state_dir is None:
+        return _blocked("managed_copy_pilot_runtime_stop_process_mismatch")
+    already_exited = not identity
+    if identity and identity.get("creation_token") != receipt.get("process_creation_token"):
+        return _blocked("managed_copy_pilot_runtime_stop_process_mismatch")
+    if not already_exited:
+        try:
+            (state_dir / "stop.signal").write_text("governed pilot stop\n", encoding="utf-8")
+        except OSError:
+            if not terminate_owned_process(
+                receipt["pid"], creation_token=receipt["process_creation_token"], timeout_seconds=1.0
+            ):
+                return _blocked("managed_copy_pilot_runtime_cleanup_failed")
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and process_identity(receipt["pid"]):
+            time.sleep(0.025)
+        if process_identity(receipt["pid"]) and not terminate_owned_process(
+            receipt["pid"], creation_token=receipt["process_creation_token"], timeout_seconds=1.0
+        ):
+            return _blocked("managed_copy_pilot_runtime_cleanup_failed")
+    cleanup = {
+        "kind": "francis.stage18.managed_copies.pilot_runtime_cleanup_receipt",
+        "receipt_id": f"mcprc_{receipt['pilot_run_id']}",
+        "startup_receipt_id": receipt["receipt_id"],
+        "pilot_run_id": receipt["pilot_run_id"],
+        "status": "already_exited" if already_exited else "stopped",
+        "pid": receipt["pid"],
+        "process_creation_token": receipt["process_creation_token"],
+        "fixture_runtime": False,
+        "recorded_at_unix_ms": int(time.time() * 1000),
+    }
+    cleanup["receipt_fingerprint"] = _fingerprint(cleanup)
+    _write_immutable(state_dir / "cleanup.json", cleanup)
+    PILOT_RUNTIME_LEASES.seal(_text(payload.get("pilot_lease_id")))
+    return {"ok": True, "status": cleanup["status"], "receipt": cleanup}
+
+
+def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
+    descriptor = plan["descriptor"]
+    provision = managed_copy_provision_for_copy(
+        descriptor["copy_id"], provisioning_receipt_id=descriptor["provisioning_receipt_id"]
+    )
+    isolation = latest_managed_copy_isolation_verification_for_provision(
+        descriptor["provisioning_receipt_id"],
+        provision_fingerprint=descriptor["provision_fingerprint"],
+        copy_id=descriptor["copy_id"],
+    )
+    if (
+        provision.get("receipt_id") != descriptor["provisioning_receipt_id"]
+        or provision.get("provision_fingerprint") != descriptor["provision_fingerprint"]
+        or isolation.get("receipt_id") != descriptor["isolation_verification_receipt_id"]
+        or isolation.get("verification_fingerprint") != descriptor["isolation_verification_fingerprint"]
+        or isolation.get("live_state_aligned") is not True
+    ):
+        return _blocked("managed_copy_pilot_runtime_lineage_changed_under_lock")
+    if _file_hash(_runtime_program()) != descriptor["program_fingerprint"]:
+        return _blocked("managed_copy_pilot_runtime_program_changed_under_lock")
+    data_root = _guarded_run_dir(provision, isolation, "tenant_data", descriptor["pilot_run_id"])
+    state_dir = _guarded_run_dir(provision, isolation, "tenant_receipts", descriptor["pilot_run_id"])
+    if data_root is None:
+        return _blocked("managed_copy_pilot_runtime_input_path_invalid")
+    if state_dir is None:
+        return _blocked("managed_copy_pilot_runtime_state_path_invalid")
+    input_path = data_root / "work_items.json"
+    try:
+        _write_immutable(input_path, operation_input)
+    except OSError:
+        return _blocked("managed_copy_pilot_runtime_input_already_exists")
+    lease_context = PILOT_RUNTIME_LEASES.lease_context(descriptor["pilot_lease_id"])
+    runtime_nonce = _text(lease_context.get("runtime_nonce"))
+    if not runtime_nonce or _sha256(runtime_nonce) != descriptor["runtime_nonce_hash"]:
+        return _blocked("managed_copy_pilot_runtime_lease_nonce_mismatch")
+    command = [
+        sys.executable,
+        str(_runtime_program()),
+        "--state-dir",
+        str(state_dir),
+        "--input-path",
+        str(input_path),
+        "--copy-id",
+        descriptor["copy_id"],
+        "--tenant-key",
+        descriptor["tenant_key"],
+        "--pilot-run-id",
+        descriptor["pilot_run_id"],
+        "--runtime-nonce",
+        runtime_nonce,
+        "--lease-seconds",
+        str(descriptor["lease_seconds"]),
+    ]
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=data_dir() / descriptor["working_directory_identity"],
+            env={"PYTHONNOUSERSITE": "1", "PYTHONUTF8": "1"},
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            shell=False,
+            close_fds=True,
+        )
+    except (OSError, ValueError):
+        return _blocked("managed_copy_pilot_runtime_process_creation_failed")
+    launcher_identity = process_identity(process.pid)
+    launcher_token = _exact_int(launcher_identity.get("creation_token"), 1, 2**127)
+    deadline = time.monotonic() + descriptor["startup_timeout_ms"] / 1000
+    while time.monotonic() < deadline and process.poll() is None:
+        handshake = _read_json(state_dir / "handshake.json")
+        heartbeat = _read_json(state_dir / "heartbeat.json")
+        operation = _read_json(state_dir / "operation.json")
+        briefing = _read_json(state_dir / "briefing.json")
+        if handshake and heartbeat and operation and briefing:
+            break
+        time.sleep(0.025)
+    else:
+        _cleanup_failed(process, launcher_token, state_dir)
+        return _blocked("managed_copy_pilot_runtime_startup_failed")
+    runtime_pid = _exact_int(handshake.get("pid"), 1, 2**31 - 1)
+    runtime_identity = process_identity(runtime_pid)
+    creation_token = _exact_int(runtime_identity.get("creation_token"), 1, 2**127)
+    blocker = _runtime_records_blocker(
+        handshake,
+        heartbeat,
+        operation,
+        briefing,
+        descriptor=descriptor,
+        pid=runtime_pid,
+        creation_token=creation_token,
+        launcher_pid=process.pid,
+    )
+    if blocker:
+        _cleanup_failed(process, launcher_token, state_dir)
+        return _blocked(blocker)
+    receipt = {
+        "kind": "francis.stage18.managed_copies.pilot_runtime_startup_receipt",
+        "contract": PILOT_RUNTIME_CONTRACT,
+        "receipt_id": f"mcprs_{descriptor['pilot_run_id']}",
+        "status": "ready",
+        "actor": descriptor["actor"],
+        "copy_id": descriptor["copy_id"],
+        "tenant_key": descriptor["tenant_key"],
+        "pilot_run_id": descriptor["pilot_run_id"],
+        "pilot_lease_id": descriptor["pilot_lease_id"],
+        "approval_id": plan["approval_id"],
+        "provisioning_receipt_id": descriptor["provisioning_receipt_id"],
+        "isolation_verification_receipt_id": descriptor["isolation_verification_receipt_id"],
+        "descriptor_fingerprint": plan["descriptor_fingerprint"],
+        "runtime_identity": RUNTIME_IDENTITY,
+        "pid": runtime_pid,
+        "process_creation_token": creation_token,
+        "parent_pid": os.getpid(),
+        "operation": "tenant_work_briefing",
+        "operation_receipt_fingerprint": operation["receipt_fingerprint"],
+        "output_fingerprint": briefing["output_fingerprint"],
+        "state_path": state_dir.relative_to(data_dir()).as_posix(),
+        "trace_id": descriptor["trace_id"],
+        "evidence_class": PILOT_RUNTIME_EVIDENCE_CLASS,
+        "fixture_runtime": False,
+        "docker_isolation": False,
+        "canonical_runtime_evidence_recorded": False,
+        "stage18_ready": False,
+        "recorded_at_unix_ms": int(time.time() * 1000),
+    }
+    receipt["startup_fingerprint"] = _fingerprint(receipt)
+    try:
+        _write_immutable(state_dir / "startup.json", receipt)
+    except OSError:
+        _cleanup_failed(process, launcher_token, state_dir)
+        return _blocked("managed_copy_pilot_runtime_startup_receipt_write_failed")
+    return {"ok": True, "status": "ready", "receipt": receipt, "output": briefing}
+
+
+def _descriptor(**values: Any) -> dict[str, Any]:
+    provision = values["provision"]
+    isolation = values["isolation"]
+    lease = values["lease_context"]
+    return {
+        "contract": PILOT_RUNTIME_CONTRACT,
+        "actor": values["actor"],
+        "copy_id": provision["copy_id"],
+        "tenant_key": provision["tenant_key"],
+        "provisioning_receipt_id": provision["receipt_id"],
+        "provision_fingerprint": provision["provision_fingerprint"],
+        "isolation_verification_receipt_id": isolation["receipt_id"],
+        "isolation_verification_fingerprint": isolation["verification_fingerprint"],
+        "pilot_lease_id": lease["lease_id"],
+        "package_id": lease["package_id"],
+        "package_fingerprint": lease["package_fingerprint"],
+        "pilot_run_id": lease["pilot_run_id"],
+        "runtime_nonce_hash": _sha256(lease["runtime_nonce"]),
+        "operator_decision_fingerprint": lease["operator_decision_fingerprint"],
+        "runtime_identity": RUNTIME_IDENTITY,
+        "program_fingerprint": _file_hash(_runtime_program()),
+        "working_directory_identity": f"managed_copies/tenants/{provision['tenant_key']}",
+        "operation": "tenant_work_briefing",
+        "input_contract": INPUT_CONTRACT,
+        "input_fingerprint": values["input_fingerprint"],
+        "operation_network_access": "none_by_implementation_not_os_enforced",
+        "startup_timeout_ms": values["timeout_ms"],
+        "lease_seconds": values["lease_seconds"],
+        "trace_id": values["trace_id"],
+    }
+
+
+def _approval_blocker(approval: dict[str, Any], descriptor: dict[str, Any], fingerprint: str) -> str:
+    if not approval:
+        return "managed_copy_pilot_runtime_approval_missing"
+    payload = approval.get("payload")
+    if (
+        set(approval) != _APPROVAL_FIELDS
+        or not isinstance(payload, dict)
+        or set(payload) != _APPROVAL_PAYLOAD_FIELDS
+        or approval.get("status") != "approved"
+        or approval.get("decision") not in {"approve", "approved"}
+        or approval.get("action") != PILOT_RUNTIME_START_ACTION
+        or payload.get("contract") != PILOT_RUNTIME_CONTRACT
+        or payload.get("descriptor") != descriptor
+        or payload.get("descriptor_fingerprint") != fingerprint
+        or payload.get("revoked") is not False
+    ):
+        return "managed_copy_pilot_runtime_approval_binding_mismatch"
+    expires = _exact_int(payload.get("expires_at_unix_ms"), 1, 2**63 - 1)
+    return "managed_copy_pilot_runtime_approval_expired" if expires <= int(time.time() * 1000) else ""
+
+
+def _runtime_records_blocker(
+    handshake: dict[str, Any],
+    heartbeat: dict[str, Any],
+    operation: dict[str, Any],
+    briefing: dict[str, Any],
+    *,
+    descriptor: dict[str, Any],
+    pid: int,
+    creation_token: int,
+    launcher_pid: int,
+) -> str:
+    common = {
+        "copy_id": descriptor["copy_id"],
+        "tenant_key": descriptor["tenant_key"],
+        "pilot_run_id": descriptor["pilot_run_id"],
+        "runtime_nonce_hash": descriptor["runtime_nonce_hash"],
+    }
+    if handshake.get("runtime_identity") != RUNTIME_IDENTITY or handshake.get("fixture_runtime") is not False:
+        return "managed_copy_pilot_runtime_handshake_invalid"
+    if any(handshake.get(key) != value for key, value in common.items()):
+        return "managed_copy_pilot_runtime_handshake_lineage_mismatch"
+    if handshake.get("pid") != pid or handshake.get("process_creation_token") != creation_token:
+        return "managed_copy_pilot_runtime_process_identity_mismatch"
+    if handshake.get("parent_pid") != launcher_pid:
+        return "managed_copy_pilot_runtime_parent_identity_mismatch"
+    if heartbeat.get("heartbeat_identity") != HEARTBEAT_IDENTITY or heartbeat.get("ready") is not True:
+        return "managed_copy_pilot_runtime_heartbeat_invalid"
+    if any(heartbeat.get(key) != value for key, value in common.items()):
+        return "managed_copy_pilot_runtime_heartbeat_lineage_mismatch"
+    if operation.get("status") != "completed" or operation.get("fixture_runtime") is not False:
+        return "managed_copy_pilot_runtime_operation_invalid"
+    operation_fingerprint = operation.get("receipt_fingerprint")
+    if (
+        not isinstance(operation_fingerprint, str)
+        or _fingerprint({key: value for key, value in operation.items() if key != "receipt_fingerprint"})
+        != operation_fingerprint
+    ):
+        return "managed_copy_pilot_runtime_operation_tampered"
+    if briefing.get("input_fingerprint") != descriptor["input_fingerprint"]:
+        return "managed_copy_pilot_runtime_input_mismatch"
+    output_fingerprint = briefing.get("output_fingerprint")
+    if (
+        not isinstance(output_fingerprint, str)
+        or _fingerprint({key: value for key, value in briefing.items() if key != "output_fingerprint"})
+        != output_fingerprint
+    ):
+        return "managed_copy_pilot_runtime_output_tampered"
+    return ""
+
+
+def _current_state(receipt: dict[str, Any]) -> dict[str, Any]:
+    state_dir = _state_dir(receipt)
+    identity = process_identity(_exact_int(receipt.get("pid"), 1, 2**31 - 1))
+    heartbeat = _read_json(state_dir / "heartbeat.json") if state_dir else {}
+    ready = bool(
+        state_dir
+        and identity.get("creation_token") == receipt.get("process_creation_token")
+        and heartbeat.get("heartbeat_identity") == HEARTBEAT_IDENTITY
+        and heartbeat.get("pilot_run_id") == receipt.get("pilot_run_id")
+        and int(time.time() * 1000) - _exact_int(heartbeat.get("observed_at_unix_ms"), 1, 2**63 - 1) < 3_000
+    )
+    return {"ready": ready, "state": "ready" if ready else "stopped_or_degraded"}
+
+
+def _guarded_run_dir(provision: dict[str, Any], isolation: dict[str, Any], domain: str, run_id: str) -> Path | None:
+    parent_name = "pilot_runtime" if domain == "tenant_receipts" else "pilot_inputs"
+    parent = managed_copy_isolation_guarded_subpath(
+        provision, isolation, domain=domain, relative_parts=(parent_name,), create_leaf_directory=True
+    )
+    if parent is None:
+        return None
+    return managed_copy_isolation_guarded_subpath(
+        provision,
+        isolation,
+        domain=domain,
+        relative_parts=(parent_name, run_id),
+        create_leaf_directory=True,
+    )
+
+
+def _startup_receipt(receipt_id: str) -> dict[str, Any]:
+    for path in (data_dir() / "managed_copies" / "tenants").glob("*/receipts/pilot_runtime/*/startup.json"):
+        item = _read_json(path)
+        if item.get("receipt_id") == receipt_id and _valid_startup_receipt(item):
+            return item
+    return {}
+
+
+def _valid_startup_receipt(receipt: dict[str, Any]) -> bool:
+    fingerprint = receipt.get("startup_fingerprint")
+    return bool(
+        isinstance(fingerprint, str)
+        and _fingerprint({key: value for key, value in receipt.items() if key != "startup_fingerprint"}) == fingerprint
+        and receipt.get("kind") == "francis.stage18.managed_copies.pilot_runtime_startup_receipt"
+        and receipt.get("contract") == PILOT_RUNTIME_CONTRACT
+        and receipt.get("runtime_identity") == RUNTIME_IDENTITY
+        and receipt.get("evidence_class") == PILOT_RUNTIME_EVIDENCE_CLASS
+        and receipt.get("fixture_runtime") is False
+        and receipt.get("canonical_runtime_evidence_recorded") is False
+        and receipt.get("stage18_ready") is False
+        and _identifier(receipt.get("receipt_id"))
+        and _identifier(receipt.get("pilot_run_id"))
+        and _exact_int(receipt.get("pid"), 1, 2**31 - 1)
+        and _exact_int(receipt.get("process_creation_token"), 1, 2**127)
+    )
+
+
+def _state_dir(receipt: dict[str, Any]) -> Path | None:
+    relative = receipt.get("state_path")
+    if not isinstance(relative, str):
+        return None
+    try:
+        path = (data_dir() / relative).resolve(strict=True)
+        path.relative_to(data_dir().resolve(strict=True))
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+def _cleanup_failed(process: subprocess.Popen[bytes], token: int, state_dir: Path) -> None:
+    (state_dir / "stop.signal").write_text("failed startup cleanup\n", encoding="utf-8")
+    try:
+        process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        if token:
+            terminate_owned_process(process.pid, creation_token=token, timeout_seconds=1.0)
+
+
+def _runtime_program() -> Path:
+    return (repo_root() / "src" / "francis" / "managed_copy_runtime.py").resolve(strict=True)
+
+
+def _write_immutable(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as stream:
+        json.dump(payload, stream, sort_keys=True, separators=(",", ":"))
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _blocked(error: str) -> dict[str, Any]:
+    return {"ok": False, "status": "blocked", "error": error, "starts_runtime": False}
+
+
+def _fingerprint(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _identifier(value: object) -> str:
+    text = value.strip() if isinstance(value, str) else ""
+    return text if 0 < len(text) <= 160 and all(char.isalnum() or char in "._:-" for char in text) else ""
+
+
+def _exact_int(value: object, minimum: int, maximum: int) -> int:
+    return value if type(value) is int and minimum <= value <= maximum else 0
+
+
+def _text(value: object) -> str:
+    return str(value).strip() if value is not None else ""

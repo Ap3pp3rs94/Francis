@@ -128,6 +128,42 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-17 - Non-fixture managed-copy local process vertical
+
+Current posture: Phase 2 and Stage 18 remain open. Francis now has an internal
+non-fixture managed-copy process path that is distinct from the BusyBox and
+heartbeat-only fixtures. An exact process-local pilot lease and approval bind a
+real provisioned and structurally verified copy to one fixed Francis program.
+That program reads bounded tenant-local synthetic work items, produces an
+actionable priority briefing, emits identity-correlated handshake, heartbeat,
+operation, startup, and cleanup receipts, and is stopped by an exact second
+lease binding.
+
+Evidence:
+
+- The existing end-to-end managed-copy creation journey now provisions and
+  structurally verifies the tenant before starting the fixed Francis subprocess.
+- The subprocess completes the tenant briefing, the controller independently
+  verifies process creation identity, lineage, heartbeat, input/output hashes,
+  and the operation receipt, and the operator route reads the true result.
+- Governed stop revalidates the exact PID and creation token, seals the pilot
+  lease, records cleanup, and leaves no managed-copy runtime process alive.
+- Focused runtime, permission-gate, fixture-start compatibility, mutation-route,
+  and complete managed-copy API tests pass with changed-path static checks.
+
+Remaining truthful gap:
+
+- Classification is `INTERNAL COMPONENT with an isolated test-only vertical`.
+  No persistent actor grant or real operator pilot lease exists, so this is not
+  yet an operator-available product capability.
+- The local host process is not Docker-isolated. Its operation performs no
+  network activity by implementation, but OS-level network and filesystem
+  isolation are not claimed. The proven Docker adapter still targets the
+  BusyBox fixture rather than this Francis runtime.
+- No canonical runtime evidence was recorded and the completion audit remains
+  1 of 8. Stage 18, FR-018, production, customer, and physical-validation claims
+  remain prohibited.
+
 ### 2026-07-17 - Canonical rogue-recovery runtime verifier contract
 
 Current posture: Phase 2 and Stage 18 remain open. The runtime-evidence

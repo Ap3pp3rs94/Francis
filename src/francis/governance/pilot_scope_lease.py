@@ -213,6 +213,52 @@ class PilotScopeLeaseRegistry:
                 },
             )
 
+    def authorize_binding(
+        self,
+        *,
+        lease_id: object,
+        actor_id: object,
+        scope: str,
+        route: str,
+        method: str,
+        action: str,
+        now_ms: int | None = None,
+    ) -> PilotLeaseDecision:
+        """Consume one binding using only server-held lease claims."""
+        with self._lock:
+            lease = self._leases.get(str(lease_id or "").strip())
+            if lease is None:
+                return _denied("missing_pilot_lease")
+            check = PilotLeaseCheck(
+                lease_id=lease.lease_id,
+                package_id=lease.package_id,
+                package_fingerprint=lease.package_fingerprint,
+                pilot_run_id=lease.pilot_run_id,
+                runtime_nonce=lease.runtime_nonce,
+                operator_decision_fingerprint=lease.operator_decision_fingerprint,
+                scope=scope,
+                route=route,
+                method=method,
+                action=action,
+            )
+            return self.authorize_and_consume(actor_id=actor_id, check=check, now_ms=now_ms)
+
+    def lease_context(self, lease_id: object) -> dict[str, str]:
+        """Return the immutable non-secret binding context for internal correlation."""
+        with self._lock:
+            lease = self._leases.get(str(lease_id or "").strip())
+            if lease is None:
+                return {}
+            return {
+                "lease_id": lease.lease_id,
+                "actor_id": lease.actor_id,
+                "package_id": lease.package_id,
+                "package_fingerprint": lease.package_fingerprint,
+                "pilot_run_id": lease.pilot_run_id,
+                "runtime_nonce": lease.runtime_nonce,
+                "operator_decision_fingerprint": lease.operator_decision_fingerprint,
+            }
+
     def revoke(self, lease_id: str, *, now_ms: int | None = None) -> PilotLeaseDecision:
         now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
         with self._lock:
