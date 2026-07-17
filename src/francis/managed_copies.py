@@ -4639,7 +4639,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
     )
     rogue_ready, rogue_blocker, rogue_receipt_id = runtime_evidence(
         "rogue_recovery_runtime_proof",
-        "stage18_rogue_recovery_runtime_not_implemented",
+        "stage18_rogue_recovery_runtime_source_receipt_missing",
     )
     sla_ready, sla_blocker, sla_receipt_id = runtime_evidence(
         "sla_runtime_proof",
@@ -4844,7 +4844,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
             "A rogue-copy scenario can be detected, halted, reviewed, replaced, and restored with evidence",
             source_contract_route="/managed-copies/rogue-recovery-contract",
             proof_kind="rogue_recovery_runtime_receipt",
-            blocker="stage18_rogue_recovery_runtime_not_implemented",
+            blocker="stage18_rogue_recovery_runtime_source_receipt_missing",
+            recording_enabled=True,
         ),
         _runtime_evidence_requirement(
             "sla_runtime_proof",
@@ -4885,8 +4886,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "required_count": len(requirements),
         "blockers": [requirement["blocker"] for requirement in requirements if not requirement["ready"]],
         "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
-        "supported_requirement_count": 3,
-        "recordable_requirement_count": 3,
+        "supported_requirement_count": 4,
+        "recordable_requirement_count": 4,
         "receipt_logical_scope": "managed_copy_runtime_evidence",
         "completion_review_route": "/managed-copies/completion-review",
         "routes": {

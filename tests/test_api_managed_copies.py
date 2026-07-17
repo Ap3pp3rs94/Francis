@@ -2197,7 +2197,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
         "stage18_copy_creation_runtime_startup_receipt_missing",
         "stage18_tenant_isolation_runtime_source_receipt_missing",
         "stage18_safe_delta_runtime_source_receipt_missing",
-        "stage18_rogue_recovery_runtime_not_implemented",
+        "stage18_rogue_recovery_runtime_source_receipt_missing",
         "stage18_sla_runtime_not_implemented",
         "stage18_role_authority_runtime_not_implemented",
         "stage18_decommission_runtime_not_implemented",
@@ -2294,13 +2294,20 @@ def test_managed_copy_runtime_evidence_contract_exposes_bounded_recorder_without
     assert requirement_by_id["tenant_isolation_runtime_proof"]["writes_receipt"] is True
     assert requirement_by_id["safe_delta_runtime_proof"]["recording_enabled"] is True
     assert requirement_by_id["safe_delta_runtime_proof"]["writes_receipt"] is True
-    assert body["supported_requirement_count"] == 3
-    assert body["recordable_requirement_count"] == 3
+    assert requirement_by_id["rogue_recovery_runtime_proof"]["recording_enabled"] is True
+    assert requirement_by_id["rogue_recovery_runtime_proof"]["writes_receipt"] is True
+    assert body["supported_requirement_count"] == 4
+    assert body["recordable_requirement_count"] == 4
     assert all(
         item["recording_enabled"] is False
         for item in body["requirements"]
         if item["id"]
-        not in {"copy_creation_runtime_proof", "tenant_isolation_runtime_proof", "safe_delta_runtime_proof"}
+        not in {
+            "copy_creation_runtime_proof",
+            "tenant_isolation_runtime_proof",
+            "safe_delta_runtime_proof",
+            "rogue_recovery_runtime_proof",
+        }
     )
     assert all(item["mutates_tenant_state"] is False for item in body["requirements"])
     assert all(item["grants_execution_authority"] is False for item in body["requirements"])
@@ -2315,7 +2322,7 @@ def test_managed_copy_runtime_evidence_contract_exposes_bounded_recorder_without
         "stage18_copy_creation_runtime_startup_receipt_missing",
         "stage18_tenant_isolation_runtime_source_receipt_missing",
         "stage18_safe_delta_runtime_source_receipt_missing",
-        "stage18_rogue_recovery_runtime_not_implemented",
+        "stage18_rogue_recovery_runtime_source_receipt_missing",
         "stage18_sla_runtime_not_implemented",
         "stage18_role_authority_runtime_not_implemented",
         "stage18_decommission_runtime_not_implemented",
@@ -2400,7 +2407,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
         "stage18_copy_creation_runtime_startup_receipt_missing",
         "stage18_tenant_isolation_runtime_source_receipt_missing",
         "stage18_safe_delta_runtime_source_receipt_missing",
-        "stage18_rogue_recovery_runtime_not_implemented",
+        "stage18_rogue_recovery_runtime_source_receipt_missing",
         "stage18_sla_runtime_not_implemented",
         "stage18_role_authority_runtime_not_implemented",
         "stage18_decommission_runtime_not_implemented",

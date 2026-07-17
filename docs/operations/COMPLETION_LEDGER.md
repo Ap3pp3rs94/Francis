@@ -128,6 +128,34 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-17 - Canonical rogue-recovery runtime verifier contract
+
+Current posture: Phase 2 and Stage 18 remain open. The runtime-evidence
+recorder now recognizes `rogue_recovery_runtime_proof` and independently
+revalidates the owned provisioning, live structural-isolation, latest integrity
+drift, governed rogue-assessment, containment disposition, and deterministic
+recovery-plan lineage before it could accept a canonical recovery source.
+
+Evidence:
+
+- Focused verifier, runtime-evidence recorder, completion-projection, and full
+  managed-copy API contract tests pass.
+- Exact-schema validation rejects fixture, weaker, malformed, injected,
+  hash-mismatched, self-consistent synthetic, and stale owned-lineage sources.
+- Changed-path Ruff, format, targeted mypy, and repository diff checks pass.
+
+Remaining truthful gap:
+
+- Francis has no governed exact-runtime-halt receipt producer. After all
+  existing read-only lineage validates, the verifier therefore fails closed at
+  `stage18_rogue_recovery_runtime_halt_receipt_not_implemented` before trusting
+  quarantine, evidence preservation, replacement, verification, or continuity
+  restoration claims.
+- No actor scope or approval was created, no runtime action occurred, and no
+  canonical runtime evidence was recorded. The completion audit remains 1 of 8;
+  Stage 18 closure, FR-018 clearance, production action, and physical-validation
+  claims remain prohibited.
+
 ### 2026-07-17 - Current-evidence rogue-recovery plan preflight
 
 Current posture: Phase 2 and Stage 18 remain open. The governed
