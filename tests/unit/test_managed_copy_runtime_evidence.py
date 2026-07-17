@@ -102,7 +102,7 @@ def test_invalid_canonical_source_result_fails_closed(isolated_data: Path, block
     [
         ({"requirement_id": "unknown"}, "stage18_runtime_evidence_requirement_unknown"),
         (
-            {"requirement_id": "safe_delta_runtime_proof"},
+            {"requirement_id": "rogue_recovery_runtime_proof"},
             "stage18_runtime_evidence_requirement_not_supported",
         ),
         ({"proof_kind": "wrong"}, "stage18_runtime_evidence_proof_kind_mismatch"),

@@ -128,6 +128,33 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-16 - Safe-delta runtime-evidence verifier software
+
+Current posture: Phase 2 and Stage 18 remain open. The Stage 18 runtime-evidence
+recorder now recognizes `safe_delta_runtime_proof` and independently revalidates
+the existing provision, structural-isolation, safe-delta review, safe-delta
+approval, and export-authorization receipt chain before it could accept a
+canonical safe-delta runtime source.
+
+Evidence:
+
+- Focused verifier, runtime-evidence recorder, completion-review, managed-copy
+  API, permission-gate, and mutating-route authority tests pass.
+- Exact-schema validation rejects fixture, malformed, injected, hash-mismatched,
+  and self-asserted source lineage; changed-path Ruff, format, targeted mypy, and
+  repository diff checks pass.
+
+Remaining truthful gap:
+
+- Francis has no governed safe-delta export-artifact executor or independently
+  owned immutable export-artifact receipt producer. After all existing lineage
+  validates, the verifier therefore fails closed at
+  `stage18_safe_delta_runtime_export_artifact_receipt_not_implemented`.
+- No actor scope or approval was created, no export ran, no tenant or runtime
+  state changed, and no canonical runtime evidence was recorded. The completion
+  audit remains 1 of 8; Stage 18 closure, FR-018 clearance, production action,
+  and physical-validation claims remain prohibited.
+
 ### 2026-07-16 - Canonical tenant-isolation runtime verifier contract
 
 Current posture: Phase 2 and Stage 18 remain open. The runtime-evidence recorder

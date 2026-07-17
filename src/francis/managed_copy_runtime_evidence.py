@@ -19,13 +19,15 @@ COPY_CREATION_PROOF_KIND = "managed_copy_creation_runtime_receipt"
 COPY_CREATION_SOURCE_MISSING = "stage18_copy_creation_runtime_startup_receipt_missing"
 TENANT_ISOLATION_REQUIREMENT = "tenant_isolation_runtime_proof"
 TENANT_ISOLATION_PROOF_KIND = "tenant_isolation_runtime_receipt"
+SAFE_DELTA_REQUIREMENT = "safe_delta_runtime_proof"
+SAFE_DELTA_PROOF_KIND = "safe_delta_runtime_receipt"
 # Compatibility alias for older callers; the producer now exists but no source receipt is present by default.
 SOURCE_NOT_IMPLEMENTED = COPY_CREATION_SOURCE_MISSING
 KNOWN_REQUIREMENTS = frozenset(
     {
         COPY_CREATION_REQUIREMENT,
         TENANT_ISOLATION_REQUIREMENT,
-        "safe_delta_runtime_proof",
+        SAFE_DELTA_REQUIREMENT,
         "rogue_recovery_runtime_proof",
         "sla_runtime_proof",
         "role_authority_runtime_proof",
@@ -111,10 +113,17 @@ def verify_tenant_isolation_runtime_source(source_receipt_id: str, source_receip
     return verify(source_receipt_id, source_receipt_fingerprint)
 
 
+def verify_safe_delta_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
+    from francis.managed_copy_safe_delta_runtime_evidence import verify_safe_delta_runtime_source as verify
+
+    return verify(source_receipt_id, source_receipt_fingerprint)
+
+
 def _source_verifier(requirement_id: str) -> SourceVerifier | None:
     return {
         COPY_CREATION_REQUIREMENT: verify_copy_creation_runtime_source,
         TENANT_ISOLATION_REQUIREMENT: verify_tenant_isolation_runtime_source,
+        SAFE_DELTA_REQUIREMENT: verify_safe_delta_runtime_source,
     }.get(requirement_id)
 
 
@@ -122,6 +131,7 @@ def _proof_kind(requirement_id: str) -> str:
     return {
         COPY_CREATION_REQUIREMENT: COPY_CREATION_PROOF_KIND,
         TENANT_ISOLATION_REQUIREMENT: TENANT_ISOLATION_PROOF_KIND,
+        SAFE_DELTA_REQUIREMENT: SAFE_DELTA_PROOF_KIND,
     }.get(requirement_id, "")
 
 

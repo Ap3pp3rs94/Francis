@@ -4599,7 +4599,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
     )
     safe_delta_ready, safe_delta_blocker, safe_delta_receipt_id = runtime_evidence(
         "safe_delta_runtime_proof",
-        "stage18_safe_delta_runtime_not_implemented",
+        "stage18_safe_delta_runtime_source_receipt_missing",
     )
     rogue_ready, rogue_blocker, rogue_receipt_id = runtime_evidence(
         "rogue_recovery_runtime_proof",
@@ -4800,7 +4800,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
             "Safe deltas move only approved non-private signals with lineage and redaction evidence",
             source_contract_route="/managed-copies/safe-delta-model-contract",
             proof_kind="safe_delta_runtime_receipt",
-            blocker="stage18_safe_delta_runtime_not_implemented",
+            blocker="stage18_safe_delta_runtime_source_receipt_missing",
+            recording_enabled=True,
         ),
         _runtime_evidence_requirement(
             "rogue_recovery_runtime_proof",
@@ -4848,8 +4849,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "required_count": len(requirements),
         "blockers": [requirement["blocker"] for requirement in requirements if not requirement["ready"]],
         "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
-        "supported_requirement_count": 2,
-        "recordable_requirement_count": 2,
+        "supported_requirement_count": 3,
+        "recordable_requirement_count": 3,
         "receipt_logical_scope": "managed_copy_runtime_evidence",
         "completion_review_route": "/managed-copies/completion-review",
         "routes": {
