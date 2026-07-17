@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -184,7 +185,10 @@ def test_real_francis_process_vertical_path_and_exact_cleanup(vertical_runtime: 
     assert receipt["evidence_class"] == pilot.PILOT_RUNTIME_EVIDENCE_CLASS
     assert receipt["canonical_runtime_evidence_recorded"] is False
     assert started["output"]["next_action"]["id"] == "work-1"
-    assert process_identity(receipt["pid"])["creation_token"] == receipt["process_creation_token"]
+    observed = process_identity(receipt["pid"])
+    assert observed["creation_token"] == receipt["process_creation_token"]
+    assert observed["parent_pid"] == receipt["parent_pid"]
+    assert receipt["parent_pid"] == os.getpid()
 
     status = client.get("/managed-copies/pilot-runtime-status", params={"copy_id": receipt["copy_id"]}).json()
     assert status["ready_count"] == 1
@@ -207,6 +211,31 @@ def test_real_francis_process_vertical_path_and_exact_cleanup(vertical_runtime: 
 
     replay = client.post(pilot.PILOT_RUNTIME_START_ROUTE, json=vertical_runtime["payload"]).json()
     assert replay["error"] == "api_permission_denied"
+
+
+@pytest.mark.parametrize("observed_parent", [4100, 4200])
+def test_runtime_parent_accepts_direct_controller_or_trusted_launcher(observed_parent: int) -> None:
+    assert pilot._trusted_parent_identity(
+        observed_parent,
+        observed_parent_pid=observed_parent,
+        launcher_pid=4100,
+        controller_pid=4200,
+    )
+
+
+def test_runtime_parent_rejects_unobserved_or_untrusted_parent() -> None:
+    assert not pilot._trusted_parent_identity(
+        4100,
+        observed_parent_pid=4200,
+        launcher_pid=4100,
+        controller_pid=4200,
+    )
+    assert not pilot._trusted_parent_identity(
+        4300,
+        observed_parent_pid=4300,
+        launcher_pid=4100,
+        controller_pid=4200,
+    )
 
 
 def test_approval_schema_failure_seals_consumed_lease_without_start(vertical_runtime: dict[str, Any]) -> None:

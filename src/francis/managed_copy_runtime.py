@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
 import hashlib
 import json
 import os
@@ -73,16 +72,12 @@ def main() -> int:
         input_path.relative_to(tenant_root)
     except ValueError:
         return 2
-    creation_token = _creation_token()
-    if not creation_token:
-        return 3
     identity = {
         "kind": "francis.stage18.managed_copies.runtime_handshake",
         "runtime_identity": RUNTIME_IDENTITY,
         "fixture_runtime": False,
         "pid": os.getpid(),
         "parent_pid": os.getppid(),
-        "process_creation_token": creation_token,
         "copy_id": args.copy_id,
         "tenant_key": args.tenant_key,
         "pilot_run_id": args.pilot_run_id,
@@ -128,37 +123,6 @@ def main() -> int:
         )
         time.sleep(0.1)
     return 0
-
-
-def _creation_token() -> int:
-    if os.name != "nt":
-        stat = Path("/proc/self/stat").read_text(encoding="utf-8")
-        return int(stat[stat.rfind(")") + 2 :].split()[19])
-    windll_type = getattr(ctypes, "WinDLL", None)
-    if windll_type is None:
-        return 0
-    from ctypes import wintypes
-
-    kernel32 = windll_type("kernel32", use_last_error=True)
-    get_times = kernel32.GetProcessTimes
-    get_times.argtypes = [
-        wintypes.HANDLE,
-        ctypes.POINTER(wintypes.FILETIME),
-        ctypes.POINTER(wintypes.FILETIME),
-        ctypes.POINTER(wintypes.FILETIME),
-        ctypes.POINTER(wintypes.FILETIME),
-    ]
-    get_times.restype = wintypes.BOOL
-    creation, exit_time, kernel_time, user_time = (wintypes.FILETIME() for _ in range(4))
-    if not get_times(
-        kernel32.GetCurrentProcess(),
-        ctypes.byref(creation),
-        ctypes.byref(exit_time),
-        ctypes.byref(kernel_time),
-        ctypes.byref(user_time),
-    ):
-        return 0
-    return (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
 
 
 def _write_atomic(path: Path, payload: dict[str, Any]) -> None:

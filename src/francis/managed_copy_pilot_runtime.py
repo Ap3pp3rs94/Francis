@@ -273,6 +273,12 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
         return _blocked("managed_copy_pilot_runtime_lineage_changed_under_lock")
     if _file_hash(_runtime_program()) != descriptor["program_fingerprint"]:
         return _blocked("managed_copy_pilot_runtime_program_changed_under_lock")
+    executable = _runtime_executable()
+    if (
+        str(executable) != descriptor["executable_identity"]
+        or _file_hash(executable) != descriptor["executable_fingerprint"]
+    ):
+        return _blocked("managed_copy_pilot_runtime_executable_changed_under_lock")
     data_root = _guarded_run_dir(provision, isolation, "tenant_data", descriptor["pilot_run_id"])
     state_dir = _guarded_run_dir(provision, isolation, "tenant_receipts", descriptor["pilot_run_id"])
     if data_root is None:
@@ -289,7 +295,7 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
     if not runtime_nonce or _sha256(runtime_nonce) != descriptor["runtime_nonce_hash"]:
         return _blocked("managed_copy_pilot_runtime_lease_nonce_mismatch")
     command = [
-        sys.executable,
+        str(executable),
         str(_runtime_program()),
         "--state-dir",
         str(state_dir),
@@ -334,8 +340,14 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
         _cleanup_failed(process, launcher_token, state_dir)
         return _blocked("managed_copy_pilot_runtime_startup_failed")
     runtime_pid = _exact_int(handshake.get("pid"), 1, 2**31 - 1)
-    runtime_identity = process_identity(runtime_pid)
+    runtime_identity: dict[str, Any] = {}
+    while time.monotonic() < deadline and process.poll() is None:
+        runtime_identity = process_identity(runtime_pid)
+        if runtime_identity.get("creation_token") and runtime_identity.get("parent_pid"):
+            break
+        time.sleep(0.025)
     creation_token = _exact_int(runtime_identity.get("creation_token"), 1, 2**127)
+    runtime_parent_pid = _exact_int(runtime_identity.get("parent_pid"), 1, 2**31 - 1)
     blocker = _runtime_records_blocker(
         handshake,
         heartbeat,
@@ -344,7 +356,9 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
         descriptor=descriptor,
         pid=runtime_pid,
         creation_token=creation_token,
+        runtime_parent_pid=runtime_parent_pid,
         launcher_pid=process.pid,
+        controller_pid=os.getpid(),
     )
     if blocker:
         _cleanup_failed(process, launcher_token, state_dir)
@@ -366,7 +380,7 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
         "runtime_identity": RUNTIME_IDENTITY,
         "pid": runtime_pid,
         "process_creation_token": creation_token,
-        "parent_pid": os.getpid(),
+        "parent_pid": runtime_parent_pid,
         "operation": "tenant_work_briefing",
         "operation_receipt_fingerprint": operation["receipt_fingerprint"],
         "output_fingerprint": briefing["output_fingerprint"],
@@ -408,6 +422,8 @@ def _descriptor(**values: Any) -> dict[str, Any]:
         "runtime_nonce_hash": _sha256(lease["runtime_nonce"]),
         "operator_decision_fingerprint": lease["operator_decision_fingerprint"],
         "runtime_identity": RUNTIME_IDENTITY,
+        "executable_identity": str(_runtime_executable()),
+        "executable_fingerprint": _file_hash(_runtime_executable()),
         "program_fingerprint": _file_hash(_runtime_program()),
         "working_directory_identity": f"managed_copies/tenants/{provision['tenant_key']}",
         "operation": "tenant_work_briefing",
@@ -450,7 +466,9 @@ def _runtime_records_blocker(
     descriptor: dict[str, Any],
     pid: int,
     creation_token: int,
+    runtime_parent_pid: int,
     launcher_pid: int,
+    controller_pid: int,
 ) -> str:
     common = {
         "copy_id": descriptor["copy_id"],
@@ -462,9 +480,14 @@ def _runtime_records_blocker(
         return "managed_copy_pilot_runtime_handshake_invalid"
     if any(handshake.get(key) != value for key, value in common.items()):
         return "managed_copy_pilot_runtime_handshake_lineage_mismatch"
-    if handshake.get("pid") != pid or handshake.get("process_creation_token") != creation_token:
+    if handshake.get("pid") != pid or not creation_token:
         return "managed_copy_pilot_runtime_process_identity_mismatch"
-    if handshake.get("parent_pid") != launcher_pid:
+    if not _trusted_parent_identity(
+        handshake.get("parent_pid"),
+        observed_parent_pid=runtime_parent_pid,
+        launcher_pid=launcher_pid,
+        controller_pid=controller_pid,
+    ):
         return "managed_copy_pilot_runtime_parent_identity_mismatch"
     if heartbeat.get("heartbeat_identity") != HEARTBEAT_IDENTITY or heartbeat.get("ready") is not True:
         return "managed_copy_pilot_runtime_heartbeat_invalid"
@@ -489,6 +512,20 @@ def _runtime_records_blocker(
     ):
         return "managed_copy_pilot_runtime_output_tampered"
     return ""
+
+
+def _trusted_parent_identity(
+    claimed_parent_pid: object,
+    *,
+    observed_parent_pid: int,
+    launcher_pid: int,
+    controller_pid: int,
+) -> bool:
+    return (
+        type(claimed_parent_pid) is int
+        and claimed_parent_pid == observed_parent_pid
+        and observed_parent_pid in {launcher_pid, controller_pid}
+    )
 
 
 def _current_state(receipt: dict[str, Any]) -> dict[str, Any]:
@@ -571,6 +608,11 @@ def _cleanup_failed(process: subprocess.Popen[bytes], token: int, state_dir: Pat
 
 def _runtime_program() -> Path:
     return (repo_root() / "src" / "francis" / "managed_copy_runtime.py").resolve(strict=True)
+
+
+def _runtime_executable() -> Path:
+    base_executable = getattr(sys, "_base_executable", sys.executable)
+    return Path(base_executable).resolve(strict=True)
 
 
 def _write_immutable(path: Path, payload: object) -> None:
