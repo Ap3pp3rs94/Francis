@@ -128,6 +128,40 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-16 - Canonical tenant-isolation runtime verifier contract
+
+Current posture: Phase 2 and Stage 18 remain open. The runtime-evidence recorder
+now recognizes the exact `tenant_isolation_runtime_proof` /
+`tenant_isolation_runtime_receipt` pair and delegates it to a dedicated,
+read-only canonical source verifier. The verifier requires an exact non-fixture
+source and current-state schema, independently reloads the owned provisioning
+and live-aligned structural-isolation lineage, and requires bounded proof links
+for runtime identity, container security, tenant data, memory, receipts,
+connectors, policy, support authority, and cross-tenant denial.
+
+Evidence:
+
+- Focused verifier and runtime-evidence tests prove missing, malformed,
+  self-asserted, fixture, stale, weaker, cross-kind, and linked-proof-tampered
+  evidence fails closed without creating runtime state.
+- The managed-copy completion and API contract suites retain eight exact proof
+  slots while reporting two recorder-supported requirements.
+- The production verifier rejects a self-consistent synthetic receipt bundle
+  because its named provisioning lineage is not present in the owning store.
+- Changed-path Ruff, format, targeted mypy, and repository diff checks pass.
+
+Remaining truthful gap:
+
+- No canonical non-fixture managed-copy runtime producer exists. The current
+  runtime-start producer remains fixture-only, and live pilot approval/lease
+  correlation is not implemented; the verifier therefore cannot return
+  production readiness from current repository artifacts.
+- No actor grant, lease activation, tenant, Docker invocation, managed-copy
+  runtime, canonical evidence, Orb, or VSC-1 action occurred.
+- The completion audit remains 1 of 8. This verifier contract does not close the
+  tenant-isolation gate, authorize the local pilot, clear FR-018, or close Stage
+  18.
+
 ### 2026-07-16 - Process-local managed-copy pilot scope leases
 
 Current posture: Phase 2 and Stage 18 remain open. Francis now has a native,

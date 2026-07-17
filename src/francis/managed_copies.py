@@ -4595,7 +4595,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
     )
     isolation_ready, isolation_blocker, isolation_receipt_id = runtime_evidence(
         "tenant_isolation_runtime_proof",
-        "stage18_tenant_isolation_runtime_not_implemented",
+        "stage18_tenant_isolation_runtime_source_receipt_missing",
     )
     safe_delta_ready, safe_delta_blocker, safe_delta_receipt_id = runtime_evidence(
         "safe_delta_runtime_proof",
@@ -4792,7 +4792,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
             "Tenant data, memory, receipts, connectors, policy, and support authority are isolated",
             source_contract_route="/managed-copies/isolation-rules-contract",
             proof_kind="tenant_isolation_runtime_receipt",
-            blocker="stage18_tenant_isolation_runtime_not_implemented",
+            blocker="stage18_tenant_isolation_runtime_source_receipt_missing",
+            recording_enabled=True,
         ),
         _runtime_evidence_requirement(
             "safe_delta_runtime_proof",
@@ -4847,8 +4848,8 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "required_count": len(requirements),
         "blockers": [requirement["blocker"] for requirement in requirements if not requirement["ready"]],
         "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
-        "supported_requirement_count": 1,
-        "recordable_requirement_count": 1,
+        "supported_requirement_count": 2,
+        "recordable_requirement_count": 2,
         "receipt_logical_scope": "managed_copy_runtime_evidence",
         "completion_review_route": "/managed-copies/completion-review",
         "routes": {

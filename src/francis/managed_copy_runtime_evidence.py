@@ -17,12 +17,14 @@ RUNTIME_EVIDENCE_RECEIPT_KIND = "francis.stage18.managed_copies.runtime_evidence
 COPY_CREATION_REQUIREMENT = "copy_creation_runtime_proof"
 COPY_CREATION_PROOF_KIND = "managed_copy_creation_runtime_receipt"
 COPY_CREATION_SOURCE_MISSING = "stage18_copy_creation_runtime_startup_receipt_missing"
+TENANT_ISOLATION_REQUIREMENT = "tenant_isolation_runtime_proof"
+TENANT_ISOLATION_PROOF_KIND = "tenant_isolation_runtime_receipt"
 # Compatibility alias for older callers; the producer now exists but no source receipt is present by default.
 SOURCE_NOT_IMPLEMENTED = COPY_CREATION_SOURCE_MISSING
 KNOWN_REQUIREMENTS = frozenset(
     {
         COPY_CREATION_REQUIREMENT,
-        "tenant_isolation_runtime_proof",
+        TENANT_ISOLATION_REQUIREMENT,
         "safe_delta_runtime_proof",
         "rogue_recovery_runtime_proof",
         "sla_runtime_proof",
@@ -103,6 +105,26 @@ def verify_copy_creation_runtime_source(
     return verify_runtime_startup_source(source_receipt_id, source_receipt_fingerprint)
 
 
+def verify_tenant_isolation_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
+    from francis.managed_copy_tenant_isolation_evidence import verify_tenant_isolation_runtime_source as verify
+
+    return verify(source_receipt_id, source_receipt_fingerprint)
+
+
+def _source_verifier(requirement_id: str) -> SourceVerifier | None:
+    return {
+        COPY_CREATION_REQUIREMENT: verify_copy_creation_runtime_source,
+        TENANT_ISOLATION_REQUIREMENT: verify_tenant_isolation_runtime_source,
+    }.get(requirement_id)
+
+
+def _proof_kind(requirement_id: str) -> str:
+    return {
+        COPY_CREATION_REQUIREMENT: COPY_CREATION_PROOF_KIND,
+        TENANT_ISOLATION_REQUIREMENT: TENANT_ISOLATION_PROOF_KIND,
+    }.get(requirement_id, "")
+
+
 def plan_runtime_evidence(
     payload: dict[str, Any],
     *,
@@ -110,7 +132,6 @@ def plan_runtime_evidence(
     stage17_closed: bool,
     source_verifier: SourceVerifier | None = None,
 ) -> dict[str, Any]:
-    verifier = source_verifier or verify_copy_creation_runtime_source
     blockers: list[str] = []
     if set(payload) != EXPECTED_PAYLOAD_FIELDS:
         blockers.append("stage18_runtime_evidence_payload_schema_invalid")
@@ -127,9 +148,9 @@ def plan_runtime_evidence(
         blockers.append("stage17_prerequisite_not_closed")
     if requirement_id not in KNOWN_REQUIREMENTS:
         blockers.append("stage18_runtime_evidence_requirement_unknown")
-    elif requirement_id != COPY_CREATION_REQUIREMENT:
+    elif not _source_verifier(requirement_id):
         blockers.append("stage18_runtime_evidence_requirement_not_supported")
-    if requirement_id == COPY_CREATION_REQUIREMENT and proof_kind != COPY_CREATION_PROOF_KIND:
+    if _proof_kind(requirement_id) and proof_kind != _proof_kind(requirement_id):
         blockers.append("stage18_runtime_evidence_proof_kind_mismatch")
     if (
         not safe_actor
@@ -151,6 +172,8 @@ def plan_runtime_evidence(
 
     source = _blocked_source("stage18_runtime_evidence_source_not_checked")
     if not blockers:
+        verifier = source_verifier or _source_verifier(requirement_id)
+        assert verifier is not None
         source = verifier(source_receipt_id, source_receipt_fingerprint)
         if not _valid_source_result(source):
             blockers.append(_exact_text(source.get("blocker")) or "stage18_runtime_evidence_source_invalid")
@@ -191,7 +214,8 @@ def record_runtime_evidence(
     stage17_closed: bool,
     source_verifier: SourceVerifier | None = None,
 ) -> dict[str, Any]:
-    verifier = source_verifier or verify_copy_creation_runtime_source
+    requirement_id = _identifier(payload.get("requirement_id"))
+    verifier = source_verifier or _source_verifier(requirement_id)
     plan = plan_runtime_evidence(
         payload,
         actor=actor,
@@ -211,6 +235,7 @@ def record_runtime_evidence(
         with _cross_process_receipt_lock() as acquired:
             if not acquired:
                 return _blocked_from_plan(plan, "stage18_runtime_evidence_write_lock_unavailable")
+            assert verifier is not None
             final_source = verifier(plan["source_receipt_id"], plan["source_receipt_fingerprint"])
             if not _valid_source_result(final_source) or not _source_matches_plan(final_source, plan):
                 return _blocked_from_plan(plan, "stage18_runtime_evidence_source_changed_under_lock")
@@ -255,9 +280,10 @@ def valid_runtime_evidence_receipt(item: dict[str, Any]) -> bool:
         return False
     if item.get("kind") != RUNTIME_EVIDENCE_RECEIPT_KIND or item.get("contract") != RUNTIME_EVIDENCE_CONTRACT:
         return False
-    if item.get("status") != "recorded" or item.get("requirement_id") != COPY_CREATION_REQUIREMENT:
+    requirement_id = _identifier(item.get("requirement_id"))
+    if item.get("status") != "recorded" or not _source_verifier(requirement_id):
         return False
-    if item.get("proof_kind") != COPY_CREATION_PROOF_KIND:
+    if item.get("proof_kind") != _proof_kind(requirement_id):
         return False
     for key in (
         "receipt_id",
@@ -309,8 +335,11 @@ def receipt_satisfies_runtime_requirement(
     *,
     source_verifier: SourceVerifier | None = None,
 ) -> bool:
-    verifier = source_verifier or verify_copy_creation_runtime_source
+    requirement_id = _identifier(item.get("requirement_id"))
+    verifier = source_verifier or _source_verifier(requirement_id)
     if not valid_runtime_evidence_receipt(item) or item.get("evidence_class") != "canonical_runtime":
+        return False
+    if verifier is None:
         return False
     source = verifier(item["source_receipt_id"], item["source_receipt_fingerprint"])
     return _valid_source_result(source) and _source_matches_plan(source, item)
