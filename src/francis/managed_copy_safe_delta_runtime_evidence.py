@@ -109,6 +109,9 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     from francis.managed_copy_safe_delta_export_authorization_decision import (
         managed_copy_safe_delta_export_authorization_decisions_readback,
     )
+    from francis.managed_copy_safe_delta_export_artifact import (
+        managed_copy_safe_delta_export_artifacts_readback,
+    )
 
     provision = managed_copy_provision_for_copy(
         source["copy_id"], provisioning_receipt_id=source["provisioning_receipt_id"]
@@ -183,7 +186,32 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     ]
     if len(matches) != 1:
         return "stage18_safe_delta_runtime_export_authorization_lineage_invalid"
-    return "stage18_safe_delta_runtime_export_artifact_receipt_not_implemented"
+    artifacts = managed_copy_safe_delta_export_artifacts_readback(
+        copy_id=source["copy_id"],
+        provisioning_receipt_id=source["provisioning_receipt_id"],
+        isolation_verification_receipt_id=source["isolation_verification_receipt_id"],
+        artifact_plan_fingerprint=source["artifact_plan_fingerprint"],
+        limit=20,
+    )
+    receipt = artifacts.get("latest_valid_receipt")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    if (
+        artifacts.get("valid_count") != 1
+        or receipt.get("receipt_id") != source["export_artifact_receipt_id"]
+        or receipt.get("receipt_fingerprint") != source["export_artifact_receipt_fingerprint"]
+        or receipt.get("artifact_content_fingerprint") != source["artifact_content_fingerprint"]
+        or receipt.get("artifact_plan_fingerprint") != source["artifact_plan_fingerprint"]
+        or receipt.get("tenant_key") != source["tenant_key"]
+        or receipt.get("copy_id") != source["copy_id"]
+        or receipt.get("provisioning_receipt_id") != source["provisioning_receipt_id"]
+        or receipt.get("isolation_verification_receipt_id") != source["isolation_verification_receipt_id"]
+        or receipt.get("review_fingerprint") != source["review_fingerprint"]
+        or receipt.get("authorization_decision_receipt_id") != source["export_authorization_decision_receipt_id"]
+        or receipt.get("authorization_decision_receipt_fingerprint")
+        != source["export_authorization_decision_receipt_fingerprint"]
+    ):
+        return "stage18_safe_delta_runtime_export_artifact_lineage_invalid"
+    return ""
 
 
 def _valid_source(source: dict[str, Any]) -> bool:

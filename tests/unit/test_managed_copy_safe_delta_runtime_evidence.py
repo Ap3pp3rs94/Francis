@@ -119,7 +119,7 @@ def test_malformed_fixture_and_injected_sources_fail_exact_schema(
     assert result["blocker"] == "stage18_safe_delta_runtime_source_receipt_invalid"
 
 
-def test_owned_lineage_stops_at_missing_export_artifact_producer(
+def test_owned_lineage_accepts_independently_validated_export_artifact(
     isolated_data: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -175,11 +175,33 @@ def test_owned_lineage_stops_at_missing_export_artifact_producer(
             ]
         },
     )
+    monkeypatch.setattr(
+        "francis.managed_copy_safe_delta_export_artifact.managed_copy_safe_delta_export_artifacts_readback",
+        lambda **kwargs: {
+            "valid_count": 1,
+            "latest_valid_receipt": {
+                "receipt_id": source["export_artifact_receipt_id"],
+                "receipt_fingerprint": source["export_artifact_receipt_fingerprint"],
+                "artifact_content_fingerprint": source["artifact_content_fingerprint"],
+                "artifact_plan_fingerprint": source["artifact_plan_fingerprint"],
+                "tenant_key": source["tenant_key"],
+                "copy_id": source["copy_id"],
+                "provisioning_receipt_id": source["provisioning_receipt_id"],
+                "isolation_verification_receipt_id": source["isolation_verification_receipt_id"],
+                "review_fingerprint": source["review_fingerprint"],
+                "authorization_decision_receipt_id": source["export_authorization_decision_receipt_id"],
+                "authorization_decision_receipt_fingerprint": source[
+                    "export_authorization_decision_receipt_fingerprint"
+                ],
+            },
+        },
+    )
 
     result = safe_delta_evidence.verify_safe_delta_runtime_source(source["receipt_id"], source["receipt_fingerprint"])
 
-    assert result["valid"] is False
-    assert result["blocker"] == "stage18_safe_delta_runtime_export_artifact_receipt_not_implemented"
+    assert result["valid"] is True
+    assert result["blocker"] == ""
+    assert result["current_state_hash"] == source["export_artifact_receipt_fingerprint"]
 
 
 def test_runtime_recorder_selects_safe_delta_verifier_and_proof_kind(isolated_data: Path) -> None:

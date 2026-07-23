@@ -70,6 +70,11 @@ from francis.managed_copy_safe_delta_export_authorization_decision import (
     record_managed_copy_safe_delta_export_authorization_decision,
 )
 from francis.managed_copy_safe_delta_export_artifact_plan import managed_copy_safe_delta_export_artifact_plan
+from francis.managed_copy_safe_delta_export_artifact import (
+    managed_copy_safe_delta_export_artifact_plan as managed_copy_safe_delta_export_artifact_write_plan,
+    managed_copy_safe_delta_export_artifacts_readback,
+    materialize_managed_copy_safe_delta_export_artifact,
+)
 from francis.managed_copy_rogue_detection_assessment import (
     managed_copy_rogue_detection_assessment_plan,
     managed_copy_rogue_detection_assessments_readback,
@@ -115,6 +120,7 @@ MANAGED_COPIES_SAFE_DELTA_EXPORT_PREFLIGHT_SCOPE = "managed_copies.safe_delta.ex
 MANAGED_COPIES_SAFE_DELTA_EXPORT_AUTHORIZATION_REQUEST_SCOPE = "managed_copies.safe_delta.export.authorization.request"
 MANAGED_COPIES_SAFE_DELTA_EXPORT_AUTHORIZATION_DECISION_SCOPE = "managed_copies.safe_delta.export.authorization.decide"
 MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_PREFLIGHT_SCOPE = "managed_copies.safe_delta.export.artifact.preflight"
+MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_WRITE_SCOPE = "managed_copies.safe_delta.export.artifact.write"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND = "francis.stage18.managed_copies.rogue_recovery_review"
 MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE = "managed_copies.rogue_recovery.write"
@@ -3367,6 +3373,29 @@ def managed_copy_safe_delta_export_artifact_plan_snapshot(payload: dict[str, Any
         "source_id": "managed_copies",
         "required_scope": MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_PREFLIGHT_SCOPE,
     }
+
+
+def managed_copy_safe_delta_export_artifact_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    plan = managed_copy_safe_delta_export_artifact_write_plan(payload, actor=actor)
+    outcome: dict[str, Any] = plan
+    if payload.get("dry_run") is False:
+        outcome = materialize_managed_copy_safe_delta_export_artifact(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("artifact_plan_fingerprint")).strip(),
+            confirmed=payload.get("confirm_export_artifact") is True,
+        )
+    return {
+        **plan,
+        **outcome,
+        "kind": "francis.stage18.managed_copies.safe_delta_export_artifact_write",
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_WRITE_SCOPE,
+    }
+
+
+def managed_copy_safe_delta_export_artifacts_snapshot(**kwargs: Any) -> dict[str, Any]:
+    return managed_copy_safe_delta_export_artifacts_readback(**kwargs)
 
 
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:

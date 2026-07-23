@@ -16,6 +16,7 @@ import francis.managed_copy_safe_delta_export as safe_delta_export
 import francis.managed_copy_safe_delta_export_authorization as safe_delta_export_authorization
 import francis.managed_copy_safe_delta_export_authorization_decision as safe_delta_export_authorization_decision
 import francis.managed_copy_safe_delta_export_artifact_plan as safe_delta_export_artifact_plan
+import francis.managed_copy_safe_delta_export_artifact as safe_delta_export_artifact
 import francis.managed_copy_rogue_detection_assessment as rogue_detection_assessment
 import francis.managed_copy_integrity_scan as integrity_scan
 import francis.managed_copy_integrity_evidence as integrity_evidence
@@ -5064,6 +5065,7 @@ def _configure_safe_delta_receipt_test_sources(
         },
         "isolation": {
             "receipt_id": "managed_copy_isolation_safe_delta_test",
+            "verification_fingerprint": "c" * 64,
             "copy_id": "managed_copy_safe_delta_test",
             "tenant_key": tenant_key,
             "provisioning_receipt_id": "managed_copy_provision_safe_delta_test",
@@ -5103,6 +5105,12 @@ def _configure_safe_delta_receipt_test_sources(
     monkeypatch.setattr(managed_copy_safe_delta, "managed_copy_provision_for_copy", provision_for_copy)
     monkeypatch.setattr(
         managed_copy_safe_delta,
+        "latest_managed_copy_isolation_verification_for_provision",
+        isolation_for_provision,
+    )
+    monkeypatch.setattr(safe_delta_export_artifact, "managed_copy_provision_for_copy", provision_for_copy)
+    monkeypatch.setattr(
+        safe_delta_export_artifact,
         "latest_managed_copy_isolation_verification_for_provision",
         isolation_for_provision,
     )
@@ -6520,6 +6528,116 @@ def test_managed_copy_safe_delta_export_artifact_plan_unscoped_and_production_bl
     )
     assert blocked["ok"] is False
     assert blocked["artifact_plan_fingerprint"] == ""
+
+
+def test_managed_copy_safe_delta_export_artifact_materializes_exact_metadata_and_replays(monkeypatch, tmp_path) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "artifact-materialize")
+    payload = _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state)
+    artifact_plan = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        payload, actor=payload["request_actor"]
+    )
+    write_payload = {
+        **payload,
+        "dry_run": False,
+        "artifact_plan_fingerprint": artifact_plan["artifact_plan_fingerprint"],
+        "confirm_export_artifact": True,
+    }
+    plan = safe_delta_export_artifact.managed_copy_safe_delta_export_artifact_plan(
+        write_payload, actor=payload["request_actor"]
+    )
+    recorded = safe_delta_export_artifact.materialize_managed_copy_safe_delta_export_artifact(
+        plan,
+        provided_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+        confirmed=True,
+    )
+    replay = safe_delta_export_artifact.materialize_managed_copy_safe_delta_export_artifact(
+        plan,
+        provided_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+        confirmed=True,
+    )
+
+    assert recorded["status"] == "export_artifact_materialized", recorded
+    assert recorded["writes_artifact"] is True
+    assert recorded["writes_receipt"] is True
+    assert replay["status"] == "already_materialized"
+    assert replay["writes_artifact"] is False
+    assert replay["receipt"] == recorded["receipt"]
+    owned = safe_delta_export_artifact._owned_paths(plan["request"], create=False)
+    assert owned is not None
+    artifact_directory, receipt_directory, _, _ = owned
+    assert len(list(artifact_directory.glob("*.json"))) == 1
+    assert len(list(receipt_directory.glob("*.json"))) == 1
+    artifact_path = artifact_directory / recorded["receipt"]["artifact_filename"]
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert set(artifact) == safe_delta_export_artifact.ARTIFACT_FIELDS
+    serialized = artifact_path.read_text(encoding="utf-8").lower()
+    for forbidden in (
+        source_state["provision"]["copy_id"].lower(),
+        source_state["provision"]["tenant_key"].lower(),
+        "credential",
+        "destination",
+        "payload",
+        "free_text",
+    ):
+        assert forbidden not in serialized
+    readback = safe_delta_export_artifact.managed_copy_safe_delta_export_artifacts_readback(
+        copy_id=source_state["provision"]["copy_id"],
+        provisioning_receipt_id=source_state["provision"]["receipt_id"],
+        isolation_verification_receipt_id=source_state["isolation"]["receipt_id"],
+        artifact_plan_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+    )
+    assert readback["valid_count"] == 1
+    assert readback["latest_valid_receipt"] == recorded["receipt"]
+    artifact["signal_class"] = "tampered"
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+    tampered = safe_delta_export_artifact.managed_copy_safe_delta_export_artifacts_readback(
+        copy_id=source_state["provision"]["copy_id"],
+        provisioning_receipt_id=source_state["provision"]["receipt_id"],
+        isolation_verification_receipt_id=source_state["isolation"]["receipt_id"],
+        artifact_plan_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+    )
+    assert tampered["valid_count"] == 0
+
+
+def test_managed_copy_safe_delta_export_artifact_denies_before_inspection_and_conflicts(monkeypatch, tmp_path) -> None:
+    root = tmp_path / "artifact-unscoped"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    body = (
+        TestClient(create_app())
+        .post("/managed-copies/safe-delta-export-artifact", json={"request_actor": "unscoped"})
+        .json()
+    )
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.safe_delta.export.artifact.write"
+    assert not root.exists()
+
+    source_state, _ = _configure_safe_delta_receipt_test_sources(monkeypatch, tmp_path.parent / "artifact-conflict")
+    payload = _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state)
+    artifact_plan = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        payload, actor=payload["request_actor"]
+    )
+    write_payload = {
+        **payload,
+        "dry_run": False,
+        "artifact_plan_fingerprint": artifact_plan["artifact_plan_fingerprint"],
+        "confirm_export_artifact": True,
+    }
+    plan = safe_delta_export_artifact.managed_copy_safe_delta_export_artifact_plan(
+        write_payload, actor=payload["request_actor"]
+    )
+    owned = safe_delta_export_artifact._owned_paths(plan["request"], create=True)
+    assert owned is not None
+    artifact_directory, _, _, _ = owned
+    conflict_path = artifact_directory / f"{artifact_plan['artifact_plan_fingerprint'][:16]}.json"
+    conflict_path.write_text('{"raw_payload":"do-not-overwrite"}', encoding="utf-8")
+    blocked = safe_delta_export_artifact.materialize_managed_copy_safe_delta_export_artifact(
+        plan,
+        provided_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+        confirmed=True,
+    )
+    assert blocked["error"] == "safe_delta_export_artifact_conflict"
+    assert conflict_path.read_text(encoding="utf-8") == '{"raw_payload":"do-not-overwrite"}'
 
 
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(

@@ -1486,6 +1486,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Produces no halt, quarantine, evidence-preservation, replacement, restore, incident, or runtime receipt.",
     ),
     AuthorityRule(
+        family="managed_copies_safe_delta_export_artifact_write",
+        prefixes=("/managed-copies/safe-delta-export-artifact",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.safe_delta.export.artifact.write",
+        approval_requirement="fresh exact approved artifact plan plus explicit confirmation",
+        receipt_behavior="one immutable metadata-only artifact and one mutually bound immutable receipt",
+        denial_behavior="api_permission_denied before lineage inspection, directory creation, or artifact write",
+        governance_maturity="permission_gated_confirmed_local_artifact_only",
+        notes="Uses no network, destination, connector, import, learning, tenant-state mutation, grant, or live invocation.",
+    ),
+    AuthorityRule(
         family="managed_copies_safe_delta_export_artifact_plan",
         prefixes=("/managed-copies/safe-delta-export-artifact-plan",),
         required_actor="payload.request_actor",
