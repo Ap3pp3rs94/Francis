@@ -119,7 +119,7 @@ def test_malformed_fixture_and_injected_sources_fail_exact_schema(
     assert result["blocker"] == "stage18_safe_delta_runtime_source_receipt_invalid"
 
 
-def test_owned_lineage_accepts_independently_validated_export_artifact(
+def test_owned_artifact_lineage_stops_at_missing_canonical_invocation_receipt(
     isolated_data: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -199,9 +199,10 @@ def test_owned_lineage_accepts_independently_validated_export_artifact(
 
     result = safe_delta_evidence.verify_safe_delta_runtime_source(source["receipt_id"], source["receipt_fingerprint"])
 
-    assert result["valid"] is True
-    assert result["blocker"] == ""
-    assert result["current_state_hash"] == source["export_artifact_receipt_fingerprint"]
+    assert result["valid"] is False
+    assert result["blocker"] == "stage18_safe_delta_runtime_canonical_invocation_receipt_not_implemented"
+    assert result["evidence_class"] == ""
+    assert result["current_state_hash"] == ""
 
 
 def test_runtime_recorder_selects_safe_delta_verifier_and_proof_kind(isolated_data: Path) -> None:

@@ -176,12 +176,28 @@ def materialize_managed_copy_safe_delta_export_artifact(
             ):
                 return _recorded(existing_receipt, False)
             return _blocked("safe_delta_export_artifact_conflict")
+        artifact_created = False
+        receipt_created = False
         try:
             _publish_exclusive(artifact_path, artifact_bytes)
+            artifact_created = True
             _publish_exclusive(receipt_path, _encode(receipt))
+            receipt_created = True
         except OSError:
+            _rollback_created(
+                artifact_path=artifact_path,
+                artifact_created=artifact_created,
+                receipt_path=receipt_path,
+                receipt_created=receipt_created,
+            )
             return _blocked("safe_delta_export_artifact_write_failed")
         if not _receipt_matches_artifact(receipt, artifact_path, artifact):
+            _rollback_created(
+                artifact_path=artifact_path,
+                artifact_created=artifact_created,
+                receipt_path=receipt_path,
+                receipt_created=receipt_created,
+            )
             return _blocked("safe_delta_export_artifact_write_verification_failed")
         return _recorded(receipt, True)
 
@@ -444,6 +460,19 @@ def _publish_exclusive(path: Path, content: bytes) -> None:
             os.link(temp, path)
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _rollback_created(
+    *,
+    artifact_path: Path,
+    artifact_created: bool,
+    receipt_path: Path,
+    receipt_created: bool,
+) -> None:
+    if receipt_created:
+        receipt_path.unlink(missing_ok=True)
+    if artifact_created:
+        artifact_path.unlink(missing_ok=True)
 
 
 def _read(path: Path) -> tuple[bool, dict[str, Any]]:

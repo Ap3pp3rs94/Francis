@@ -211,7 +211,7 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
         != source["export_authorization_decision_receipt_fingerprint"]
     ):
         return "stage18_safe_delta_runtime_export_artifact_lineage_invalid"
-    return ""
+    return "stage18_safe_delta_runtime_canonical_invocation_receipt_not_implemented"
 
 
 def _valid_source(source: dict[str, Any]) -> bool:

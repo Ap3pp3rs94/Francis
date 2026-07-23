@@ -6640,6 +6640,60 @@ def test_managed_copy_safe_delta_export_artifact_denies_before_inspection_and_co
     assert conflict_path.read_text(encoding="utf-8") == '{"raw_payload":"do-not-overwrite"}'
 
 
+def test_managed_copy_safe_delta_export_artifact_rolls_back_second_publication_failure_and_retries(
+    monkeypatch, tmp_path
+) -> None:
+    source_state, _ = _configure_safe_delta_receipt_test_sources(
+        monkeypatch, tmp_path.parent / "artifact-pair-rollback"
+    )
+    payload = _safe_delta_export_artifact_plan_fixture(monkeypatch, source_state)
+    artifact_plan = safe_delta_export_artifact_plan.managed_copy_safe_delta_export_artifact_plan(
+        payload, actor=payload["request_actor"]
+    )
+    write_payload = {
+        **payload,
+        "dry_run": False,
+        "artifact_plan_fingerprint": artifact_plan["artifact_plan_fingerprint"],
+        "confirm_export_artifact": True,
+    }
+    plan = safe_delta_export_artifact.managed_copy_safe_delta_export_artifact_plan(
+        write_payload, actor=payload["request_actor"]
+    )
+    owned = safe_delta_export_artifact._owned_paths(plan["request"], create=True)
+    assert owned is not None
+    artifact_directory, receipt_directory, _, _ = owned
+    original_publish = safe_delta_export_artifact._publish_exclusive
+    publication_count = 0
+
+    def fail_receipt_publication(path: Path, content: bytes) -> None:
+        nonlocal publication_count
+        publication_count += 1
+        if publication_count == 2:
+            raise OSError("injected receipt publication failure")
+        original_publish(path, content)
+
+    monkeypatch.setattr(safe_delta_export_artifact, "_publish_exclusive", fail_receipt_publication)
+    failed = safe_delta_export_artifact.materialize_managed_copy_safe_delta_export_artifact(
+        plan,
+        provided_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+        confirmed=True,
+    )
+
+    assert failed["error"] == "safe_delta_export_artifact_write_failed"
+    assert list(artifact_directory.iterdir()) == []
+    assert list(receipt_directory.iterdir()) == []
+
+    monkeypatch.setattr(safe_delta_export_artifact, "_publish_exclusive", original_publish)
+    retried = safe_delta_export_artifact.materialize_managed_copy_safe_delta_export_artifact(
+        plan,
+        provided_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+        confirmed=True,
+    )
+    assert retried["status"] == "export_artifact_materialized"
+    assert len(list(artifact_directory.glob("*.json"))) == 1
+    assert len(list(receipt_directory.glob("*.json"))) == 1
+
+
 def test_managed_copy_safe_delta_malformed_existing_receipt_fails_closed(
     monkeypatch,
     tmp_path,
