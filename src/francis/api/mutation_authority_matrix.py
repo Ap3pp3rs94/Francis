@@ -1552,7 +1552,10 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
         required_actor="payload.request_actor",
         required_scope="managed_copies.pilot_lease.manage",
-        approval_requirement="exact bounded lease package and operator-decision fingerprint",
+        approval_requirement=(
+            "exact approved managed_copies.pilot_lease.issue record; server-loaded immutable lease descriptor, "
+            "descriptor fingerprint, expiry, revocation, and issuer binding"
+        ),
         receipt_behavior="process-local lease state only; no persistence",
         denial_behavior="api_permission_denied before schema processing or process-local registry mutation",
         governance_maturity="permission_gated_process_local_exact_lease_authority",

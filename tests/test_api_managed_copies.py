@@ -1622,6 +1622,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
             operator_decision_fingerprint="b" * 64,
         )
     )
+    pilot_runtime._PILOT_LEASES[pilot_lease_id] = pilot_registry._leases[pilot_lease_id]
     pilot_payload = {
         "request_actor": actor,
         "pilot_lease_id": pilot_lease_id,

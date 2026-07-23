@@ -27,6 +27,8 @@ from francis.process_identity import process_identity, terminate_owned_process
 
 PILOT_RUNTIME_SCOPE = "managed_copies.pilot_runtime.execute"
 PILOT_LEASE_MANAGE_SCOPE = "managed_copies.pilot_lease.manage"
+PILOT_LEASE_ISSUE_ACTION = "managed_copies.pilot_lease.issue"
+PILOT_LEASE_ISSUE_CONTRACT = "stage18_managed_copy_pilot_lease_issue_v1"
 PILOT_RUNTIME_PROPOSAL_ACTION = "managed_copies.pilot_runtime.propose"
 PILOT_RUNTIME_START_ACTION = "managed_copies.pilot_runtime.start"
 PILOT_RUNTIME_STOP_ACTION = "managed_copies.pilot_runtime.stop"
@@ -38,9 +40,13 @@ PILOT_RUNTIME_EVIDENCE_CLASS = "local_non_fixture_runtime"
 
 PILOT_RUNTIME_LEASES = PilotScopeLeaseRegistry()
 _PILOT_LEASES: dict[str, PilotScopeLease] = {}
+_PILOT_LEASE_APPROVAL_FINGERPRINTS: dict[str, str] = {}
+_PILOT_LEASE_ISSUERS: dict[str, str] = {}
 _LOCK = threading.RLock()
-_LEASE_ISSUE_FIELDS = {
-    "request_actor",
+_LEASE_ISSUE_FIELDS = {"request_actor", "approval_id", "confirm_issue"}
+_LEASE_DESCRIPTOR_FIELDS = {
+    "contract",
+    "issuer_actor",
     "lease_id",
     "actor_id",
     "package_id",
@@ -51,6 +57,13 @@ _LEASE_ISSUE_FIELDS = {
     "expires_at_ms",
     "runtime_nonce",
     "operator_decision_fingerprint",
+}
+_LEASE_APPROVAL_PAYLOAD_FIELDS = {
+    "contract",
+    "descriptor",
+    "descriptor_fingerprint",
+    "expires_at_unix_ms",
+    "revoked",
 }
 _LEASE_LOOKUP_FIELDS = {"request_actor", "lease_id"}
 _PAYLOAD_FIELDS = {
@@ -75,6 +88,41 @@ _APPROVAL_PAYLOAD_FIELDS = {
     "expires_at_unix_ms",
     "revoked",
 }
+_STARTUP_RECEIPT_FIELDS = {
+    "kind",
+    "contract",
+    "receipt_id",
+    "status",
+    "actor",
+    "copy_id",
+    "tenant_key",
+    "pilot_run_id",
+    "pilot_lease_id",
+    "approval_id",
+    "provisioning_receipt_id",
+    "isolation_verification_receipt_id",
+    "descriptor_fingerprint",
+    "runtime_identity",
+    "pid",
+    "process_creation_token",
+    "parent_pid",
+    "launcher_pid",
+    "launcher_creation_token",
+    "controller_pid",
+    "controller_creation_token",
+    "operation",
+    "operation_receipt_fingerprint",
+    "output_fingerprint",
+    "state_path",
+    "trace_id",
+    "evidence_class",
+    "fixture_runtime",
+    "docker_isolation",
+    "canonical_runtime_evidence_recorded",
+    "stage18_ready",
+    "recorded_at_unix_ms",
+    "startup_fingerprint",
+}
 
 
 def pilot_runtime_contract_snapshot() -> dict[str, Any]:
@@ -85,6 +133,7 @@ def pilot_runtime_contract_snapshot() -> dict[str, Any]:
         "status": "local_process_software_available",
         "required_scope": PILOT_RUNTIME_SCOPE,
         "lease_manage_scope": PILOT_LEASE_MANAGE_SCOPE,
+        "lease_issue_action": PILOT_LEASE_ISSUE_ACTION,
         "proposal_action": PILOT_RUNTIME_PROPOSAL_ACTION,
         "start_action": PILOT_RUNTIME_START_ACTION,
         "stop_action": PILOT_RUNTIME_STOP_ACTION,
@@ -101,8 +150,74 @@ def pilot_runtime_contract_snapshot() -> dict[str, Any]:
 def issue_pilot_runtime_lease(payload: dict[str, Any]) -> dict[str, Any]:
     if set(payload) != _LEASE_ISSUE_FIELDS:
         return _blocked("managed_copy_pilot_lease_payload_schema_invalid")
+    if payload.get("confirm_issue") is not True:
+        return _blocked("managed_copy_pilot_lease_confirmation_required")
+    actor = _identifier(payload.get("request_actor"))
+    approval_id = _identifier(payload.get("approval_id"))
+    if not actor or not approval_id:
+        return _blocked("managed_copy_pilot_lease_issue_binding_missing")
+    initial = _pilot_lease_from_approval(approval_id, issuer_actor=actor)
+    if initial["error"]:
+        return _blocked(initial["error"])
+    with _LOCK:
+        final = _pilot_lease_from_approval(approval_id, issuer_actor=actor)
+        if (
+            final["error"]
+            or final["approval_fingerprint"] != initial["approval_fingerprint"]
+            or final["descriptor_fingerprint"] != initial["descriptor_fingerprint"]
+        ):
+            return _blocked(final["error"] or "managed_copy_pilot_lease_approval_changed_under_lock")
+        lease = final["lease"]
+        assert isinstance(lease, PilotScopeLease)
+        existing = _PILOT_LEASES.get(lease.lease_id)
+        if existing is not None:
+            state = PILOT_RUNTIME_LEASES.state(lease.lease_id)
+            if (
+                existing == lease
+                and state is PilotLeaseState.ACTIVE
+                and _PILOT_LEASE_APPROVAL_FINGERPRINTS.get(lease.lease_id) == final["approval_fingerprint"]
+            ):
+                return _lease_result(existing, status="already_issued")
+            return _blocked("managed_copy_pilot_lease_conflicting_replay")
+        try:
+            issued = PILOT_RUNTIME_LEASES.issue(lease)
+        except ValueError as exc:
+            return _blocked(str(exc))
+        _PILOT_LEASES[issued.lease_id] = issued
+        _PILOT_LEASE_APPROVAL_FINGERPRINTS[issued.lease_id] = final["approval_fingerprint"]
+        _PILOT_LEASE_ISSUERS[issued.lease_id] = actor
+    return _lease_result(issued, status="issued")
+
+
+def _pilot_lease_from_approval(approval_id: str, *, issuer_actor: str) -> dict[str, Any]:
+    approval = _read_json(data_dir() / "approvals" / "approved" / f"{approval_id}.json")
+    payload = approval.get("payload")
+    descriptor = payload.get("descriptor") if isinstance(payload, dict) else None
+    if (
+        set(approval) != _APPROVAL_FIELDS
+        or not isinstance(payload, dict)
+        or set(payload) != _LEASE_APPROVAL_PAYLOAD_FIELDS
+        or not isinstance(descriptor, dict)
+        or set(descriptor) != _LEASE_DESCRIPTOR_FIELDS
+        or approval.get("id") != approval_id
+        or approval.get("action") != PILOT_LEASE_ISSUE_ACTION
+        or approval.get("status") != "approved"
+        or approval.get("decision") not in {"approve", "approved"}
+        or not _identifier(approval.get("decision_actor"))
+        or payload.get("contract") != PILOT_LEASE_ISSUE_CONTRACT
+        or descriptor.get("contract") != PILOT_LEASE_ISSUE_CONTRACT
+        or descriptor.get("issuer_actor") != issuer_actor
+        or payload.get("revoked") is not False
+    ):
+        return _lease_approval_blocked("managed_copy_pilot_lease_approval_binding_mismatch")
+    descriptor_fingerprint = _text(payload.get("descriptor_fingerprint"))
+    if _fingerprint(descriptor) != descriptor_fingerprint:
+        return _lease_approval_blocked("managed_copy_pilot_lease_approval_descriptor_tampered")
+    expires = _exact_int(payload.get("expires_at_unix_ms"), 1, 2**63 - 1)
+    if expires <= int(time.time() * 1000):
+        return _lease_approval_blocked("managed_copy_pilot_lease_approval_expired")
     try:
-        raw_bindings = payload.get("bindings")
+        raw_bindings = descriptor.get("bindings")
         if not isinstance(raw_bindings, list):
             raise ValueError("invalid_lease_bindings")
         bindings = tuple(
@@ -118,26 +233,29 @@ def issue_pilot_runtime_lease(payload: dict[str, Any]) -> dict[str, Any]:
         if len(bindings) != len(raw_bindings):
             raise ValueError("invalid_lease_bindings")
         lease = PilotScopeLease(
-            lease_id=payload["lease_id"],
-            actor_id=payload["actor_id"],
-            package_id=payload["package_id"],
-            package_fingerprint=payload["package_fingerprint"],
-            pilot_run_id=payload["pilot_run_id"],
+            lease_id=descriptor["lease_id"],
+            actor_id=descriptor["actor_id"],
+            package_id=descriptor["package_id"],
+            package_fingerprint=descriptor["package_fingerprint"],
+            pilot_run_id=descriptor["pilot_run_id"],
             bindings=bindings,
-            issued_at_ms=payload["issued_at_ms"],
-            expires_at_ms=payload["expires_at_ms"],
-            runtime_nonce=payload["runtime_nonce"],
-            operator_decision_fingerprint=payload["operator_decision_fingerprint"],
+            issued_at_ms=descriptor["issued_at_ms"],
+            expires_at_ms=descriptor["expires_at_ms"],
+            runtime_nonce=descriptor["runtime_nonce"],
+            operator_decision_fingerprint=descriptor["operator_decision_fingerprint"],
         ).validated()
     except (KeyError, TypeError, ValueError) as exc:
-        return _blocked(str(exc) or "managed_copy_pilot_lease_invalid")
-    with _LOCK:
-        try:
-            issued = PILOT_RUNTIME_LEASES.issue(lease)
-        except ValueError as exc:
-            return _blocked(str(exc))
-        _PILOT_LEASES[issued.lease_id] = issued
-    return _lease_result(issued, status="issued")
+        return _lease_approval_blocked(str(exc) or "managed_copy_pilot_lease_invalid")
+    return {
+        "error": "",
+        "lease": lease,
+        "descriptor_fingerprint": descriptor_fingerprint,
+        "approval_fingerprint": _fingerprint(approval),
+    }
+
+
+def _lease_approval_blocked(error: str) -> dict[str, Any]:
+    return {"error": error, "lease": None, "descriptor_fingerprint": "", "approval_fingerprint": ""}
 
 
 def pilot_runtime_lease_status(payload: dict[str, Any]) -> dict[str, Any]:
@@ -147,8 +265,11 @@ def pilot_runtime_lease_status(payload: dict[str, Any]) -> dict[str, Any]:
     with _LOCK:
         lease = _PILOT_LEASES.get(lease_id)
         state = PILOT_RUNTIME_LEASES.state(lease_id)
+        issuer = _PILOT_LEASE_ISSUERS.get(lease_id)
     if lease is None or state is None:
         return _blocked("missing_pilot_lease")
+    if issuer != _identifier(payload.get("request_actor")):
+        return _blocked("managed_copy_pilot_lease_manager_mismatch")
     return _lease_result(lease, status=state.value)
 
 
@@ -158,6 +279,11 @@ def revoke_pilot_runtime_lease(payload: dict[str, Any]) -> dict[str, Any]:
     lease_id = _identifier(payload.get("lease_id"))
     with _LOCK:
         lease = _PILOT_LEASES.get(lease_id)
+        issuer = _PILOT_LEASE_ISSUERS.get(lease_id)
+        if lease is None:
+            return _blocked("missing_pilot_lease")
+        if issuer != _identifier(payload.get("request_actor")):
+            return _blocked("managed_copy_pilot_lease_manager_mismatch")
         decision = PILOT_RUNTIME_LEASES.revoke(lease_id)
     if lease is None or not decision.allowed:
         return _blocked(decision.reason)
@@ -285,13 +411,15 @@ def pilot_runtime_proposal(payload: dict[str, Any], *, actor: str, stage17_close
 
 
 def verify_pilot_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
-    receipt = _startup_receipt(_identifier(source_receipt_id))
+    receipt = _raw_startup_receipt(_identifier(source_receipt_id))
     if not receipt:
         return _source_blocked("stage18_copy_creation_runtime_startup_receipt_missing")
-    if receipt.get("startup_fingerprint") != source_receipt_fingerprint:
-        return _source_blocked("managed_copy_pilot_runtime_source_fingerprint_mismatch")
     if receipt.get("fixture_runtime") is not False:
         return _source_blocked("managed_copy_pilot_runtime_fixture_source_rejected")
+    if not _valid_startup_receipt(receipt):
+        return _source_blocked("managed_copy_pilot_runtime_source_receipt_invalid")
+    if receipt.get("startup_fingerprint") != source_receipt_fingerprint:
+        return _source_blocked("managed_copy_pilot_runtime_source_fingerprint_mismatch")
     state_dir = _state_dir(receipt)
     if state_dir is None:
         return _source_blocked("managed_copy_pilot_runtime_source_path_invalid")
@@ -302,6 +430,14 @@ def verify_pilot_runtime_source(source_receipt_id: str, source_receipt_fingerpri
     identity = process_identity(_exact_int(receipt.get("pid"), 1, 2**31 - 1))
     if identity.get("creation_token") != receipt.get("process_creation_token"):
         return _source_blocked("managed_copy_pilot_runtime_source_process_mismatch")
+    controller_identity = process_identity(_exact_int(receipt.get("controller_pid"), 1, 2**31 - 1))
+    if (
+        receipt.get("launcher_pid") != receipt.get("pid")
+        or receipt.get("launcher_creation_token") != receipt.get("process_creation_token")
+        or identity.get("parent_pid") != receipt.get("controller_pid")
+        or controller_identity.get("creation_token") != receipt.get("controller_creation_token")
+    ):
+        return _source_blocked("managed_copy_pilot_runtime_source_controller_mismatch")
     if int(time.time() * 1000) - _exact_int(heartbeat.get("observed_at_unix_ms"), 1, 2**63 - 1) >= 3_000:
         return _source_blocked("managed_copy_pilot_runtime_source_heartbeat_stale")
     provision = managed_copy_provision_for_copy(
@@ -349,8 +485,8 @@ def verify_pilot_runtime_source(source_receipt_id: str, source_receipt_fingerpri
         pid=receipt["pid"],
         creation_token=receipt["process_creation_token"],
         runtime_parent_pid=_exact_int(identity.get("parent_pid"), 1, 2**31 - 1),
-        launcher_pid=_exact_int(identity.get("parent_pid"), 1, 2**31 - 1),
-        controller_pid=os.getpid(),
+        launcher_pid=_exact_int(receipt.get("launcher_pid"), 1, 2**31 - 1),
+        controller_pid=_exact_int(receipt.get("controller_pid"), 1, 2**31 - 1),
     )
     if blocker:
         return _source_blocked(blocker)
@@ -376,6 +512,10 @@ def verify_pilot_runtime_source(source_receipt_id: str, source_receipt_fingerpri
     current = {
         "pid": receipt["pid"],
         "process_creation_token": receipt["process_creation_token"],
+        "launcher_pid": receipt["launcher_pid"],
+        "launcher_creation_token": receipt["launcher_creation_token"],
+        "controller_pid": receipt["controller_pid"],
+        "controller_creation_token": receipt["controller_creation_token"],
         "heartbeat": {
             key: heartbeat.get(key)
             for key in (
@@ -425,6 +565,9 @@ def start_pilot_runtime(payload: dict[str, Any], *, actor: str, stage17_closed: 
             for item in pilot_runtime_status_snapshot(plan["copy_id"])["items"]
         ):
             return _blocked("managed_copy_pilot_runtime_active_conflict")
+        lease_blocker = _pilot_lease_start_blocker(plan["descriptor"])
+        if lease_blocker:
+            return _blocked(lease_blocker)
         result = _launch(plan, payload["operation_input"])
         if result.get("ok") is not True:
             PILOT_RUNTIME_LEASES.seal(_identifier(payload.get("pilot_lease_id")))
@@ -594,6 +737,8 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
         time.sleep(0.025)
     creation_token = _exact_int(runtime_identity.get("creation_token"), 1, 2**127)
     runtime_parent_pid = _exact_int(runtime_identity.get("parent_pid"), 1, 2**31 - 1)
+    controller_identity = process_identity(os.getpid())
+    controller_creation_token = _exact_int(controller_identity.get("creation_token"), 1, 2**127)
     blocker = _runtime_records_blocker(
         handshake,
         heartbeat,
@@ -627,6 +772,10 @@ def _launch(plan: dict[str, Any], operation_input: object) -> dict[str, Any]:
         "pid": runtime_pid,
         "process_creation_token": creation_token,
         "parent_pid": runtime_parent_pid,
+        "launcher_pid": process.pid,
+        "launcher_creation_token": launcher_token,
+        "controller_pid": os.getpid(),
+        "controller_creation_token": controller_creation_token,
         "operation": "tenant_work_briefing",
         "operation_receipt_fingerprint": operation["receipt_fingerprint"],
         "output_fingerprint": briefing["output_fingerprint"],
@@ -701,6 +850,39 @@ def _approval_blocker(approval: dict[str, Any], descriptor: dict[str, Any], fing
         return "managed_copy_pilot_runtime_approval_binding_mismatch"
     expires = _exact_int(payload.get("expires_at_unix_ms"), 1, 2**63 - 1)
     return "managed_copy_pilot_runtime_approval_expired" if expires <= int(time.time() * 1000) else ""
+
+
+def _pilot_lease_start_blocker(descriptor: dict[str, Any]) -> str:
+    lease_id = _text(descriptor.get("pilot_lease_id"))
+    lease = _PILOT_LEASES.get(lease_id)
+    context = PILOT_RUNTIME_LEASES.lease_context(lease_id)
+    state = PILOT_RUNTIME_LEASES.state(lease_id)
+    if lease is None:
+        return "managed_copy_pilot_runtime_lease_missing_under_lock"
+    if state is not PilotLeaseState.ACTIVE:
+        return f"managed_copy_pilot_runtime_lease_{state.value if state else 'missing'}_under_lock"
+    expected = {
+        "lease_id": lease.lease_id,
+        "actor_id": lease.actor_id,
+        "package_id": lease.package_id,
+        "package_fingerprint": lease.package_fingerprint,
+        "pilot_run_id": lease.pilot_run_id,
+        "runtime_nonce": lease.runtime_nonce,
+        "operator_decision_fingerprint": lease.operator_decision_fingerprint,
+    }
+    if context != expected or any(
+        descriptor.get(key) != value
+        for key, value in (
+            ("actor", lease.actor_id),
+            ("package_id", lease.package_id),
+            ("package_fingerprint", lease.package_fingerprint),
+            ("pilot_run_id", lease.pilot_run_id),
+            ("runtime_nonce_hash", _sha256(lease.runtime_nonce)),
+            ("operator_decision_fingerprint", lease.operator_decision_fingerprint),
+        )
+    ):
+        return "managed_copy_pilot_runtime_lease_lineage_changed_under_lock"
+    return ""
 
 
 def _runtime_records_blocker(
@@ -805,9 +987,14 @@ def _guarded_run_dir(provision: dict[str, Any], isolation: dict[str, Any], domai
 
 
 def _startup_receipt(receipt_id: str) -> dict[str, Any]:
+    item = _raw_startup_receipt(receipt_id)
+    return item if _valid_startup_receipt(item) else {}
+
+
+def _raw_startup_receipt(receipt_id: str) -> dict[str, Any]:
     for path in (data_dir() / "managed_copies" / "tenants").glob("*/receipts/pilot_runtime/*/startup.json"):
         item = _read_json(path)
-        if item.get("receipt_id") == receipt_id and _valid_startup_receipt(item):
+        if item.get("receipt_id") == receipt_id:
             return item
     return {}
 
@@ -815,7 +1002,8 @@ def _startup_receipt(receipt_id: str) -> dict[str, Any]:
 def _valid_startup_receipt(receipt: dict[str, Any]) -> bool:
     fingerprint = receipt.get("startup_fingerprint")
     return bool(
-        isinstance(fingerprint, str)
+        set(receipt) == _STARTUP_RECEIPT_FIELDS
+        and isinstance(fingerprint, str)
         and _fingerprint({key: value for key, value in receipt.items() if key != "startup_fingerprint"}) == fingerprint
         and receipt.get("kind") == "francis.stage18.managed_copies.pilot_runtime_startup_receipt"
         and receipt.get("contract") == PILOT_RUNTIME_CONTRACT
@@ -828,6 +1016,10 @@ def _valid_startup_receipt(receipt: dict[str, Any]) -> bool:
         and _identifier(receipt.get("pilot_run_id"))
         and _exact_int(receipt.get("pid"), 1, 2**31 - 1)
         and _exact_int(receipt.get("process_creation_token"), 1, 2**127)
+        and receipt.get("launcher_pid") == receipt.get("pid")
+        and receipt.get("launcher_creation_token") == receipt.get("process_creation_token")
+        and _exact_int(receipt.get("controller_pid"), 1, 2**31 - 1)
+        and _exact_int(receipt.get("controller_creation_token"), 1, 2**127)
     )
 
 
@@ -839,17 +1031,8 @@ def _lease_result(lease: PilotScopeLease, *, status: str) -> dict[str, Any]:
         "lease": {
             "lease_id": lease.lease_id,
             "actor_id": lease.actor_id,
-            "package_id": lease.package_id,
-            "package_fingerprint": lease.package_fingerprint,
             "pilot_run_id": lease.pilot_run_id,
-            "bindings": [
-                {"scope": item.scope, "route": item.route, "method": item.method, "action": item.action}
-                for item in lease.bindings
-            ],
-            "issued_at_ms": lease.issued_at_ms,
             "expires_at_ms": lease.expires_at_ms,
-            "runtime_nonce_hash": _sha256(lease.runtime_nonce),
-            "operator_decision_fingerprint": lease.operator_decision_fingerprint,
             "state": status,
         },
         "writes_persistent_state": False,
