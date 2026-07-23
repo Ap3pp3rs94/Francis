@@ -20,17 +20,29 @@ from francis.managed_copy_safe_delta_export_artifact_plan import (
     managed_copy_safe_delta_export_artifact_plan as build_artifact_plan,
 )
 
-CONTRACT = "stage18_managed_copy_safe_delta_export_artifact_v1"
+CONTRACT = "stage18_managed_copy_safe_delta_export_artifact_v2"
 ARTIFACT_KIND = "francis.stage18.managed_copies.safe_delta_export_artifact"
 RECEIPT_KIND = "francis.stage18.managed_copies.safe_delta_export_artifact_receipt"
 READBACK_KIND = "francis.stage18.managed_copies.safe_delta_export_artifacts"
-SIGNAL_CLASS = "approved_non_private_signal"
+CANDIDATE_FIELDS = {
+    "signal_fingerprint",
+    "summary_fingerprint",
+    "lineage_fingerprint",
+    "source_record_count",
+    "contains_raw_private_data",
+    "contains_tenant_identifiers",
+    "redaction_review_complete",
+    "abstraction_level",
+    "retention_class",
+}
+_ABSTRACTION_LEVELS = {"metadata_only", "class_level", "aggregate"}
 ARTIFACT_FIELDS = {
     "kind",
     "contract",
     "artifact_media_type",
     "artifact_schema_class",
     "signal_class",
+    "candidate",
     "review_fingerprint",
     "authorization_decision_fingerprint",
     "artifact_plan_fingerprint",
@@ -111,7 +123,10 @@ def managed_copy_safe_delta_export_artifact_plan(payload: dict[str, Any], *, act
     expected = _text(plan.get("artifact_plan_fingerprint"))
     if not expected or provided != expected:
         blockers.append("safe_delta_export_artifact_plan_fingerprint_mismatch")
-    artifact = _artifact(plan) if not blockers else {}
+    review = _review_envelope(plan_payload)
+    if not review:
+        blockers.append("safe_delta_export_artifact_review_receipt_invalid")
+    artifact = _artifact(plan, review) if not blockers else {}
     return {
         "ok": not blockers,
         "status": "export_artifact_ready" if not blockers else "blocked",
@@ -151,7 +166,10 @@ def materialize_managed_copy_safe_delta_export_artifact(
         artifact_directory, receipt_directory, provision, isolation = owned
         artifact_path = artifact_directory / f"{expected[:16]}.json"
         receipt_path = receipt_directory / f"{expected[:16]}.json"
-        artifact = _artifact(fresh)
+        review = _review_envelope(request)
+        if not review:
+            return _blocked("safe_delta_export_artifact_review_receipt_invalid")
+        artifact = _artifact(fresh, review)
         artifact_bytes = _encode(artifact)
         artifact_fp = _bytes_fingerprint(artifact_bytes)
         receipt = _receipt(
@@ -273,7 +291,7 @@ def _owned_paths(request: dict[str, Any], *, create: bool) -> tuple[Path, Path, 
     return artifact_directory, receipt_directory, provision, isolation
 
 
-def _artifact(plan: dict[str, Any]) -> dict[str, Any]:
+def _artifact(plan: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
     request = plan.get("request")
     request = request if isinstance(request, dict) else {}
     return {
@@ -281,7 +299,8 @@ def _artifact(plan: dict[str, Any]) -> dict[str, Any]:
         "contract": CONTRACT,
         "artifact_media_type": MEDIA_TYPE,
         "artifact_schema_class": SCHEMA_CLASS,
-        "signal_class": SIGNAL_CLASS,
+        "signal_class": review["signal_class"],
+        "candidate": dict(review["candidate"]),
         "review_fingerprint": _text(request.get("review_fingerprint")),
         "authorization_decision_fingerprint": _text(request.get("authorization_decision_fingerprint")),
         "artifact_plan_fingerprint": _text(plan.get("artifact_plan_fingerprint")),
@@ -401,19 +420,66 @@ def _receipt_matches_artifact(receipt: dict[str, Any], path: Path, artifact: dic
         artifact_bytes = path.read_bytes()
     except OSError:
         return False
+    review = _review_envelope(receipt)
     return bool(
-        set(artifact) == ARTIFACT_FIELDS
+        review
+        and set(artifact) == ARTIFACT_FIELDS
         and artifact.get("kind") == ARTIFACT_KIND
         and artifact.get("contract") == CONTRACT
         and artifact.get("artifact_media_type") == MEDIA_TYPE
         and artifact.get("artifact_schema_class") == SCHEMA_CLASS
-        and artifact.get("signal_class") == SIGNAL_CLASS
+        and artifact.get("signal_class") == review.get("signal_class")
+        and artifact.get("candidate") == review.get("candidate")
+        and _valid_candidate(artifact.get("candidate"))
         and artifact.get("review_fingerprint") == receipt.get("review_fingerprint")
         and artifact.get("authorization_decision_fingerprint") == receipt.get("authorization_decision_fingerprint")
         and artifact.get("artifact_plan_fingerprint") == receipt.get("artifact_plan_fingerprint")
         and artifact_bytes == _encode(artifact)
         and len(artifact_bytes) == receipt.get("artifact_byte_count")
         and _bytes_fingerprint(artifact_bytes) == receipt.get("artifact_content_fingerprint")
+    )
+
+
+def _review_envelope(lineage: dict[str, Any]) -> dict[str, Any]:
+    from francis.managed_copy_safe_delta import managed_copy_safe_delta_review_receipts_readback
+
+    readback = managed_copy_safe_delta_review_receipts_readback(
+        copy_id=_text(lineage.get("copy_id")),
+        provisioning_receipt_id=_text(lineage.get("provisioning_receipt_id")),
+        isolation_verification_receipt_id=_text(lineage.get("isolation_verification_receipt_id")),
+        review_fingerprint=_text(lineage.get("review_fingerprint")),
+        limit=20,
+    )
+    receipt = readback.get("latest_valid_receipt")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    candidate = receipt.get("candidate")
+    if not isinstance(candidate, dict):
+        return {}
+    if (
+        readback.get("receipt_set_valid") is not True
+        or readback.get("valid_count") != 1
+        or receipt.get("live_source_boundary_aligned") is not True
+        or receipt.get("review_fingerprint") != lineage.get("review_fingerprint")
+        or not _text(receipt.get("signal_class"))
+        or not _valid_candidate(candidate)
+    ):
+        return {}
+    return {"signal_class": _text(receipt.get("signal_class")), "candidate": dict(candidate)}
+
+
+def _valid_candidate(value: Any) -> bool:
+    if not isinstance(value, dict) or set(value) != CANDIDATE_FIELDS:
+        return False
+    source_record_count = value.get("source_record_count")
+    return bool(
+        all(_sha(value.get(field)) for field in ("signal_fingerprint", "summary_fingerprint", "lineage_fingerprint"))
+        and type(source_record_count) is int
+        and 1 <= source_record_count <= 1_000_000
+        and value.get("contains_raw_private_data") is False
+        and value.get("contains_tenant_identifiers") is False
+        and value.get("redaction_review_complete") is True
+        and _text(value.get("abstraction_level")) in _ABSTRACTION_LEVELS
+        and value.get("retention_class") == "review_receipt_only"
     )
 
 

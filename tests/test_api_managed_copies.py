@@ -6568,8 +6568,25 @@ def test_managed_copy_safe_delta_export_artifact_materializes_exact_metadata_and
     assert len(list(artifact_directory.glob("*.json"))) == 1
     assert len(list(receipt_directory.glob("*.json"))) == 1
     artifact_path = artifact_directory / recorded["receipt"]["artifact_filename"]
-    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact_bytes = artifact_path.read_bytes()
+    artifact = json.loads(artifact_bytes)
     assert set(artifact) == safe_delta_export_artifact.ARTIFACT_FIELDS
+    assert artifact["signal_class"] == "quality_gate_learning"
+    assert artifact["candidate"] == {
+        "signal_fingerprint": "1" * 64,
+        "summary_fingerprint": "2" * 64,
+        "lineage_fingerprint": "3" * 64,
+        "source_record_count": 12,
+        "contains_raw_private_data": False,
+        "contains_tenant_identifiers": False,
+        "redaction_review_complete": True,
+        "abstraction_level": "class_level",
+        "retention_class": "review_receipt_only",
+    }
+    assert set(artifact["candidate"]) == safe_delta_export_artifact.CANDIDATE_FIELDS
+    assert not {"raw_records", "tenant_id", "free_text", "credential", "destination", "path"}.intersection(
+        artifact["candidate"]
+    )
     serialized = artifact_path.read_text(encoding="utf-8").lower()
     for forbidden in (
         source_state["provision"]["copy_id"].lower(),
@@ -6588,7 +6605,7 @@ def test_managed_copy_safe_delta_export_artifact_materializes_exact_metadata_and
     )
     assert readback["valid_count"] == 1
     assert readback["latest_valid_receipt"] == recorded["receipt"]
-    artifact["signal_class"] = "tampered"
+    artifact["candidate"]["raw_records"] = ["forbidden"]
     artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
     tampered = safe_delta_export_artifact.managed_copy_safe_delta_export_artifacts_readback(
         copy_id=source_state["provision"]["copy_id"],
@@ -6597,6 +6614,36 @@ def test_managed_copy_safe_delta_export_artifact_materializes_exact_metadata_and
         artifact_plan_fingerprint=artifact_plan["artifact_plan_fingerprint"],
     )
     assert tampered["valid_count"] == 0
+    artifact_path.write_bytes(artifact_bytes)
+
+    artifact = json.loads(artifact_bytes)
+    artifact["candidate"]["source_record_count"] = True
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+    malformed_type = safe_delta_export_artifact.managed_copy_safe_delta_export_artifacts_readback(
+        copy_id=source_state["provision"]["copy_id"],
+        provisioning_receipt_id=source_state["provision"]["receipt_id"],
+        isolation_verification_receipt_id=source_state["isolation"]["receipt_id"],
+        artifact_plan_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+    )
+    assert malformed_type["valid_count"] == 0
+    artifact_path.write_bytes(artifact_bytes)
+
+    review_directory = managed_copy_safe_delta._guarded_review_directory(
+        source_state["provision"], source_state["isolation"], create=False
+    )
+    assert review_directory is not None
+    review_path = next(review_directory.glob("*.json"))
+    review_receipt = json.loads(review_path.read_text(encoding="utf-8"))
+    review_receipt["candidate"]["raw_records"] = ["forbidden"]
+    review_path.write_text(json.dumps(review_receipt), encoding="utf-8")
+    drifted_review = safe_delta_export_artifact.managed_copy_safe_delta_export_artifacts_readback(
+        copy_id=source_state["provision"]["copy_id"],
+        provisioning_receipt_id=source_state["provision"]["receipt_id"],
+        isolation_verification_receipt_id=source_state["isolation"]["receipt_id"],
+        artifact_plan_fingerprint=artifact_plan["artifact_plan_fingerprint"],
+    )
+    assert drifted_review["valid_count"] == 0
+    assert "forbidden" not in json.dumps(drifted_review)
 
 
 def test_managed_copy_safe_delta_export_artifact_denies_before_inspection_and_conflicts(monkeypatch, tmp_path) -> None:
