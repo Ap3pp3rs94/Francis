@@ -811,150 +811,157 @@ def test_approval_schema_failure_seals_consumed_lease_without_start(vertical_run
     assert not list(vertical_runtime["tenant_root"].glob("receipts/pilot_runtime/*/startup.json"))
 
 
-def test_canonical_source_rejects_tamper_stale_process_and_lineage(
-    vertical_runtime: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
+@pytest.fixture
+def canonical_source(
+    vertical_runtime: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> dict[str, Any]:
     started = TestClient(create_app()).post(pilot.PILOT_RUNTIME_START_ROUTE, json=vertical_runtime["payload"]).json()
     receipt = started["receipt"]
+    assert started["ok"] is True, started
 
-    def current_identity(pid: int) -> dict[str, int]:
-        if pid == receipt["controller_pid"]:
-            return {"creation_token": receipt["controller_creation_token"], "parent_pid": 0}
-        return {
-            "creation_token": receipt["process_creation_token"],
-            "parent_pid": receipt["parent_pid"],
-        }
+    def cleanup_child() -> None:
+        if process_identity(receipt["pid"]):
+            assert terminate_owned_process(
+                receipt["pid"],
+                creation_token=receipt["process_creation_token"],
+                timeout_seconds=2.0,
+            )
+        assert process_identity(receipt["pid"]) == {}
 
-    monkeypatch.setattr(pilot, "process_identity", current_identity)
+    request.addfinalizer(cleanup_child)
     state_dir = vertical_runtime["data_root"] / receipt["state_path"]
-    startup_path = state_dir / "startup.json"
-    original_startup = startup_path.read_text(encoding="utf-8")
-    injected_startup = json.loads(original_startup)
-    injected_startup["injected"] = True
-    injected_startup["startup_fingerprint"] = pilot._fingerprint(
-        {key: value for key, value in injected_startup.items() if key != "startup_fingerprint"}
-    )
-    startup_path.write_text(json.dumps(injected_startup), encoding="utf-8")
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], injected_startup["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_receipt_invalid"
-    )
-    startup_path.write_text(original_startup, encoding="utf-8")
-    heartbeat_path = state_dir / "heartbeat.json"
-    heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
-    heartbeat["observed_at_unix_ms"] = int(time.time() * 1000)
-    heartbeat_path.write_text(json.dumps(heartbeat), encoding="utf-8")
-    fixed_now = heartbeat["observed_at_unix_ms"] / 1000 + 0.1
-    monkeypatch.setattr(pilot.time, "time", lambda: fixed_now)
-    operation_path = state_dir / "operation.json"
-    original_operation = operation_path.read_text(encoding="utf-8")
-    operation_path.write_text('{"status":"completed"}', encoding="utf-8")
-    assert (
-        "operation"
-        in pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-    )
-    operation_path.write_text(original_operation, encoding="utf-8")
-    briefing_path = state_dir / "briefing.json"
-    original_briefing = briefing_path.read_text(encoding="utf-8")
-    briefing = json.loads(original_briefing)
-    briefing["next_action"]["title"] = "tampered output"
-    briefing_path.write_text(json.dumps(briefing), encoding="utf-8")
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_output_tampered"
-    )
-    briefing_path.write_text(original_briefing, encoding="utf-8")
-
-    original_heartbeat = heartbeat_path.read_text(encoding="utf-8")
-    heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
-    heartbeat["observed_at_unix_ms"] = 1
-    heartbeat_path.write_text(json.dumps(heartbeat), encoding="utf-8")
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_heartbeat_stale"
-    )
-    heartbeat_path.write_text(original_heartbeat, encoding="utf-8")
-
-    monkeypatch.setattr(pilot, "process_identity", lambda _pid: {"creation_token": 1, "parent_pid": os.getpid()})
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_process_mismatch"
-    )
-    monkeypatch.setattr(pilot, "process_identity", current_identity)
-
     approval_path = (
         vertical_runtime["data_root"] / "approvals" / "approved" / f"{vertical_runtime['payload']['approval_id']}.json"
     )
-    original_approval = approval_path.read_text(encoding="utf-8")
-    approval = json.loads(original_approval)
-    approval["payload"]["expires_at_unix_ms"] = 1
-    approval_path.write_text(json.dumps(approval), encoding="utf-8")
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_approval_lineage_mismatch"
-    )
-    approval_path.write_text(original_approval, encoding="utf-8")
-    approval = json.loads(original_approval)
-    approval["payload"]["revoked"] = True
-    approval_path.write_text(json.dumps(approval), encoding="utf-8")
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_approval_lineage_mismatch"
-    )
-    approval_path.write_text(original_approval, encoding="utf-8")
-    heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
-    heartbeat["observed_at_unix_ms"] = int(time.time() * 1000)
-    heartbeat_path.write_text(json.dumps(heartbeat), encoding="utf-8")
+    paths = {
+        "startup": state_dir / "startup.json",
+        "heartbeat": state_dir / "heartbeat.json",
+        "operation": state_dir / "operation.json",
+        "briefing": state_dir / "briefing.json",
+        "approval": approval_path,
+    }
 
-    original_provision = pilot.managed_copy_provision_for_copy
+    def read_snapshot(path: Path) -> dict[str, Any]:
+        for _ in range(100):
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                time.sleep(0.01)
+        pytest.fail(f"could not snapshot runtime source: {path.name}")
+
+    records = {key: read_snapshot(path) for key, path in paths.items()}
+    records["heartbeat"]["observed_at_unix_ms"] = int(time.time() * 1000)
+    original_read_json = pilot._read_json
+    records_by_path = {str(path.resolve()): key for key, path in paths.items()}
+
+    def frozen_read(path: Path) -> dict[str, Any]:
+        key = records_by_path.get(str(path.resolve()))
+        return json.loads(json.dumps(records[key])) if key else original_read_json(path)
+
+    identities = {
+        receipt["pid"]: {
+            "creation_token": receipt["process_creation_token"],
+            "parent_pid": receipt["parent_pid"],
+        },
+        receipt["controller_pid"]: {
+            "creation_token": receipt["controller_creation_token"],
+            "parent_pid": 0,
+        },
+    }
+
+    monkeypatch.setattr(pilot, "_read_json", frozen_read)
+    monkeypatch.setattr(pilot, "process_identity", lambda pid: dict(identities.get(pid, {})))
+    fixed_now = records["heartbeat"]["observed_at_unix_ms"] / 1000 + 0.1
+    monkeypatch.setattr(pilot.time, "time", lambda: fixed_now)
+    yield {
+        "receipt": receipt,
+        "records": records,
+        "identities": identities,
+        "vertical_runtime": vertical_runtime,
+    }
+
+
+def _verify_canonical_source(context: dict[str, Any]) -> dict[str, Any]:
+    receipt = context["receipt"]
+    return pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])
+
+
+def test_canonical_source_rejects_stale_heartbeat(canonical_source: dict[str, Any]) -> None:
+    canonical_source["records"]["heartbeat"]["observed_at_unix_ms"] = 1
+    assert _verify_canonical_source(canonical_source)["blocker"] == (
+        "managed_copy_pilot_runtime_source_heartbeat_stale"
+    )
+
+
+def test_canonical_source_rejects_operation_tamper(canonical_source: dict[str, Any]) -> None:
+    canonical_source["records"]["operation"] = {"status": "completed"}
+    assert "operation" in _verify_canonical_source(canonical_source)["blocker"]
+
+
+def test_canonical_source_rejects_briefing_output_tamper(canonical_source: dict[str, Any]) -> None:
+    canonical_source["records"]["briefing"]["next_action"]["title"] = "tampered output"
+    assert _verify_canonical_source(canonical_source)["blocker"] == "managed_copy_pilot_runtime_output_tampered"
+
+
+@pytest.mark.parametrize(("field", "value"), [("expires_at_unix_ms", 1), ("revoked", True)])
+def test_canonical_source_rejects_approval_expiry_or_revoke(
+    canonical_source: dict[str, Any],
+    field: str,
+    value: object,
+) -> None:
+    canonical_source["records"]["approval"]["payload"][field] = value
+    assert _verify_canonical_source(canonical_source)["blocker"] == (
+        "managed_copy_pilot_runtime_source_approval_lineage_mismatch"
+    )
+
+
+def test_canonical_source_rejects_provision_drift(
+    canonical_source: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = pilot.managed_copy_provision_for_copy
     monkeypatch.setattr(
         pilot,
         "managed_copy_provision_for_copy",
-        lambda *args, **kwargs: {**original_provision(*args, **kwargs), "provision_fingerprint": "0" * 64},
+        lambda *args, **kwargs: {**original(*args, **kwargs), "provision_fingerprint": "0" * 64},
     )
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_lineage_mismatch"
+    assert _verify_canonical_source(canonical_source)["blocker"] == (
+        "managed_copy_pilot_runtime_source_lineage_mismatch"
     )
-    monkeypatch.setattr(pilot, "managed_copy_provision_for_copy", original_provision)
 
-    original_isolation = pilot.latest_managed_copy_isolation_verification_for_provision
+
+def test_canonical_source_rejects_isolation_drift(
+    canonical_source: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = pilot.latest_managed_copy_isolation_verification_for_provision
     monkeypatch.setattr(
         pilot,
         "latest_managed_copy_isolation_verification_for_provision",
-        lambda *args, **kwargs: {
-            **original_isolation(*args, **kwargs),
-            "verification_fingerprint": "0" * 64,
-        },
+        lambda *args, **kwargs: {**original(*args, **kwargs), "verification_fingerprint": "0" * 64},
     )
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_approval_lineage_mismatch"
-    )
-    monkeypatch.setattr(
-        pilot,
-        "latest_managed_copy_isolation_verification_for_provision",
-        original_isolation,
+    assert _verify_canonical_source(canonical_source)["blocker"] == (
+        "managed_copy_pilot_runtime_source_approval_lineage_mismatch"
     )
 
-    def unrelated_parent(pid: int) -> dict[str, int]:
-        identity = current_identity(pid)
-        if pid == receipt["pid"]:
-            identity["parent_pid"] = 2**20
-        return identity
 
-    monkeypatch.setattr(pilot, "process_identity", unrelated_parent)
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_controller_mismatch"
+def test_canonical_source_rejects_unrelated_parent_controller(canonical_source: dict[str, Any]) -> None:
+    receipt = canonical_source["receipt"]
+    canonical_source["identities"][receipt["pid"]]["parent_pid"] = 2**20
+    assert _verify_canonical_source(canonical_source)["blocker"] == (
+        "managed_copy_pilot_runtime_source_controller_mismatch"
     )
-    monkeypatch.setattr(pilot, "process_identity", current_identity)
 
-    pilot._PILOT_LEASES.pop(_LEASE)
-    assert (
-        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
-        == "managed_copy_pilot_runtime_source_lineage_mismatch"
+
+def test_canonical_source_rejects_exact_schema_injection(canonical_source: dict[str, Any]) -> None:
+    startup = canonical_source["records"]["startup"]
+    startup["injected"] = True
+    startup["startup_fingerprint"] = pilot._fingerprint(
+        {key: value for key, value in startup.items() if key != "startup_fingerprint"}
     )
+    receipt = canonical_source["receipt"]
+    result = pilot.verify_pilot_runtime_source(receipt["receipt_id"], startup["startup_fingerprint"])
+    assert result["blocker"] == "managed_copy_pilot_runtime_source_receipt_invalid"
 
 
 def test_canonical_source_explicitly_rejects_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
