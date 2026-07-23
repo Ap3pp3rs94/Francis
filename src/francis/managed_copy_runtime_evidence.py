@@ -104,9 +104,9 @@ def verify_copy_creation_runtime_source(
     source_receipt_fingerprint: str,
 ) -> dict[str, Any]:
     """Validate independently loaded managed-copy startup evidence."""
-    from francis.managed_copy_runtime_start import verify_runtime_startup_source
+    from francis.managed_copy_pilot_runtime import verify_pilot_runtime_source
 
-    return verify_runtime_startup_source(source_receipt_id, source_receipt_fingerprint)
+    return verify_pilot_runtime_source(source_receipt_id, source_receipt_fingerprint)
 
 
 def verify_tenant_isolation_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:

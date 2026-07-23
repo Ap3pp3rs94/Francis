@@ -826,7 +826,7 @@ def test_managed_copy_creation_plan_records_redacted_lineage_bound_receipt(
     monkeypatch,
     tmp_path,
 ) -> None:
-    data_root = tmp_path.parent / "managed-copy-plan"
+    data_root = Path(pilot_runtime.__file__).parents[2] / "data" / "test_runs" / f"managed-copy-plan-{os.getpid()}"
     actor = "stage18.copy-plan-recorder"
     decision_actor = "stage18.copy-plan-approver"
     raw_tenant_id = "customer-plan-private-id"

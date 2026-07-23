@@ -377,8 +377,28 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert managed_copy["family"] == "managed_copies_runtime_evidence"
     assert managed_copy["required_actor"] == "payload.request_actor"
     assert managed_copy["required_scope"] == "managed_copies.runtime_evidence.write"
-    assert managed_copy["governance_maturity"] == ("permission_gated_one_requirement_recorder_fixture_runtime_producer")
+    assert managed_copy["governance_maturity"] == (
+        "permission_gated_one_requirement_recorder_canonical_non_fixture_source"
+    )
     assert "no runtime or tenant authority" in managed_copy["notes"]
+
+    pilot_lease = entries["/managed-copies/pilot-runtime-lease-issue"]
+    assert pilot_lease["family"] == "managed_copies_pilot_lease"
+    assert pilot_lease["required_scope"] == "managed_copies.pilot_lease.manage"
+    assert pilot_lease["governance_maturity"] == "permission_gated_process_local_exact_lease_authority"
+    assert "before schema processing" in pilot_lease["denial_behavior"]
+    assert "No default actor grant" in pilot_lease["notes"]
+
+    pilot_proposal = entries["/managed-copies/pilot-runtime-proposal"]
+    assert pilot_proposal["family"] == "managed_copies_pilot_runtime_proposal"
+    assert pilot_proposal["required_scope"] == "managed_copies.pilot_runtime.execute"
+    assert pilot_proposal["governance_maturity"] == ("permission_and_non_consuming_exact_lease_gated_proposal")
+    assert "does not consume a binding" in pilot_proposal["denial_behavior"]
+
+    pilot_start = entries["/managed-copies/pilot-runtime-start"]
+    assert pilot_start["family"] == "managed_copies_pilot_runtime"
+    assert pilot_start["required_scope"] == "managed_copies.pilot_runtime.execute"
+    assert pilot_start["governance_maturity"] == ("permission_exact_lease_and_exact_approval_gated_local_runtime")
 
     runtime_start = entries["/managed-copies/runtime-start"]
     assert runtime_start["family"] == "managed_copies_runtime_start"

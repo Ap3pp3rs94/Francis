@@ -10,7 +10,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from francis.governance.pilot_scope_lease import PilotScopeLeaseRegistry
+from francis.governance.pilot_scope_lease import (
+    PilotLeaseBinding,
+    PilotLeaseState,
+    PilotScopeLease,
+    PilotScopeLeaseRegistry,
+)
 from francis.kernel.paths import data_dir, repo_root
 from francis.managed_copy_isolation import (
     latest_managed_copy_isolation_verification_for_provision,
@@ -21,15 +26,33 @@ from francis.managed_copy_runtime import HEARTBEAT_IDENTITY, INPUT_CONTRACT, RUN
 from francis.process_identity import process_identity, terminate_owned_process
 
 PILOT_RUNTIME_SCOPE = "managed_copies.pilot_runtime.execute"
+PILOT_LEASE_MANAGE_SCOPE = "managed_copies.pilot_lease.manage"
+PILOT_RUNTIME_PROPOSAL_ACTION = "managed_copies.pilot_runtime.propose"
 PILOT_RUNTIME_START_ACTION = "managed_copies.pilot_runtime.start"
 PILOT_RUNTIME_STOP_ACTION = "managed_copies.pilot_runtime.stop"
 PILOT_RUNTIME_CONTRACT = "stage18_managed_copy_pilot_runtime_v1"
+PILOT_RUNTIME_PROPOSAL_ROUTE = "/managed-copies/pilot-runtime-proposal"
 PILOT_RUNTIME_START_ROUTE = "/managed-copies/pilot-runtime-start"
 PILOT_RUNTIME_STOP_ROUTE = "/managed-copies/pilot-runtime-stop"
 PILOT_RUNTIME_EVIDENCE_CLASS = "local_non_fixture_runtime"
 
 PILOT_RUNTIME_LEASES = PilotScopeLeaseRegistry()
+_PILOT_LEASES: dict[str, PilotScopeLease] = {}
 _LOCK = threading.RLock()
+_LEASE_ISSUE_FIELDS = {
+    "request_actor",
+    "lease_id",
+    "actor_id",
+    "package_id",
+    "package_fingerprint",
+    "pilot_run_id",
+    "bindings",
+    "issued_at_ms",
+    "expires_at_ms",
+    "runtime_nonce",
+    "operator_decision_fingerprint",
+}
+_LEASE_LOOKUP_FIELDS = {"request_actor", "lease_id"}
 _PAYLOAD_FIELDS = {
     "request_actor",
     "pilot_lease_id",
@@ -61,6 +84,8 @@ def pilot_runtime_contract_snapshot() -> dict[str, Any]:
         "contract": PILOT_RUNTIME_CONTRACT,
         "status": "local_process_software_available",
         "required_scope": PILOT_RUNTIME_SCOPE,
+        "lease_manage_scope": PILOT_LEASE_MANAGE_SCOPE,
+        "proposal_action": PILOT_RUNTIME_PROPOSAL_ACTION,
         "start_action": PILOT_RUNTIME_START_ACTION,
         "stop_action": PILOT_RUNTIME_STOP_ACTION,
         "runtime_identity": RUNTIME_IDENTITY,
@@ -70,6 +95,108 @@ def pilot_runtime_contract_snapshot() -> dict[str, Any]:
         "persistent_actor_grant_present": False,
         "canonical_runtime_evidence_recorded": False,
         "stage18_ready": False,
+    }
+
+
+def issue_pilot_runtime_lease(payload: dict[str, Any]) -> dict[str, Any]:
+    if set(payload) != _LEASE_ISSUE_FIELDS:
+        return _blocked("managed_copy_pilot_lease_payload_schema_invalid")
+    try:
+        raw_bindings = payload.get("bindings")
+        if not isinstance(raw_bindings, list):
+            raise ValueError("invalid_lease_bindings")
+        bindings = tuple(
+            PilotLeaseBinding(
+                scope=item["scope"],
+                route=item["route"],
+                method=item["method"],
+                action=item["action"],
+            )
+            for item in raw_bindings
+            if isinstance(item, dict) and set(item) == {"scope", "route", "method", "action"}
+        )
+        if len(bindings) != len(raw_bindings):
+            raise ValueError("invalid_lease_bindings")
+        lease = PilotScopeLease(
+            lease_id=payload["lease_id"],
+            actor_id=payload["actor_id"],
+            package_id=payload["package_id"],
+            package_fingerprint=payload["package_fingerprint"],
+            pilot_run_id=payload["pilot_run_id"],
+            bindings=bindings,
+            issued_at_ms=payload["issued_at_ms"],
+            expires_at_ms=payload["expires_at_ms"],
+            runtime_nonce=payload["runtime_nonce"],
+            operator_decision_fingerprint=payload["operator_decision_fingerprint"],
+        ).validated()
+    except (KeyError, TypeError, ValueError) as exc:
+        return _blocked(str(exc) or "managed_copy_pilot_lease_invalid")
+    with _LOCK:
+        try:
+            issued = PILOT_RUNTIME_LEASES.issue(lease)
+        except ValueError as exc:
+            return _blocked(str(exc))
+        _PILOT_LEASES[issued.lease_id] = issued
+    return _lease_result(issued, status="issued")
+
+
+def pilot_runtime_lease_status(payload: dict[str, Any]) -> dict[str, Any]:
+    if set(payload) != _LEASE_LOOKUP_FIELDS:
+        return _blocked("managed_copy_pilot_lease_status_payload_schema_invalid")
+    lease_id = _identifier(payload.get("lease_id"))
+    with _LOCK:
+        lease = _PILOT_LEASES.get(lease_id)
+        state = PILOT_RUNTIME_LEASES.state(lease_id)
+    if lease is None or state is None:
+        return _blocked("missing_pilot_lease")
+    return _lease_result(lease, status=state.value)
+
+
+def revoke_pilot_runtime_lease(payload: dict[str, Any]) -> dict[str, Any]:
+    if set(payload) != _LEASE_LOOKUP_FIELDS:
+        return _blocked("managed_copy_pilot_lease_revoke_payload_schema_invalid")
+    lease_id = _identifier(payload.get("lease_id"))
+    with _LOCK:
+        lease = _PILOT_LEASES.get(lease_id)
+        decision = PILOT_RUNTIME_LEASES.revoke(lease_id)
+    if lease is None or not decision.allowed:
+        return _blocked(decision.reason)
+    return _lease_result(lease, status="revoked")
+
+
+def authorize_pilot_runtime_proposal(*, lease_id: object, actor: object) -> dict[str, Any]:
+    safe_lease_id = _identifier(lease_id)
+    safe_actor = _identifier(actor)
+    with _LOCK:
+        lease = _PILOT_LEASES.get(safe_lease_id)
+        state = PILOT_RUNTIME_LEASES.state(safe_lease_id)
+    if lease is None or state is None:
+        return _blocked("missing_pilot_lease")
+    if state is not PilotLeaseState.ACTIVE:
+        return _blocked(f"pilot_lease_{state.value}")
+    if lease.actor_id != safe_actor:
+        return _blocked("pilot_lease_actor_mismatch")
+    proposal_binding = PilotLeaseBinding(
+        PILOT_RUNTIME_SCOPE,
+        PILOT_RUNTIME_PROPOSAL_ROUTE,
+        "POST",
+        PILOT_RUNTIME_PROPOSAL_ACTION,
+    )
+    start_binding = PilotLeaseBinding(
+        PILOT_RUNTIME_SCOPE,
+        PILOT_RUNTIME_START_ROUTE,
+        "POST",
+        PILOT_RUNTIME_START_ACTION,
+    )
+    if proposal_binding not in lease.bindings or start_binding not in lease.bindings:
+        return _blocked("pilot_lease_binding_mismatch")
+    return {
+        "ok": True,
+        "status": "authorized",
+        "error": "",
+        "lease_id": lease.lease_id,
+        "lease_state": state.value,
+        "binding_consumed": False,
     }
 
 
@@ -154,6 +281,123 @@ def pilot_runtime_proposal(payload: dict[str, Any], *, actor: str, stage17_close
         "descriptor_fingerprint": descriptor_fingerprint,
         "operation_preview": preview if not blockers else {},
         "starts_runtime": False,
+    }
+
+
+def verify_pilot_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
+    receipt = _startup_receipt(_identifier(source_receipt_id))
+    if not receipt:
+        return _source_blocked("stage18_copy_creation_runtime_startup_receipt_missing")
+    if receipt.get("startup_fingerprint") != source_receipt_fingerprint:
+        return _source_blocked("managed_copy_pilot_runtime_source_fingerprint_mismatch")
+    if receipt.get("fixture_runtime") is not False:
+        return _source_blocked("managed_copy_pilot_runtime_fixture_source_rejected")
+    state_dir = _state_dir(receipt)
+    if state_dir is None:
+        return _source_blocked("managed_copy_pilot_runtime_source_path_invalid")
+    handshake = _read_json(state_dir / "handshake.json")
+    heartbeat = _read_json(state_dir / "heartbeat.json")
+    operation = _read_json(state_dir / "operation.json")
+    briefing = _read_json(state_dir / "briefing.json")
+    identity = process_identity(_exact_int(receipt.get("pid"), 1, 2**31 - 1))
+    if identity.get("creation_token") != receipt.get("process_creation_token"):
+        return _source_blocked("managed_copy_pilot_runtime_source_process_mismatch")
+    if int(time.time() * 1000) - _exact_int(heartbeat.get("observed_at_unix_ms"), 1, 2**63 - 1) >= 3_000:
+        return _source_blocked("managed_copy_pilot_runtime_source_heartbeat_stale")
+    provision = managed_copy_provision_for_copy(
+        _text(receipt.get("copy_id")),
+        provisioning_receipt_id=_text(receipt.get("provisioning_receipt_id")),
+    )
+    isolation = latest_managed_copy_isolation_verification_for_provision(
+        _text(receipt.get("provisioning_receipt_id")),
+        provision_fingerprint=_text(provision.get("provision_fingerprint")),
+        copy_id=_text(receipt.get("copy_id")),
+    )
+    lease = _PILOT_LEASES.get(_text(receipt.get("pilot_lease_id")))
+    lease_state = PILOT_RUNTIME_LEASES.state(_text(receipt.get("pilot_lease_id")))
+    approval = _read_json(data_dir() / "approvals" / "approved" / f"{receipt.get('approval_id')}.json")
+    if (
+        not provision
+        or provision.get("receipt_id") != receipt.get("provisioning_receipt_id")
+        or isolation.get("receipt_id") != receipt.get("isolation_verification_receipt_id")
+        or isolation.get("live_state_aligned") is not True
+        or lease is None
+        or lease_state is not PilotLeaseState.ACTIVE
+        or lease.actor_id != receipt.get("actor")
+        or lease.pilot_run_id != receipt.get("pilot_run_id")
+    ):
+        return _source_blocked("managed_copy_pilot_runtime_source_lineage_mismatch")
+    descriptor = approval.get("payload", {}).get("descriptor", {}) if isinstance(approval.get("payload"), dict) else {}
+    if (
+        _fingerprint(descriptor) != receipt.get("descriptor_fingerprint")
+        or _approval_blocker(approval, descriptor, _text(receipt.get("descriptor_fingerprint")))
+        or provision.get("provision_fingerprint") != descriptor.get("provision_fingerprint")
+        or isolation.get("verification_fingerprint") != descriptor.get("isolation_verification_fingerprint")
+        or descriptor.get("pilot_lease_id") != lease.lease_id
+        or descriptor.get("package_id") != lease.package_id
+        or descriptor.get("package_fingerprint") != lease.package_fingerprint
+        or descriptor.get("runtime_nonce_hash") != _sha256(lease.runtime_nonce)
+        or descriptor.get("operator_decision_fingerprint") != lease.operator_decision_fingerprint
+    ):
+        return _source_blocked("managed_copy_pilot_runtime_source_approval_lineage_mismatch")
+    blocker = _runtime_records_blocker(
+        handshake,
+        heartbeat,
+        operation,
+        briefing,
+        descriptor=descriptor,
+        pid=receipt["pid"],
+        creation_token=receipt["process_creation_token"],
+        runtime_parent_pid=_exact_int(identity.get("parent_pid"), 1, 2**31 - 1),
+        launcher_pid=_exact_int(identity.get("parent_pid"), 1, 2**31 - 1),
+        controller_pid=os.getpid(),
+    )
+    if blocker:
+        return _source_blocked(blocker)
+    if operation.get("receipt_fingerprint") != receipt.get("operation_receipt_fingerprint") or briefing.get(
+        "output_fingerprint"
+    ) != receipt.get("output_fingerprint"):
+        return _source_blocked("managed_copy_pilot_runtime_source_output_lineage_mismatch")
+    lineage = {
+        key: receipt[key]
+        for key in (
+            "receipt_id",
+            "actor",
+            "copy_id",
+            "tenant_key",
+            "pilot_run_id",
+            "pilot_lease_id",
+            "approval_id",
+            "provisioning_receipt_id",
+            "isolation_verification_receipt_id",
+            "descriptor_fingerprint",
+        )
+    }
+    current = {
+        "pid": receipt["pid"],
+        "process_creation_token": receipt["process_creation_token"],
+        "heartbeat": {
+            key: heartbeat.get(key)
+            for key in (
+                "heartbeat_identity",
+                "runtime_identity",
+                "copy_id",
+                "tenant_key",
+                "pilot_run_id",
+                "runtime_nonce_hash",
+                "ready",
+                "fixture_runtime",
+            )
+        },
+        "operation_receipt_fingerprint": operation["receipt_fingerprint"],
+        "output_fingerprint": briefing["output_fingerprint"],
+    }
+    return {
+        "valid": True,
+        "blocker": "",
+        "evidence_class": "canonical_runtime",
+        "source_lineage_hash": _fingerprint(lineage),
+        "current_state_hash": _fingerprint(current),
     }
 
 
@@ -585,6 +829,42 @@ def _valid_startup_receipt(receipt: dict[str, Any]) -> bool:
         and _exact_int(receipt.get("pid"), 1, 2**31 - 1)
         and _exact_int(receipt.get("process_creation_token"), 1, 2**127)
     )
+
+
+def _lease_result(lease: PilotScopeLease, *, status: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "status": status,
+        "error": "",
+        "lease": {
+            "lease_id": lease.lease_id,
+            "actor_id": lease.actor_id,
+            "package_id": lease.package_id,
+            "package_fingerprint": lease.package_fingerprint,
+            "pilot_run_id": lease.pilot_run_id,
+            "bindings": [
+                {"scope": item.scope, "route": item.route, "method": item.method, "action": item.action}
+                for item in lease.bindings
+            ],
+            "issued_at_ms": lease.issued_at_ms,
+            "expires_at_ms": lease.expires_at_ms,
+            "runtime_nonce_hash": _sha256(lease.runtime_nonce),
+            "operator_decision_fingerprint": lease.operator_decision_fingerprint,
+            "state": status,
+        },
+        "writes_persistent_state": False,
+        "grants_default_actor": False,
+    }
+
+
+def _source_blocked(blocker: str) -> dict[str, Any]:
+    return {
+        "valid": False,
+        "blocker": blocker,
+        "evidence_class": "",
+        "source_lineage_hash": "",
+        "current_state_hash": "",
+    }
 
 
 def _state_dir(receipt: dict[str, Any]) -> Path | None:

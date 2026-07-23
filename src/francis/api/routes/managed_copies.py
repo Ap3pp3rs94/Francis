@@ -85,14 +85,21 @@ from francis.managed_copy_container_isolation import (
     execute_container_isolation,
 )
 from francis.managed_copy_pilot_runtime import (
+    PILOT_LEASE_MANAGE_SCOPE,
     PILOT_RUNTIME_LEASES,
+    PILOT_RUNTIME_PROPOSAL_ROUTE,
     PILOT_RUNTIME_SCOPE,
     PILOT_RUNTIME_START_ACTION,
     PILOT_RUNTIME_START_ROUTE,
     PILOT_RUNTIME_STOP_ACTION,
     PILOT_RUNTIME_STOP_ROUTE,
+    authorize_pilot_runtime_proposal,
+    issue_pilot_runtime_lease,
     pilot_runtime_contract_snapshot,
+    pilot_runtime_lease_status,
+    pilot_runtime_proposal,
     pilot_runtime_status_snapshot,
+    revoke_pilot_runtime_lease,
     start_pilot_runtime,
     stop_pilot_runtime,
 )
@@ -284,6 +291,71 @@ def pilot_runtime_contract() -> dict[str, Any]:
 @router.get("/pilot-runtime-status")
 def pilot_runtime_status(copy_id: str = "") -> dict[str, Any]:
     return pilot_runtime_status_snapshot(copy_id=copy_id)
+
+
+def _pilot_lease_permission(payload: dict[str, Any], request: Request) -> dict[str, Any] | None:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=PILOT_LEASE_MANAGE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if decision.allowed:
+        return None
+    return _permission_denied(
+        decision,
+        required_scope=PILOT_LEASE_MANAGE_SCOPE,
+        next_step="configure_dedicated_process_local_pilot_lease_management_scope",
+    )
+
+
+@router.post("/pilot-runtime-lease-issue")
+def pilot_runtime_lease_issue(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    denied = _pilot_lease_permission(payload, request)
+    return denied or issue_pilot_runtime_lease(payload)
+
+
+@router.post("/pilot-runtime-lease-status")
+def pilot_runtime_lease_status_route(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    denied = _pilot_lease_permission(payload, request)
+    return denied or pilot_runtime_lease_status(payload)
+
+
+@router.post("/pilot-runtime-lease-revoke")
+def pilot_runtime_lease_revoke(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    denied = _pilot_lease_permission(payload, request)
+    return denied or revoke_pilot_runtime_lease(payload)
+
+
+@router.post("/pilot-runtime-proposal")
+def pilot_runtime_proposal_route(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=PILOT_RUNTIME_SCOPE,
+        route=PILOT_RUNTIME_PROPOSAL_ROUTE,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=PILOT_RUNTIME_SCOPE,
+            next_step="configure_static_pilot_scope_and_attach_exact_active_pilot_lease",
+        )
+    lease = authorize_pilot_runtime_proposal(lease_id=payload.get("pilot_lease_id"), actor=actor)
+    if lease.get("ok") is not True:
+        return _permission_denied(
+            ApiPermissionDecision(False, lease["error"], {}),
+            required_scope=PILOT_RUNTIME_SCOPE,
+            next_step="attach_exact_active_server_held_pilot_runtime_lease",
+        )
+    managed_status = managed_copies_status_snapshot()
+    return pilot_runtime_proposal(
+        payload,
+        actor=actor,
+        stage17_closed=bool(managed_status["stage17_closed_by_receipt"]),
+    )
 
 
 @router.post("/pilot-runtime-start")

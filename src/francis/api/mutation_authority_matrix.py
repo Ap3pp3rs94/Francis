@@ -1544,6 +1544,43 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="managed_copies_pilot_lease",
+        prefixes=(
+            "/managed-copies/pilot-runtime-lease-issue",
+            "/managed-copies/pilot-runtime-lease-status",
+            "/managed-copies/pilot-runtime-lease-revoke",
+        ),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.pilot_lease.manage",
+        approval_requirement="exact bounded lease package and operator-decision fingerprint",
+        receipt_behavior="process-local lease state only; no persistence",
+        denial_behavior="api_permission_denied before schema processing or process-local registry mutation",
+        governance_maturity="permission_gated_process_local_exact_lease_authority",
+        notes="No default actor grant, persistence, runtime start, tenant write, or stage-readiness claim.",
+    ),
+    AuthorityRule(
+        family="managed_copies_pilot_runtime_proposal",
+        prefixes=("/managed-copies/pilot-runtime-proposal",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.pilot_runtime.execute",
+        approval_requirement="static pilot scope plus exact active server-held proposal and start lease bindings",
+        receipt_behavior="none; bounded descriptor projection for separate exact approval",
+        denial_behavior="permission or lease denial before lineage projection; proposal does not consume a binding",
+        governance_maturity="permission_and_non_consuming_exact_lease_gated_proposal",
+        notes="Starts no runtime, writes no tenant state, and grants no approval or stage-readiness claim.",
+    ),
+    AuthorityRule(
+        family="managed_copies_pilot_runtime",
+        prefixes=("/managed-copies/pilot-runtime-start", "/managed-copies/pilot-runtime-stop"),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.pilot_runtime.execute",
+        approval_requirement="exact active consuming pilot lease binding plus separate exact start approval",
+        receipt_behavior="non-fixture startup and governed cleanup receipts under the isolated tenant root",
+        denial_behavior="permission and lease denial before runtime side effects",
+        governance_maturity="permission_exact_lease_and_exact_approval_gated_local_runtime",
+        notes="No persistent actor grant, caller command, production claim, or automatic Stage 18 readiness.",
+    ),
+    AuthorityRule(
         family="managed_copies_runtime_evidence",
         prefixes=("/managed-copies/runtime-evidence-readback",),
         required_actor="payload.request_actor",
@@ -1553,10 +1590,10 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
         receipt_behavior="immutable Stage 18 runtime-evidence receipt; exact replay is idempotent",
         denial_behavior="api_permission_denied before payload processing or filesystem creation; source failures fail closed",
-        governance_maturity="permission_gated_one_requirement_recorder_fixture_runtime_producer",
+        governance_maturity="permission_gated_one_requirement_recorder_canonical_non_fixture_source",
         notes=(
             "The route can record copy_creation_runtime_proof only after an independent canonical verifier succeeds; "
-            "the fixed fixture startup producer is independently verified but cannot satisfy production readiness; "
+            "the non-fixture pilot source is independently reloaded and current-state verified; "
             "the receipt grants no runtime or tenant authority."
         ),
     ),

@@ -16,6 +16,11 @@ import francis.api.routes.managed_copies as managed_routes
 import francis.managed_copy_pilot_runtime as pilot
 from francis.api.app import create_app
 from francis.governance.pilot_scope_lease import PilotLeaseBinding, PilotScopeLease, PilotScopeLeaseRegistry
+from francis.managed_copy_runtime_evidence import (
+    COPY_CREATION_PROOF_KIND,
+    COPY_CREATION_REQUIREMENT,
+    record_runtime_evidence,
+)
 from francis.managed_copy_runtime import INPUT_CONTRACT, build_work_briefing
 from francis.process_identity import process_identity, terminate_owned_process
 
@@ -154,7 +159,7 @@ def test_managed_copy_runtime_image_is_fixed_to_real_francis_entrypoint() -> Non
 
 @pytest.fixture
 def vertical_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
-    data_root = tmp_path.parent / f"mpr_{uuid.uuid4().hex[:8]}"
+    data_root = Path(pilot.__file__).parents[2] / "data" / "test_runs" / f"mpr_{uuid.uuid4().hex[:8]}"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({_ACTOR: [pilot.PILOT_RUNTIME_SCOPE]}))
     tenant_key = "c" * 64
@@ -201,34 +206,41 @@ def vertical_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[st
     registry = PilotScopeLeaseRegistry()
     monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", registry)
     monkeypatch.setattr(managed_routes, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {})
     now = int(time.time() * 1000)
-    registry.issue(
-        PilotScopeLease(
-            lease_id=_LEASE,
-            actor_id=_ACTOR,
-            package_id="stage18-local-pilot-package",
-            package_fingerprint=_HASH_A,
-            pilot_run_id=_RUN,
-            bindings=(
-                PilotLeaseBinding(
-                    pilot.PILOT_RUNTIME_SCOPE,
-                    pilot.PILOT_RUNTIME_START_ROUTE,
-                    "POST",
-                    pilot.PILOT_RUNTIME_START_ACTION,
-                ),
-                PilotLeaseBinding(
-                    pilot.PILOT_RUNTIME_SCOPE,
-                    pilot.PILOT_RUNTIME_STOP_ROUTE,
-                    "POST",
-                    pilot.PILOT_RUNTIME_STOP_ACTION,
-                ),
+    lease = PilotScopeLease(
+        lease_id=_LEASE,
+        actor_id=_ACTOR,
+        package_id="stage18-local-pilot-package",
+        package_fingerprint=_HASH_A,
+        pilot_run_id=_RUN,
+        bindings=(
+            PilotLeaseBinding(
+                pilot.PILOT_RUNTIME_SCOPE,
+                pilot.PILOT_RUNTIME_START_ROUTE,
+                "POST",
+                pilot.PILOT_RUNTIME_START_ACTION,
             ),
-            issued_at_ms=now - 1_000,
-            expires_at_ms=now + 60_000,
-            runtime_nonce="runtime-nonce-vertical-001",
-            operator_decision_fingerprint=_HASH_B,
-        )
+            PilotLeaseBinding(
+                pilot.PILOT_RUNTIME_SCOPE,
+                pilot.PILOT_RUNTIME_STOP_ROUTE,
+                "POST",
+                pilot.PILOT_RUNTIME_STOP_ACTION,
+            ),
+            PilotLeaseBinding(
+                pilot.PILOT_RUNTIME_SCOPE,
+                pilot.PILOT_RUNTIME_PROPOSAL_ROUTE,
+                "POST",
+                pilot.PILOT_RUNTIME_PROPOSAL_ACTION,
+            ),
+        ),
+        issued_at_ms=now - 1_000,
+        expires_at_ms=now + 60_000,
+        runtime_nonce="runtime-nonce-vertical-001",
+        operator_decision_fingerprint=_HASH_B,
     )
+    registry.issue(lease)
+    pilot._PILOT_LEASES[_LEASE] = lease
     payload = {
         "request_actor": _ACTOR,
         "pilot_lease_id": _LEASE,
@@ -280,6 +292,97 @@ def test_unleased_request_denies_before_runtime_state(monkeypatch: pytest.Monkey
     assert not data_root.exists()
 
 
+def test_lease_issue_denies_without_scope_before_registry_write(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_root = tmp_path / "lease-denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    registry = PilotScopeLeaseRegistry()
+    monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(managed_routes, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {})
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/pilot-runtime-lease-issue",
+        json={"request_actor": "lease.operator"},
+    )
+
+    assert response.json()["error"] == "api_permission_denied"
+    assert pilot._PILOT_LEASES == {}
+    assert not data_root.exists()
+
+
+def test_process_local_lease_lifecycle_and_restart_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    operator = "lease.operator"
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({operator: [pilot.PILOT_LEASE_MANAGE_SCOPE]}))
+    registry = PilotScopeLeaseRegistry()
+    monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(managed_routes, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {})
+    now = int(time.time() * 1000)
+    payload = {
+        "request_actor": operator,
+        "lease_id": "lease-api-001",
+        "actor_id": _ACTOR,
+        "package_id": "package-api-001",
+        "package_fingerprint": _HASH_A,
+        "pilot_run_id": "run-api-001",
+        "bindings": [
+            {
+                "scope": pilot.PILOT_RUNTIME_SCOPE,
+                "route": pilot.PILOT_RUNTIME_START_ROUTE,
+                "method": "POST",
+                "action": pilot.PILOT_RUNTIME_START_ACTION,
+            },
+            {
+                "scope": pilot.PILOT_RUNTIME_SCOPE,
+                "route": pilot.PILOT_RUNTIME_PROPOSAL_ROUTE,
+                "method": "POST",
+                "action": pilot.PILOT_RUNTIME_PROPOSAL_ACTION,
+            },
+        ],
+        "issued_at_ms": now - 1,
+        "expires_at_ms": now + 60_000,
+        "runtime_nonce": "runtime-nonce-api-001",
+        "operator_decision_fingerprint": _HASH_B,
+    }
+    client = TestClient(create_app())
+
+    issued = client.post("/managed-copies/pilot-runtime-lease-issue", json=payload).json()
+    assert issued["ok"] is True
+    assert issued["writes_persistent_state"] is False
+    status = client.post(
+        "/managed-copies/pilot-runtime-lease-status",
+        json={"request_actor": operator, "lease_id": payload["lease_id"]},
+    ).json()
+    assert status["status"] == "active"
+    revoked = client.post(
+        "/managed-copies/pilot-runtime-lease-revoke",
+        json={"request_actor": operator, "lease_id": payload["lease_id"]},
+    ).json()
+    assert revoked["status"] == "revoked"
+
+    monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", PilotScopeLeaseRegistry())
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {})
+    assert (
+        pilot.pilot_runtime_lease_status({"request_actor": operator, "lease_id": payload["lease_id"]})["error"]
+        == "missing_pilot_lease"
+    )
+
+
+def test_proposal_authorization_does_not_consume_start_binding(vertical_runtime: dict[str, Any]) -> None:
+    payload = {**vertical_runtime["payload"], "confirm_start": False}
+    before = vertical_runtime["registry"].state(_LEASE)
+    proposed = TestClient(create_app()).post(pilot.PILOT_RUNTIME_PROPOSAL_ROUTE, json=payload).json()
+    after = vertical_runtime["registry"].state(_LEASE)
+
+    assert proposed["ok"] is True, proposed
+    assert proposed["starts_runtime"] is False
+    assert before == after
+    assert vertical_runtime["registry"].state(_LEASE).value == "active"
+
+
 def test_real_francis_process_vertical_path_and_exact_cleanup(vertical_runtime: dict[str, Any]) -> None:
     client = TestClient(create_app())
     started = client.post(pilot.PILOT_RUNTIME_START_ROUTE, json=vertical_runtime["payload"]).json()
@@ -297,6 +400,34 @@ def test_real_francis_process_vertical_path_and_exact_cleanup(vertical_runtime: 
     status = client.get("/managed-copies/pilot-runtime-status", params={"copy_id": receipt["copy_id"]}).json()
     assert status["ready_count"] == 1
     assert status["items"][0]["current_state"]["ready"] is True
+
+    source = pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])
+    assert source["valid"] is True
+    assert source["evidence_class"] == "canonical_runtime"
+    evidence_payload = {
+        "request_actor": _ACTOR,
+        "requirement_id": COPY_CREATION_REQUIREMENT,
+        "proof_kind": COPY_CREATION_PROOF_KIND,
+        "source_receipt_id": receipt["receipt_id"],
+        "source_receipt_fingerprint": receipt["startup_fingerprint"],
+        "trace_id": "trace-canonical-runtime-evidence",
+        "dry_run": True,
+        "record_fingerprint": "",
+        "confirm_runtime_evidence": False,
+    }
+    evidence_plan = record_runtime_evidence(evidence_payload, actor=_ACTOR, stage17_closed=True)
+    assert evidence_plan["ok"] is True
+    recorded = record_runtime_evidence(
+        {
+            **evidence_payload,
+            "dry_run": False,
+            "record_fingerprint": evidence_plan["record_fingerprint"],
+            "confirm_runtime_evidence": True,
+        },
+        actor=_ACTOR,
+        stage17_closed=True,
+    )
+    assert recorded["writes_receipt"] is True
 
     stopped = client.post(
         pilot.PILOT_RUNTIME_STOP_ROUTE,
@@ -354,6 +485,57 @@ def test_approval_schema_failure_seals_consumed_lease_without_start(vertical_run
     assert result["error"] == "managed_copy_pilot_runtime_approval_binding_mismatch"
     assert vertical_runtime["registry"].state(_LEASE).value == "sealed"
     assert not list(vertical_runtime["tenant_root"].glob("receipts/pilot_runtime/*/startup.json"))
+
+
+def test_canonical_source_rejects_tamper_stale_process_and_lineage(
+    vertical_runtime: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = TestClient(create_app()).post(pilot.PILOT_RUNTIME_START_ROUTE, json=vertical_runtime["payload"]).json()
+    receipt = started["receipt"]
+
+    def current_identity(_pid: int) -> dict[str, int]:
+        return {
+            "creation_token": receipt["process_creation_token"],
+            "parent_pid": receipt["parent_pid"],
+        }
+
+    monkeypatch.setattr(pilot, "process_identity", current_identity)
+    state_dir = vertical_runtime["data_root"] / receipt["state_path"]
+    heartbeat_path = state_dir / "heartbeat.json"
+    heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
+    heartbeat["observed_at_unix_ms"] = int(time.time() * 1000)
+    heartbeat_path.write_text(json.dumps(heartbeat), encoding="utf-8")
+    operation_path = state_dir / "operation.json"
+    original_operation = operation_path.read_text(encoding="utf-8")
+    operation_path.write_text('{"status":"completed"}', encoding="utf-8")
+    assert (
+        "operation"
+        in pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
+    )
+    operation_path.write_text(original_operation, encoding="utf-8")
+
+    original_heartbeat = heartbeat_path.read_text(encoding="utf-8")
+    heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
+    heartbeat["observed_at_unix_ms"] = 1
+    heartbeat_path.write_text(json.dumps(heartbeat), encoding="utf-8")
+    assert (
+        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
+        == "managed_copy_pilot_runtime_source_heartbeat_stale"
+    )
+    heartbeat_path.write_text(original_heartbeat, encoding="utf-8")
+
+    monkeypatch.setattr(pilot, "process_identity", lambda _pid: {"creation_token": 1, "parent_pid": os.getpid()})
+    assert (
+        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
+        == "managed_copy_pilot_runtime_source_process_mismatch"
+    )
+    monkeypatch.setattr(pilot, "process_identity", current_identity)
+
+    pilot._PILOT_LEASES.pop(_LEASE)
+    assert (
+        pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])["blocker"]
+        == "managed_copy_pilot_runtime_source_lineage_mismatch"
+    )
 
 
 def test_interrupted_owned_process_can_be_finalized_without_pid_reuse(vertical_runtime: dict[str, Any]) -> None:
