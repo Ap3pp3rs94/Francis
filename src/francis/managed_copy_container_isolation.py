@@ -583,7 +583,9 @@ def _proof_base() -> Path:
     if configured:
         return Path(configured)
     if sys.platform == "win32":
-        return Path(r"D:\Francis-support\proof-journeys\MC-ISO-001")
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        windows_local_root = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+        return windows_local_root / "Francis" / "managed-copy-container-proofs"
     return data_dir() / "managed_copy_container_proofs"
 
 

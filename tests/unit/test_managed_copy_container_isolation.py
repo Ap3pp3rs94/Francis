@@ -24,6 +24,28 @@ from francis.governance.pilot_scope_lease import (
 _REAL_PILOT_LEASE_CONTEXT = container_isolation._pilot_lease_context
 
 
+def test_windows_default_proof_base_uses_fixed_local_application_data(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    local_app_data = tmp_path / "LocalAppData"
+    monkeypatch.delenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+    monkeypatch.setattr(container_isolation.sys, "platform", "win32")
+
+    assert container_isolation._proof_base() == local_app_data / "Francis" / "managed-copy-container-proofs"
+
+
+def test_explicit_proof_base_override_remains_authoritative(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configured = tmp_path / "operator-proof-root"
+    monkeypatch.setenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT", str(configured))
+
+    assert container_isolation._proof_base() == configured
+
+
 @pytest.fixture
 def isolation_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
