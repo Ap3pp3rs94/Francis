@@ -57,7 +57,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["writes_data"] is False
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
-    assert payload["latest_ledger_entry"]["title"] == ("2026-07-17 - Current-evidence rogue-recovery plan preflight")
+    assert payload["latest_ledger_entry"]["title"] == ("2026-07-24 - Stage 18 copy-creation runtime proof accepted")
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
         "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"
     )
@@ -66,9 +66,10 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the first authorized production Stage 18 runtime proof. A dedicated managed-copy runtime-start "
-            "authority contract and fixed fixture producer now exercise the copy-creation proof path in isolated "
-            "test state, but no persistent actor holds that scope and no production startup receipt exists. "
+            "continued Stage 18 runtime-evidence closure. A governed synthetic local managed-copy lifecycle now "
+            "executes the real Francis `tenant_work_briefing` runtime in a constrained Docker container and "
+            "supplies the canonical copy-creation receipt, advancing the completion audit to 2 of 8. No persistent "
+            "actor holds the temporary proof scopes, and no production tenant or customer startup receipt exists. "
             "Production copy creation and incident determination still require real operator-supplied tenant, "
             "policy, runtime, and incident facts; those facts are not inferred or fabricated."
         ),
