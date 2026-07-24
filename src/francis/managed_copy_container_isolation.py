@@ -23,6 +23,7 @@ from francis.managed_copy_runtime import (
     OUTPUT_CONTRACT,
     RUNTIME_IDENTITY,
     TENANT_BOUNDARY_INPUT_CONTRACT,
+    TENANT_DOMAIN_BOUNDARY_PATHS,
     TENANT_BOUNDARY_OPERATION,
     TENANT_BOUNDARY_OUTPUT_CONTRACT,
     WORK_BRIEFING_OPERATION,
@@ -1461,6 +1462,8 @@ def _tenant_boundary_observation_fields(output: dict[str, Any], descriptor: dict
         "approved_tenant_input_fingerprint": output["approved_tenant_input_fingerprint"],
         "sibling_boundary_id": output["sibling_boundary_id"],
         "sibling_tenant_boundary_absent": output["sibling_tenant_boundary_absent"],
+        "domain_boundaries_absent": output["domain_boundaries_absent"],
+        "bounded_isolation_domains_proven": output["bounded_isolation_domains_proven"],
         "tenant_boundary_probe_output_fingerprint": output["output_fingerprint"],
         "comprehensive_tenant_isolation_proven": False,
     }
@@ -1532,6 +1535,7 @@ def _runtime_records_blocker(
             operation_input,
             approved_input_read=True,
             sibling_boundary_absent=True,
+            domain_boundaries_absent={domain: True for domain in TENANT_DOMAIN_BOUNDARY_PATHS},
         )
     else:
         expected_output = build_work_briefing(operation_input)

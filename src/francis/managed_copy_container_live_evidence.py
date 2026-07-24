@@ -63,6 +63,8 @@ _TENANT_BOUNDARY_READY_FIELDS = _READY_FIELDS | {
     "approved_tenant_input_fingerprint",
     "sibling_boundary_id",
     "sibling_tenant_boundary_absent",
+    "domain_boundaries_absent",
+    "bounded_isolation_domains_proven",
     "tenant_boundary_probe_output_fingerprint",
     "comprehensive_tenant_isolation_proven",
 }

@@ -13,11 +13,19 @@ HEARTBEAT_IDENTITY = "stage18_managed_copy_runtime_heartbeat_v1"
 INPUT_CONTRACT = "stage18_managed_copy_work_briefing_input_v1"
 OUTPUT_CONTRACT = "stage18_managed_copy_work_briefing_output_v1"
 TENANT_BOUNDARY_INPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_input_v1"
-TENANT_BOUNDARY_OUTPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_output_v1"
+TENANT_BOUNDARY_OUTPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_output_v2"
 WORK_BRIEFING_OPERATION = "tenant_work_briefing"
 TENANT_BOUNDARY_OPERATION = "tenant_boundary_probe"
 TENANT_BOUNDARY_ID = "fixed_sibling_tenant_boundary_v1"
 TENANT_BOUNDARY_RELATIVE_PATH = "tenant-b"
+TENANT_DOMAIN_BOUNDARY_PATHS = {
+    "tenant_data": "tenant-data",
+    "tenant_memory": "tenant-memory",
+    "tenant_receipts": "tenant-receipts",
+    "tenant_connectors": "tenant-connectors",
+    "tenant_policy": "tenant-policy",
+    "tenant_support_authority": "tenant-support-authority",
+}
 _PRIORITIES = ("critical", "high", "normal", "low")
 _STATUSES = ("open", "blocked", "done")
 _PUBLIC_INPUT_BLOCKERS = frozenset(
@@ -86,6 +94,7 @@ def build_tenant_boundary_probe(
     *,
     approved_input_read: bool,
     sibling_boundary_absent: bool,
+    domain_boundaries_absent: dict[str, bool],
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or set(payload) != {"contract", "probe_id", "tenant_marker"}:
         raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_input_schema_invalid")
@@ -95,8 +104,15 @@ def build_tenant_boundary_probe(
     tenant_marker = _bounded(payload.get("tenant_marker"), 160)
     if not probe_id or not tenant_marker:
         raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_input_invalid")
-    if type(approved_input_read) is not bool or type(sibling_boundary_absent) is not bool:
+    if (
+        type(approved_input_read) is not bool
+        or type(sibling_boundary_absent) is not bool
+        or not isinstance(domain_boundaries_absent, dict)
+        or set(domain_boundaries_absent) != set(TENANT_DOMAIN_BOUNDARY_PATHS)
+        or any(type(value) is not bool for value in domain_boundaries_absent.values())
+    ):
         raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_observation_invalid")
+    bounded_domains_proven = all(domain_boundaries_absent.values())
     result = {
         "contract": TENANT_BOUNDARY_OUTPUT_CONTRACT,
         "operation": TENANT_BOUNDARY_OPERATION,
@@ -105,7 +121,11 @@ def build_tenant_boundary_probe(
         "approved_tenant_input_fingerprint": _fingerprint(payload),
         "sibling_boundary_id": TENANT_BOUNDARY_ID,
         "sibling_tenant_boundary_absent": sibling_boundary_absent,
-        "bounded_cross_tenant_denial": approved_input_read and sibling_boundary_absent,
+        "domain_boundaries_absent": {
+            domain: domain_boundaries_absent[domain] for domain in TENANT_DOMAIN_BOUNDARY_PATHS
+        },
+        "bounded_isolation_domains_proven": bounded_domains_proven,
+        "bounded_cross_tenant_denial": approved_input_read and sibling_boundary_absent and bounded_domains_proven,
         "fixture_runtime": False,
         "comprehensive_tenant_isolation_proven": False,
     }
@@ -118,6 +138,7 @@ def build_runtime_operation_preview(payload: object) -> dict[str, Any]:
             payload,
             approved_input_read=False,
             sibling_boundary_absent=False,
+            domain_boundaries_absent={domain: False for domain in TENANT_DOMAIN_BOUNDARY_PATHS},
         )
     return build_work_briefing(payload)
 
@@ -176,6 +197,10 @@ def main() -> int:
                 source,
                 approved_input_read=input_path.is_file(),
                 sibling_boundary_absent=not sibling_boundary.exists(),
+                domain_boundaries_absent={
+                    domain: not (tenant_root / relative_path).exists()
+                    for domain, relative_path in TENANT_DOMAIN_BOUNDARY_PATHS.items()
+                },
             )
             operation_name = TENANT_BOUNDARY_OPERATION
             output_name = "tenant_boundary_probe"

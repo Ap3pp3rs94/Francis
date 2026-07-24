@@ -30,6 +30,7 @@ from francis.managed_copy_runtime_evidence import (
 from francis.managed_copy_runtime import (
     INPUT_CONTRACT,
     TENANT_BOUNDARY_INPUT_CONTRACT,
+    TENANT_DOMAIN_BOUNDARY_PATHS,
     build_work_briefing,
 )
 from francis.process_identity import process_identity, terminate_owned_process
@@ -187,13 +188,19 @@ def test_container_entrypoint_layout_executes_real_francis_operation(tmp_path: P
 
 
 @pytest.mark.parametrize(
-    ("sibling_exists", "expected_absent"),
-    [(False, True), (True, False)],
+    ("sibling_exists", "present_domain", "expected_absent", "expected_domains"),
+    [
+        (False, "", True, True),
+        (True, "", False, True),
+        (False, "tenant_memory", True, False),
+    ],
 )
 def test_container_entrypoint_executes_fixed_tenant_boundary_probe(
     tmp_path: Path,
     sibling_exists: bool,
+    present_domain: str,
     expected_absent: bool,
+    expected_domains: bool,
 ) -> None:
     tenant_root = tmp_path / "francis"
     input_path = tenant_root / "tenant" / "work_items.json"
@@ -202,6 +209,8 @@ def test_container_entrypoint_executes_fixed_tenant_boundary_probe(
     state_dir.mkdir()
     if sibling_exists:
         (tenant_root.parent / "tenant-b").mkdir()
+    if present_domain:
+        (tenant_root / TENANT_DOMAIN_BOUNDARY_PATHS[present_domain]).mkdir()
     input_path.write_text(
         json.dumps(
             {
@@ -247,7 +256,9 @@ def test_container_entrypoint_executes_fixed_tenant_boundary_probe(
     operation = json.loads((state_dir / "operation.json").read_text(encoding="utf-8"))
     assert output["approved_tenant_input_read"] is True
     assert output["sibling_tenant_boundary_absent"] is expected_absent
-    assert output["bounded_cross_tenant_denial"] is expected_absent
+    assert output["domain_boundaries_absent"][present_domain or "tenant_data"] is expected_domains
+    assert output["bounded_isolation_domains_proven"] is expected_domains
+    assert output["bounded_cross_tenant_denial"] is (expected_absent and expected_domains)
     assert output["comprehensive_tenant_isolation_proven"] is False
     assert operation["operation"] == "tenant_boundary_probe"
 
@@ -299,7 +310,7 @@ def test_managed_copy_runtime_image_is_fixed_to_real_francis_entrypoint() -> Non
         "FROM python:3.12-alpine@sha256:dbb1970cc04ce7d381c65efe8309c0c03d463e5b35c88f14d721796ad24cfbfd",
         "",
         'LABEL francis.runtime.contract="stage18_managed_copy_runtime_v1"',
-        'LABEL francis.runtime.program_sha256="568b3e0cf395c3993fac6e3c088d1547317d7243eff60c98ed34fd8a9c1ec6cf"',
+        'LABEL francis.runtime.program_sha256="5c6ff6a28b6dee77d80980cbcf9bf0f30c6aea55bdc597178e2f7b07079e84ba"',
         "",
         "COPY --chown=65532:65532 src/francis/managed_copy_runtime.py /opt/francis/managed_copy_runtime.py",
         "",

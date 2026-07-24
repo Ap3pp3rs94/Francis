@@ -474,6 +474,7 @@ def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str,
             payload["operation_input"],
             approved_input_read=True,
             sibling_boundary_absent=True,
+            domain_boundaries_absent={domain: True for domain in container_isolation.TENANT_DOMAIN_BOUNDARY_PATHS},
         )
     else:
         output = container_isolation.build_runtime_operation_preview(payload["operation_input"])
@@ -1353,11 +1354,15 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
     else:
         assert result["output"]["approved_tenant_input_read"] is True
         assert result["output"]["sibling_tenant_boundary_absent"] is True
+        assert all(result["output"]["domain_boundaries_absent"].values())
+        assert result["output"]["bounded_isolation_domains_proven"] is True
         assert result["output"]["bounded_cross_tenant_denial"] is True
         assert result["output"]["comprehensive_tenant_isolation_proven"] is False
         assert result["receipt"]["tenant_boundary_probe_id"] == "tenant-boundary-probe-001"
         assert result["receipt"]["approved_tenant_input_read"] is True
         assert result["receipt"]["sibling_tenant_boundary_absent"] is True
+        assert all(result["receipt"]["domain_boundaries_absent"].values())
+        assert result["receipt"]["bounded_isolation_domains_proven"] is True
         assert result["receipt"]["comprehensive_tenant_isolation_proven"] is False
         assert "synthetic-tenant-a-marker" not in " ".join(created_argv)
     assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
