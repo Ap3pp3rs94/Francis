@@ -49,6 +49,7 @@ RUNTIME_EVIDENCE_ACTION = "managed_copies.runtime_evidence"
 CONTAINER_ISOLATION_CONTRACT = "stage18_managed_copy_docker_isolation_v2"
 FIXED_IMAGE_REPOSITORY = "francis/managed-copy-runtime"
 FIXED_IMAGE_TAG = "stage18-v1"
+_STATE_IDENTITY_FILENAME = ".francis-state-identity"
 FIXED_PLATFORM = "linux/amd64"
 FIXED_CONTAINER_USER = "65532:65532"
 RUNTIME_PROGRAM = repo_root() / "src" / "francis" / "managed_copy_runtime.py"
@@ -60,6 +61,94 @@ SECURITY_PROFILE_DIAGNOSTIC_CONTRACT = "stage18_managed_copy_docker_security_pro
 DIAGNOSTIC_PREDECESSOR_PROOF_RUN_ID = "mciso-20260716t170613z"
 DIAGNOSTIC_PREDECESSOR_FAILED_RECEIPT_FINGERPRINT = "1add7aa3607770bc7e034c29edbe2252e2ea87ad516b0fa46b852c7393cdb006"
 _LOCK = threading.Lock()
+
+
+@dataclass
+class _StateRootIdentity:
+    path: Path
+    token_fingerprint: str
+    file_descriptor: int
+    file_identity: tuple[int, int, int, int]
+
+    @classmethod
+    def acquire(cls, state_root: Path) -> _StateRootIdentity | None:
+        identity_path = state_root / _STATE_IDENTITY_FILENAME
+        descriptor = -1
+        try:
+            if not _safe_existing_chain(state_root):
+                return None
+            token = os.urandom(32).hex().encode("ascii") + b"\n"
+            binary_flag = getattr(os, "O_BINARY", 0)
+            write_descriptor = os.open(identity_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | binary_flag, 0o600)
+            try:
+                if os.write(write_descriptor, token) != len(token):
+                    return None
+                os.fsync(write_descriptor)
+            finally:
+                os.close(write_descriptor)
+            descriptor = os.open(identity_path, os.O_RDONLY | binary_flag)
+            held_stat = os.fstat(descriptor)
+            held_token = _read_file_descriptor(descriptor)
+            if held_token != token:
+                os.close(descriptor)
+                return None
+            return cls(
+                path=identity_path,
+                token_fingerprint=hashlib.sha256(token).hexdigest(),
+                file_descriptor=descriptor,
+                file_identity=_file_identity(held_stat),
+            )
+        except OSError:
+            if descriptor >= 0:
+                os.close(descriptor)
+            return None
+
+    def verify(self) -> bool:
+        try:
+            state_root = self.path.parent
+            if (
+                not _safe_existing_chain(self.path)
+                or self.path.resolve(strict=True).parent != state_root.resolve(strict=True)
+                or _is_reparse(self.path)
+            ):
+                return False
+            held_stat = os.fstat(self.file_descriptor)
+            path_stat = self.path.lstat()
+            if (
+                _file_identity(held_stat) != self.file_identity
+                or _file_identity(path_stat) != self.file_identity
+                or not os.path.samestat(held_stat, path_stat)
+            ):
+                return False
+            held_token = _read_file_descriptor(self.file_descriptor)
+            path_token = self.path.read_bytes()
+            return (
+                hashlib.sha256(held_token).hexdigest() == self.token_fingerprint
+                and hashlib.sha256(path_token).hexdigest() == self.token_fingerprint
+            )
+        except OSError:
+            return False
+
+    def close(self) -> None:
+        if self.file_descriptor >= 0:
+            os.close(self.file_descriptor)
+            self.file_descriptor = -1
+
+
+def _file_identity(stat: os.stat_result) -> tuple[int, int, int, int]:
+    return (
+        stat.st_dev,
+        stat.st_ino,
+        stat.st_mode,
+        getattr(stat, "st_file_attributes", 0),
+    )
+
+
+def _read_file_descriptor(descriptor: int) -> bytes:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    return os.read(descriptor, 4096)
+
+
 _IDENTIFIER_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
 _PAYLOAD_FIELDS = frozenset(
     {
@@ -396,11 +485,15 @@ def _execute(
     for path in (receipts, state, tenant):
         path.mkdir()
     _write_text_immutable(tenant / "work_items.json", json.dumps(operation_input, sort_keys=True) + "\n")
+    state_identity = _StateRootIdentity.acquire(state)
+    if state_identity is None:
+        return _blocked(plan, "managed_copy_container_state_identity_unavailable")
     name = f"francis-mciso-{d['proof_run_id'].lower()}"
     image = f"{FIXED_IMAGE_REPOSITORY}:{FIXED_IMAGE_TAG}"
     create_argv = _create_argv(d, name=name, image=image, root=root)
     source_snapshot = _mount_source_snapshot(root, descriptor=d)
     if not source_snapshot:
+        state_identity.close()
         return _blocked(plan, "managed_copy_container_mount_source_unsafe")
     attempt = _receipt(
         plan, "launch_attempt", {"container_name": name, "command_fingerprint": _fingerprint(create_argv)}
@@ -412,6 +505,7 @@ def _execute(
         if recovered_id:
             cleanup_status = _cleanup_exact(run, recovered_id, name=name, receipts=receipts, plan=plan)
             if cleanup_status != "removed":
+                state_identity.close()
                 _fail(plan, receipts, "managed_copy_container_create_failed_cleanup_failed", created)
                 return {
                     "ok": False,
@@ -420,6 +514,7 @@ def _execute(
                     "proof_root": str(root),
                 }
         elif created.timed_out:
+            state_identity.close()
             _fail(plan, receipts, "managed_copy_container_create_timeout_cleanup_unverified", created)
             return {
                 "ok": False,
@@ -427,6 +522,7 @@ def _execute(
                 "error": "managed_copy_container_create_timeout_cleanup_unverified",
                 "proof_root": str(root),
             }
+        state_identity.close()
         return _fail(plan, receipts, "managed_copy_container_create_failed", created)
     container_id = _container_id(created.stdout)
     if not container_id:
@@ -435,6 +531,7 @@ def _execute(
         if recovered_id:
             cleanup_status = _cleanup_exact(run, recovered_id, name=name, receipts=receipts, plan=plan)
             if cleanup_status != "removed":
+                state_identity.close()
                 _fail(plan, receipts, "managed_copy_container_id_invalid_cleanup_failed", created)
                 return {
                     "ok": False,
@@ -442,7 +539,9 @@ def _execute(
                     "error": "managed_copy_container_id_invalid_cleanup_failed",
                     "proof_root": str(root),
                 }
+            state_identity.close()
             return _fail(plan, receipts, "managed_copy_container_id_invalid", created)
+        state_identity.close()
         _fail(plan, receipts, "managed_copy_container_id_invalid_cleanup_unverified", created)
         return {
             "ok": False,
@@ -452,7 +551,7 @@ def _execute(
         }
     cleanup_attempted = False
     try:
-        if _mount_source_snapshot(root, descriptor=d) != source_snapshot:
+        if not state_identity.verify() or _mount_source_snapshot(root, descriptor=d) != source_snapshot:
             return _fail(plan, receipts, "managed_copy_container_mount_source_changed", created)
         inspected = _inspect(run, container_id)
         blocker = _inspect_blocker(inspected, d, name=name, root=root)
@@ -473,6 +572,8 @@ def _execute(
             if blocker == "managed_copy_container_security_profile_mismatch":
                 _write_security_profile_diagnostic(receipts, plan=plan, inspected=inspected)
             return _fail(plan, receipts, blocker, inspected)
+        if not state_identity.verify():
+            return _fail(plan, receipts, "managed_copy_container_mount_source_changed", inspected)
         container_host_pid = _container_host_pid(inspected)
         if container_host_pid == 0:
             return _fail(plan, receipts, "managed_copy_container_runtime_process_identity_mismatch", inspected)
@@ -542,6 +643,8 @@ def _execute(
                 "error": "managed_copy_container_cleanup_failed",
                 "proof_root": str(root),
             }
+        if not state_identity.verify():
+            return _fail(plan, receipts, "managed_copy_container_mount_source_changed", inspected)
         cleanup_receipt = _read_json(receipts / "cleanup.json")
         lifecycle = write_lifecycle_complete_receipt(
             plan=plan,
@@ -617,6 +720,7 @@ def _execute(
             cleanup_status = _cleanup_exact(run, container_id, name=name, receipts=receipts, plan=plan)
         else:
             cleanup_status = "removed"
+        state_identity.close()
         if cleanup_status != "removed":
             return {
                 "ok": False,

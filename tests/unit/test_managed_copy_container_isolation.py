@@ -70,24 +70,115 @@ def test_mount_snapshot_allows_expected_writable_state_updates(tmp_path: Path) -
     assert container_isolation._mount_source_snapshot(root, descriptor=descriptor) == before
 
 
-def test_mount_snapshot_rejects_state_directory_replacement(tmp_path: Path) -> None:
+def test_state_root_identity_accepts_unchanged_directory(tmp_path: Path) -> None:
     root = tmp_path / "proof"
-    tenant = root / "tenant"
     state = root / "state"
-    tenant.mkdir(parents=True)
-    state.mkdir()
-    input_path = tenant / "work_items.json"
-    input_path.write_text('{"contract":"stage18_managed_copy_work_briefing_input_v1","items":[]}', encoding="utf-8")
-    descriptor = {
-        "operation_input_file_fingerprint": container_isolation._file_sha256(input_path),
-    }
-    before = container_isolation._mount_source_snapshot(root, descriptor=descriptor)
+    state.mkdir(parents=True)
 
-    state.rmdir()
-    state.mkdir()
+    identity = container_isolation._StateRootIdentity.acquire(state)
+    assert identity is not None
+    try:
+        assert identity.verify() is True
+    finally:
+        identity.close()
 
-    assert before
-    assert container_isolation._mount_source_snapshot(root, descriptor=descriptor) != before
+
+def test_state_root_identity_rejects_delete_and_recreate_with_retained_handle(tmp_path: Path) -> None:
+    state = tmp_path / "proof" / "state"
+    state.mkdir(parents=True)
+    identity = container_isolation._StateRootIdentity.acquire(state)
+    assert identity is not None
+    original_token = identity.path.read_bytes()
+
+    try:
+        try:
+            identity.path.unlink()
+            state.rmdir()
+        except PermissionError:
+            # Windows denies replacement while the controller retains the file handle.
+            assert identity.verify() is True
+        else:
+            state.mkdir()
+            identity.path.write_bytes(original_token)
+            assert identity.verify() is False
+            assert identity.file_identity != container_isolation._file_identity(identity.path.lstat())
+    finally:
+        identity.close()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows prevents replacement while the identity handle is retained")
+def test_state_root_identity_rejects_replacement_when_weak_metadata_is_reused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = tmp_path / "proof" / "state"
+    state.mkdir(parents=True)
+    identity = container_isolation._StateRootIdentity.acquire(state)
+    assert identity is not None
+    original_token = identity.path.read_bytes()
+
+    try:
+        identity.path.unlink()
+        state.rmdir()
+        state.mkdir()
+        identity.path.write_bytes(original_token)
+        monkeypatch.setattr(container_isolation, "_file_identity", lambda stat: identity.file_identity)
+
+        assert identity.verify() is False
+    finally:
+        identity.close()
+
+
+def test_state_root_identity_fails_closed_for_missing_or_altered_token(tmp_path: Path) -> None:
+    state = tmp_path / "proof" / "state"
+    state.mkdir(parents=True)
+    identity = container_isolation._StateRootIdentity.acquire(state)
+    assert identity is not None
+
+    try:
+        try:
+            identity.path.write_text("altered\n", encoding="utf-8")
+        except PermissionError:
+            identity.close()
+            identity.path.unlink()
+        assert identity.verify() is False
+    finally:
+        identity.close()
+
+
+def test_state_root_identity_fails_closed_when_identity_evidence_is_missing(tmp_path: Path) -> None:
+    state = tmp_path / "proof" / "state"
+    state.mkdir(parents=True)
+    identity = container_isolation._StateRootIdentity.acquire(state)
+    assert identity is not None
+
+    identity.close()
+    identity.path.unlink()
+
+    assert identity.verify() is False
+
+
+def test_state_root_identity_rejects_symlink_redirection_where_supported(tmp_path: Path) -> None:
+    state = tmp_path / "proof" / "state"
+    replacement = tmp_path / "replacement"
+    state.mkdir(parents=True)
+    replacement.mkdir()
+    identity = container_isolation._StateRootIdentity.acquire(state)
+    assert identity is not None
+
+    try:
+        try:
+            identity.path.unlink()
+        except OSError:
+            assert identity.verify() is True
+        else:
+            try:
+                identity.path.symlink_to(replacement / "identity")
+            except OSError:
+                assert identity.verify() is False
+            else:
+                assert identity.verify() is False
+    finally:
+        identity.close()
 
 
 def test_mount_snapshot_rejects_tenant_input_tampering(tmp_path: Path) -> None:
