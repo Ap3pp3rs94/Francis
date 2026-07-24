@@ -1092,6 +1092,13 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_obser
     )
 
     client = TestClient(create_app())
+    from francis.chat import router as chat_router
+
+    def fake_generate(prompt: str) -> str:
+        assert "feedback_memory_assistance.summary:" in prompt
+        return "Feedback memory assistance live sample observed."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
     seed_feedback = client.post(
         "/telemetry/context/feedback",
         json={
@@ -1129,7 +1136,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_obser
         "/chat/send",
         json={
             "message": "What context should guide this work?",
-            "use_llm": False,
+            "use_llm": True,
             "api_actor": actor,
         },
     )
@@ -1198,7 +1205,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_obser
     assert body["chat"]["run_id"].startswith("chat_run_")
     assert body["chat"]["route"] == "/chat/send"
     assert body["chat"]["method"] == "POST"
-    assert body["chat"]["model_or_tool_execution_span_captured"] is False
+    assert body["chat"]["model_or_tool_execution_span_captured"] is True
     assert body["feedback"]["feedback_id"]
     assert body["memory"]["event_id"] in {
         "evt-feedback-memory-assistance-live-seed",
