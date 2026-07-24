@@ -12,6 +12,12 @@ RUNTIME_IDENTITY = "stage18_managed_copy_runtime_v1"
 HEARTBEAT_IDENTITY = "stage18_managed_copy_runtime_heartbeat_v1"
 INPUT_CONTRACT = "stage18_managed_copy_work_briefing_input_v1"
 OUTPUT_CONTRACT = "stage18_managed_copy_work_briefing_output_v1"
+TENANT_BOUNDARY_INPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_input_v1"
+TENANT_BOUNDARY_OUTPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_output_v1"
+WORK_BRIEFING_OPERATION = "tenant_work_briefing"
+TENANT_BOUNDARY_OPERATION = "tenant_boundary_probe"
+TENANT_BOUNDARY_ID = "fixed_sibling_tenant_boundary_v1"
+TENANT_BOUNDARY_RELATIVE_PATH = "tenant-b"
 _PRIORITIES = ("critical", "high", "normal", "low")
 _STATUSES = ("open", "blocked", "done")
 
@@ -52,6 +58,52 @@ def build_work_briefing(payload: object) -> dict[str, Any]:
         "input_fingerprint": _fingerprint(payload),
     }
     return {**result, "output_fingerprint": _fingerprint(result)}
+
+
+def build_tenant_boundary_probe(
+    payload: object,
+    *,
+    approved_input_read: bool,
+    sibling_boundary_absent: bool,
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or set(payload) != {"contract", "probe_id", "tenant_marker"}:
+        raise ValueError("managed_copy_tenant_boundary_probe_input_schema_invalid")
+    if payload.get("contract") != TENANT_BOUNDARY_INPUT_CONTRACT:
+        raise ValueError("managed_copy_tenant_boundary_probe_contract_invalid")
+    probe_id = _bounded(payload.get("probe_id"), 80)
+    tenant_marker = _bounded(payload.get("tenant_marker"), 160)
+    if not probe_id or not tenant_marker:
+        raise ValueError("managed_copy_tenant_boundary_probe_input_invalid")
+    if type(approved_input_read) is not bool or type(sibling_boundary_absent) is not bool:
+        raise ValueError("managed_copy_tenant_boundary_probe_observation_invalid")
+    result = {
+        "contract": TENANT_BOUNDARY_OUTPUT_CONTRACT,
+        "operation": TENANT_BOUNDARY_OPERATION,
+        "probe_id": probe_id,
+        "approved_tenant_input_read": approved_input_read,
+        "approved_tenant_input_fingerprint": _fingerprint(payload),
+        "sibling_boundary_id": TENANT_BOUNDARY_ID,
+        "sibling_tenant_boundary_absent": sibling_boundary_absent,
+        "bounded_cross_tenant_denial": approved_input_read and sibling_boundary_absent,
+        "fixture_runtime": False,
+        "comprehensive_tenant_isolation_proven": False,
+    }
+    return {**result, "output_fingerprint": _fingerprint(result)}
+
+
+def build_runtime_operation_preview(payload: object) -> dict[str, Any]:
+    if isinstance(payload, dict) and payload.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
+        return build_tenant_boundary_probe(
+            payload,
+            approved_input_read=False,
+            sibling_boundary_absent=False,
+        )
+    return build_work_briefing(payload)
+
+
+def runtime_operation_name(payload: object) -> str:
+    preview = build_runtime_operation_preview(payload)
+    return str(preview.get("operation") or WORK_BRIEFING_OPERATION)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -97,17 +149,29 @@ def main() -> int:
     _write_atomic(state_dir / "handshake.json", identity)
     try:
         source = json.loads(input_path.read_text(encoding="utf-8"))
-        output = build_work_briefing(source)
-        _write_atomic(state_dir / "briefing.json", output)
+        if isinstance(source, dict) and source.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
+            sibling_boundary = tenant_root.parent / TENANT_BOUNDARY_RELATIVE_PATH
+            output = build_tenant_boundary_probe(
+                source,
+                approved_input_read=input_path.is_file(),
+                sibling_boundary_absent=not sibling_boundary.exists(),
+            )
+            operation_name = TENANT_BOUNDARY_OPERATION
+            output_name = "tenant_boundary_probe"
+        else:
+            output = build_work_briefing(source)
+            operation_name = WORK_BRIEFING_OPERATION
+            output_name = "briefing"
+        _write_atomic(state_dir / f"{output_name}.json", output)
         operation = {
             "kind": "francis.stage18.managed_copies.runtime_operation_receipt",
-            "operation": "tenant_work_briefing",
+            "operation": operation_name,
             "status": "completed",
             "copy_id": args.copy_id,
             "tenant_key": args.tenant_key,
             "pilot_run_id": args.pilot_run_id,
             "runtime_nonce_hash": identity["runtime_nonce_hash"],
-            "input_fingerprint": output["input_fingerprint"],
+            "input_fingerprint": output.get("input_fingerprint", output.get("approved_tenant_input_fingerprint")),
             "output_fingerprint": output["output_fingerprint"],
             "fixture_runtime": False,
             "recorded_at_unix_ms": int(time.time() * 1000),

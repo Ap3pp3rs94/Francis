@@ -14,6 +14,9 @@ TENANT_ISOLATION_SOURCE_KIND = "francis.stage18.managed_copies.tenant_isolation_
 TENANT_ISOLATION_STATE_KIND = "francis.stage18.managed_copies.tenant_isolation_current_state_receipt"
 TENANT_ISOLATION_DOMAIN_KIND = "francis.stage18.managed_copies.tenant_isolation_domain_receipt"
 TENANT_ISOLATION_SOURCE_MISSING = "stage18_tenant_isolation_runtime_source_receipt_missing"
+TENANT_ISOLATION_CONTAINER_SOURCE_MISSING = (
+    "stage18_tenant_isolation_runtime_canonical_container_source_verifier_not_implemented"
+)
 TENANT_ISOLATION_PROOF_KIND = "tenant_isolation_runtime_receipt"
 _MAX_STATE_AGE_MS = 30_000
 _IDENTIFIER_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
@@ -278,8 +281,8 @@ def _load_linked_proofs(source: dict[str, Any], *, now_ms: int | None) -> dict[s
 
 def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
+    from francis.managed_copy_pilot_runtime import verify_pilot_runtime_authority_lineage
     from francis.managed_copy_provisioning import managed_copy_provision_for_copy
-    from francis.managed_copy_runtime_start import verify_runtime_startup_source
 
     provision = managed_copy_provision_for_copy(
         source["copy_id"], provisioning_receipt_id=source["provisioning_receipt_id"]
@@ -302,15 +305,32 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
         or isolation.get("live_state_aligned") is not True
     ):
         return "stage18_tenant_isolation_runtime_structural_lineage_invalid"
-    runtime = verify_runtime_startup_source(
+    runtime = verify_pilot_runtime_authority_lineage(
         source["runtime_start_receipt_id"], source["runtime_start_receipt_fingerprint"]
     )
     if runtime.get("valid") is not True or runtime.get("evidence_class") != "canonical_runtime":
-        return "stage18_tenant_isolation_runtime_canonical_runtime_source_not_implemented"
-    # The current process-local lease intentionally has no durable rehydration
-    # path. A future pilot producer must correlate its live lease and approvals
-    # here before this canonical verifier can return ready.
-    return "stage18_tenant_isolation_runtime_pilot_authority_lineage_not_implemented"
+        return "stage18_tenant_isolation_runtime_canonical_runtime_source_invalid"
+    authority_lineage = runtime.get("authority_lineage")
+    if not isinstance(authority_lineage, dict) or any(
+        authority_lineage.get(field) != source[field]
+        for field in (
+            "tenant_key",
+            "copy_id",
+            "pilot_run_id",
+            "runtime_identity",
+            "runtime_start_receipt_id",
+            "runtime_start_receipt_fingerprint",
+            "operator_approval_receipt_id",
+            "operator_approval_receipt_fingerprint",
+            "actor_scope_lease_id",
+            "actor_scope_lease_fingerprint",
+        )
+    ):
+        return "stage18_tenant_isolation_runtime_pilot_authority_lineage_invalid"
+    # The existing Docker receipt is fixture evidence and the proof container is
+    # removed before control returns. No current canonical container verifier
+    # exists that can independently prove this source binding.
+    return TENANT_ISOLATION_CONTAINER_SOURCE_MISSING
 
 
 def _valid_domain_receipt(receipt: dict[str, Any], *, domain: str, source: dict[str, Any], current_ms: int) -> bool:

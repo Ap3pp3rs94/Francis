@@ -259,6 +259,20 @@ class PilotScopeLeaseRegistry:
                 "operator_decision_fingerprint": lease.operator_decision_fingerprint,
             }
 
+    def lease_snapshot_with_state(
+        self,
+        lease_id: object,
+        *,
+        now_ms: int | None = None,
+    ) -> tuple[PilotScopeLease, PilotLeaseState] | None:
+        """Return one atomic immutable lease and effective-state observation."""
+        now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
+        with self._lock:
+            lease = self._leases.get(str(lease_id or "").strip())
+            if lease is None:
+                return None
+            return lease, self._effective_state(lease, now)
+
     def revoke(self, lease_id: str, *, now_ms: int | None = None) -> PilotLeaseDecision:
         now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")
         with self._lock:

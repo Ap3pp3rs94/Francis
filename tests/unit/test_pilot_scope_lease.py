@@ -203,6 +203,28 @@ def test_process_restart_loses_registry_and_gate_fails_closed(monkeypatch: pytes
     assert decision.reason == "missing_pilot_lease"
 
 
+def test_lease_snapshot_and_effective_state_are_observed_atomically() -> None:
+    registry = _registry(_lease(bindings=(_CREATE,)))
+    before = registry.lease_snapshot_with_state("pilot-lease-001", now_ms=_NOW)
+    assert before is not None
+    before_lease, before_state = before
+    assert before_state is PilotLeaseState.ACTIVE
+    assert before_lease.consumed_bindings == frozenset()
+
+    consumed = registry.authorize_and_consume(
+        actor_id=_ACTOR,
+        check=_check(_CREATE),
+        now_ms=_NOW,
+    )
+    assert consumed.allowed is True
+
+    after = registry.lease_snapshot_with_state("pilot-lease-001", now_ms=_NOW)
+    assert after is not None
+    after_lease, after_state = after
+    assert after_state is PilotLeaseState.CONSUMED
+    assert after_lease.consumed_bindings == frozenset({_CREATE})
+
+
 @pytest.mark.parametrize(
     ("route", "method", "action", "reason"),
     [

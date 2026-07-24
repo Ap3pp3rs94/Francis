@@ -21,7 +21,14 @@ from francis.managed_copy_runtime import (
     INPUT_CONTRACT,
     OUTPUT_CONTRACT,
     RUNTIME_IDENTITY,
+    TENANT_BOUNDARY_INPUT_CONTRACT,
+    TENANT_BOUNDARY_OPERATION,
+    TENANT_BOUNDARY_OUTPUT_CONTRACT,
+    WORK_BRIEFING_OPERATION,
+    build_runtime_operation_preview,
+    build_tenant_boundary_probe,
     build_work_briefing,
+    runtime_operation_name,
 )
 from francis.managed_copy_runtime_start import validate_runtime_start_approval_reference
 
@@ -150,7 +157,8 @@ def container_isolation_contract_snapshot() -> dict[str, Any]:
         "fixed_image_tag": FIXED_IMAGE_TAG,
         "fixed_platform": FIXED_PLATFORM,
         "runtime_identity": RUNTIME_IDENTITY,
-        "operation": "tenant_work_briefing",
+        "operation": WORK_BRIEFING_OPERATION,
+        "supported_operations": [WORK_BRIEFING_OPERATION, TENANT_BOUNDARY_OPERATION],
         "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
         "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
         "controller_verifier_fingerprint": _file_sha256(CONTROLLER_VERIFIER),
@@ -211,7 +219,7 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
     if len(set(digests.get(key) for key in ("image_manifest_digest", "image_platform_digest", "image_id"))) != 1:
         blockers.append("managed_copy_container_isolation_fixed_image_mismatch")
     try:
-        operation_preview = build_work_briefing(payload.get("operation_input"))
+        operation_preview = build_runtime_operation_preview(payload.get("operation_input"))
     except ValueError as exc:
         blockers.append(str(exc))
         operation_preview = {}
@@ -405,6 +413,8 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
         container_host_pid = _container_host_pid(inspected)
         if container_host_pid == 0:
             return _fail(plan, receipts, "managed_copy_container_runtime_process_identity_mismatch", inspected)
+        output = _runtime_output(records, d)
+        observation_fields = _tenant_boundary_observation_fields(output, d)
         proof = _receipt(
             plan,
             "ready",
@@ -417,8 +427,9 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
                 "security_profile_fingerprint": d["security_profile_fingerprint"],
                 "handshake_fingerprint": _fingerprint(records["handshake"]),
                 "heartbeat_fingerprint": _fingerprint(records["heartbeat"]),
+                "operation": d["operation"],
                 "operation_receipt_fingerprint": records["operation"]["receipt_fingerprint"],
-                "output_fingerprint": records["briefing"]["output_fingerprint"],
+                "output_fingerprint": output["output_fingerprint"],
                 "controller_verifier_fingerprint": d["controller_verifier_fingerprint"],
                 "container_host_pid": container_host_pid,
                 "runtime_namespace_pid": records["handshake"]["pid"],
@@ -429,6 +440,7 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
                 "evidence_class": "isolated_non_fixture_francis_runtime",
                 "runtime_gate_ready": False,
                 "stage18_ready": False,
+                **observation_fields,
             },
         )
         _write_immutable(receipts / "ready.json", proof)
@@ -436,7 +448,7 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
             "ok": True,
             "status": "runtime_ready",
             "receipt": proof,
-            "output": records["briefing"],
+            "output": output,
             "proof_root": str(root),
         }
     finally:
@@ -729,10 +741,10 @@ def _descriptor(
         "security_profile_fingerprint": _fingerprint(security),
         "runtime_identity": RUNTIME_IDENTITY,
         "heartbeat_identity": HEARTBEAT_IDENTITY,
-        "input_contract": INPUT_CONTRACT,
-        "output_contract": OUTPUT_CONTRACT,
-        "operation": "tenant_work_briefing",
-        "operation_input_fingerprint": operation_preview["input_fingerprint"],
+        "input_contract": _operation_input_contract(payload["operation_input"]),
+        "output_contract": _operation_output_contract(payload["operation_input"]),
+        "operation": runtime_operation_name(payload["operation_input"]),
+        "operation_input_fingerprint": _operation_preview_input_fingerprint(operation_preview),
         "operation_input_file_fingerprint": _sha256_text(json.dumps(payload["operation_input"], sort_keys=True) + "\n"),
         "proof_run_id": values["proof_run_id"],
         "lease_id": values["lease_id"],
@@ -1110,6 +1122,45 @@ def _readiness_seconds(value: object) -> int:
     return _exact_int(value, minimum=2, maximum=30)
 
 
+def _operation_input_contract(operation_input: object) -> str:
+    if isinstance(operation_input, dict) and operation_input.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
+        return TENANT_BOUNDARY_INPUT_CONTRACT
+    return INPUT_CONTRACT
+
+
+def _operation_preview_input_fingerprint(preview: dict[str, Any]) -> str:
+    return _text(preview.get("input_fingerprint") or preview.get("approved_tenant_input_fingerprint"))
+
+
+def _operation_output_contract(operation_input: object) -> str:
+    if isinstance(operation_input, dict) and operation_input.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
+        return TENANT_BOUNDARY_OUTPUT_CONTRACT
+    return OUTPUT_CONTRACT
+
+
+def _runtime_output_name(descriptor: dict[str, Any]) -> str:
+    return "tenant_boundary_probe" if descriptor.get("operation") == TENANT_BOUNDARY_OPERATION else "briefing"
+
+
+def _runtime_output(records: dict[str, dict[str, Any]], descriptor: dict[str, Any]) -> dict[str, Any]:
+    return records.get(_runtime_output_name(descriptor)) or {}
+
+
+def _tenant_boundary_observation_fields(output: dict[str, Any], descriptor: dict[str, Any]) -> dict[str, Any]:
+    if descriptor.get("operation") != TENANT_BOUNDARY_OPERATION:
+        return {}
+    return {
+        "tenant_boundary_probe_contract": output["contract"],
+        "tenant_boundary_probe_id": output["probe_id"],
+        "approved_tenant_input_read": output["approved_tenant_input_read"],
+        "approved_tenant_input_fingerprint": output["approved_tenant_input_fingerprint"],
+        "sibling_boundary_id": output["sibling_boundary_id"],
+        "sibling_tenant_boundary_absent": output["sibling_tenant_boundary_absent"],
+        "tenant_boundary_probe_output_fingerprint": output["output_fingerprint"],
+        "comprehensive_tenant_isolation_proven": False,
+    }
+
+
 def _wait_for_runtime_records(
     state: Path,
     descriptor: dict[str, Any],
@@ -1126,9 +1177,8 @@ def _wait_for_runtime_records(
     deadline = now() + float(readiness_seconds)
     records: dict[str, dict[str, Any]] = {}
     while now() < deadline:
-        records = {
-            name: _read_json(state / f"{name}.json") for name in ("handshake", "heartbeat", "operation", "briefing")
-        }
+        names = ("handshake", "heartbeat", "operation", _runtime_output_name(descriptor))
+        records = {name: _read_json(state / f"{name}.json") for name in names}
         if not _runtime_records_blocker(records, descriptor, operation_input=operation_input):
             break
         sleep(0.1)
@@ -1144,7 +1194,7 @@ def _runtime_records_blocker(
     handshake = records.get("handshake") or {}
     heartbeat = records.get("heartbeat") or {}
     operation = records.get("operation") or {}
-    briefing = records.get("briefing") or {}
+    output = _runtime_output(records, d)
     common = {
         "copy_id": d["copy_id"],
         "tenant_key": d["tenant_key"],
@@ -1172,16 +1222,25 @@ def _runtime_records_blocker(
         return "managed_copy_container_runtime_heartbeat_missing_or_invalid"
     if any(heartbeat.get(key) != value for key, value in common.items()):
         return "managed_copy_container_runtime_heartbeat_lineage_mismatch"
-    expected_briefing = build_work_briefing(operation_input)
-    if briefing != expected_briefing or briefing.get("input_fingerprint") != d["operation_input_fingerprint"]:
+    if d.get("operation") == TENANT_BOUNDARY_OPERATION:
+        expected_output = build_tenant_boundary_probe(
+            operation_input,
+            approved_input_read=True,
+            sibling_boundary_absent=True,
+        )
+    else:
+        expected_output = build_work_briefing(operation_input)
+    observed_input_fingerprint = output.get("input_fingerprint", output.get("approved_tenant_input_fingerprint"))
+    if output != expected_output or observed_input_fingerprint != d["operation_input_fingerprint"]:
         return "managed_copy_container_runtime_output_invalid"
     receipt_fingerprint = operation.get("receipt_fingerprint")
     if (
-        operation.get("operation") != "tenant_work_briefing"
+        operation.get("operation") != d["operation"]
         or operation.get("status") != "completed"
         or operation.get("fixture_runtime") is not False
-        or operation.get("input_fingerprint") != briefing.get("input_fingerprint")
-        or operation.get("output_fingerprint") != briefing.get("output_fingerprint")
+        or operation.get("input_fingerprint")
+        != output.get("input_fingerprint", output.get("approved_tenant_input_fingerprint"))
+        or operation.get("output_fingerprint") != output.get("output_fingerprint")
         or any(operation.get(key) != value for key, value in common.items())
         or not isinstance(receipt_fingerprint, str)
         or receipt_fingerprint

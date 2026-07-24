@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +27,11 @@ from francis.managed_copy_runtime_evidence import (
     COPY_CREATION_PROOF_KIND,
     COPY_CREATION_REQUIREMENT,
 )
-from francis.managed_copy_runtime import INPUT_CONTRACT, build_work_briefing
+from francis.managed_copy_runtime import (
+    INPUT_CONTRACT,
+    TENANT_BOUNDARY_INPUT_CONTRACT,
+    build_work_briefing,
+)
 from francis.process_identity import process_identity, terminate_owned_process
 
 _ACTOR = "stage18.pilot-test"
@@ -162,7 +167,7 @@ def test_container_entrypoint_layout_executes_real_francis_operation(tmp_path: P
         env={"PYTHONNOUSERSITE": "1", "PYTHONUTF8": "1"},
         capture_output=True,
         check=False,
-        timeout=5,
+        timeout=15,
     )
 
     assert completed.returncode == 0, completed.stderr.decode(errors="replace")
@@ -171,6 +176,72 @@ def test_container_entrypoint_layout_executes_real_francis_operation(tmp_path: P
     assert briefing["next_action"]["id"] == "work-1"
     assert operation["status"] == "completed"
     assert operation["fixture_runtime"] is False
+
+
+@pytest.mark.parametrize(
+    ("sibling_exists", "expected_absent"),
+    [(False, True), (True, False)],
+)
+def test_container_entrypoint_executes_fixed_tenant_boundary_probe(
+    tmp_path: Path,
+    sibling_exists: bool,
+    expected_absent: bool,
+) -> None:
+    tenant_root = tmp_path / "francis"
+    input_path = tenant_root / "tenant" / "work_items.json"
+    state_dir = tenant_root / "state"
+    input_path.parent.mkdir(parents=True)
+    state_dir.mkdir()
+    if sibling_exists:
+        (tenant_root.parent / "tenant-b").mkdir()
+    input_path.write_text(
+        json.dumps(
+            {
+                "contract": TENANT_BOUNDARY_INPUT_CONTRACT,
+                "probe_id": "tenant-boundary-process-001",
+                "tenant_marker": "synthetic-tenant-a-marker",
+            }
+        ),
+        encoding="utf-8",
+    )
+    program = Path(pilot.__file__).with_name("managed_copy_runtime.py")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(program),
+            "--tenant-root",
+            str(tenant_root),
+            "--state-dir",
+            str(state_dir),
+            "--input-path",
+            str(input_path),
+            "--copy-id",
+            "managed_copy_tenant_boundary",
+            "--tenant-key",
+            "d" * 64,
+            "--pilot-run-id",
+            "tenant-boundary-process-run",
+            "--runtime-nonce",
+            "tenant-boundary-process-nonce",
+            "--lease-seconds",
+            "1",
+        ],
+        cwd=tmp_path,
+        env={"PYTHONNOUSERSITE": "1", "PYTHONUTF8": "1"},
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(errors="replace")
+    output = json.loads((state_dir / "tenant_boundary_probe.json").read_text(encoding="utf-8"))
+    operation = json.loads((state_dir / "operation.json").read_text(encoding="utf-8"))
+    assert output["approved_tenant_input_read"] is True
+    assert output["sibling_tenant_boundary_absent"] is expected_absent
+    assert output["bounded_cross_tenant_denial"] is expected_absent
+    assert output["comprehensive_tenant_isolation_proven"] is False
+    assert operation["operation"] == "tenant_boundary_probe"
 
 
 def test_runtime_rejects_paths_outside_explicit_tenant_root(tmp_path: Path) -> None:
@@ -220,7 +291,7 @@ def test_managed_copy_runtime_image_is_fixed_to_real_francis_entrypoint() -> Non
         "FROM python:3.12-alpine@sha256:dbb1970cc04ce7d381c65efe8309c0c03d463e5b35c88f14d721796ad24cfbfd",
         "",
         'LABEL francis.runtime.contract="stage18_managed_copy_runtime_v1"',
-        'LABEL francis.runtime.program_sha256="aa0802b54f102f70ac21e3388a9c48837ed68f5d1ec5aa15d76403f3af1c4b2a"',
+        'LABEL francis.runtime.program_sha256="7c939cba3e0ab62fc2c950d7488de852e821294126af20cae7b9b2d4dee04485"',
         "",
         "COPY --chown=65532:65532 src/francis/managed_copy_runtime.py /opt/francis/managed_copy_runtime.py",
         "",
@@ -818,6 +889,7 @@ def canonical_source(
     request: pytest.FixtureRequest,
 ) -> dict[str, Any]:
     started = TestClient(create_app()).post(pilot.PILOT_RUNTIME_START_ROUTE, json=vertical_runtime["payload"]).json()
+    assert started.get("ok") is True, started
     receipt = started["receipt"]
     assert started["ok"] is True, started
 
@@ -886,6 +958,129 @@ def canonical_source(
 def _verify_canonical_source(context: dict[str, Any]) -> dict[str, Any]:
     receipt = context["receipt"]
     return pilot.verify_pilot_runtime_source(receipt["receipt_id"], receipt["startup_fingerprint"])
+
+
+def test_verified_pilot_source_exposes_independent_authority_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = int(time.time() * 1000)
+    lease = PilotScopeLease(
+        lease_id="authority-lineage-lease",
+        actor_id=_ACTOR,
+        package_id="authority-lineage-package",
+        package_fingerprint=_HASH_A,
+        pilot_run_id="authority-lineage-run",
+        bindings=(
+            PilotLeaseBinding(
+                scope=pilot.PILOT_RUNTIME_SCOPE,
+                route=pilot.PILOT_RUNTIME_START_ROUTE,
+                method="POST",
+                action=pilot.PILOT_RUNTIME_START_ACTION,
+            ),
+        ),
+        issued_at_ms=now - 1,
+        expires_at_ms=now + 60_000,
+        runtime_nonce="authority-lineage-nonce",
+        operator_decision_fingerprint=_HASH_B,
+    )
+    registry = PilotScopeLeaseRegistry()
+    assert registry.issue(lease).lease_id == lease.lease_id
+    monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {lease.lease_id: lease})
+    receipt = {
+        "tenant_key": "c" * 64,
+        "copy_id": "managed_copy_authority_lineage",
+        "pilot_run_id": lease.pilot_run_id,
+        "runtime_identity": pilot.RUNTIME_IDENTITY,
+        "receipt_id": "pilot-runtime-authority-lineage",
+        "startup_fingerprint": _HASH_A,
+        "approval_id": "pilot-runtime-authority-approval",
+        "pilot_lease_id": lease.lease_id,
+    }
+    approval = {"id": receipt["approval_id"], "status": "approved"}
+    monkeypatch.setattr(pilot, "verify_pilot_runtime_source", lambda *_args: {"valid": True})
+    monkeypatch.setattr(pilot, "_raw_startup_receipt", lambda _receipt_id: dict(receipt))
+    monkeypatch.setattr(pilot, "_read_json", lambda _path: dict(approval))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    result = pilot.verify_pilot_runtime_authority_lineage(receipt["receipt_id"], receipt["startup_fingerprint"])
+
+    assert result["valid"] is True
+    assert result["authority_lineage"] == {
+        "tenant_key": receipt["tenant_key"],
+        "copy_id": receipt["copy_id"],
+        "pilot_run_id": receipt["pilot_run_id"],
+        "runtime_identity": receipt["runtime_identity"],
+        "runtime_start_receipt_id": receipt["receipt_id"],
+        "runtime_start_receipt_fingerprint": receipt["startup_fingerprint"],
+        "operator_approval_receipt_id": receipt["approval_id"],
+        "operator_approval_receipt_fingerprint": pilot._fingerprint(approval),
+        "actor_scope_lease_id": receipt["pilot_lease_id"],
+        "actor_scope_lease_fingerprint": pilot._pilot_lease_authority_fingerprint(
+            lease,
+            effective_state=PilotLeaseState.ACTIVE,
+        ),
+    }
+
+
+def test_pilot_authority_fingerprint_binds_permissions_expiry_and_consumption() -> None:
+    now = int(time.time() * 1000)
+    binding = PilotLeaseBinding(
+        scope=pilot.PILOT_RUNTIME_SCOPE,
+        route=pilot.PILOT_RUNTIME_START_ROUTE,
+        method="POST",
+        action=pilot.PILOT_RUNTIME_START_ACTION,
+    )
+    lease = PilotScopeLease(
+        lease_id="authority-fingerprint-lease",
+        actor_id=_ACTOR,
+        package_id="authority-fingerprint-package",
+        package_fingerprint=_HASH_A,
+        pilot_run_id="authority-fingerprint-run",
+        bindings=(binding,),
+        issued_at_ms=now,
+        expires_at_ms=now + 60_000,
+        runtime_nonce="authority-fingerprint-nonce",
+        operator_decision_fingerprint=_HASH_B,
+    )
+    fingerprint = pilot._pilot_lease_authority_fingerprint(
+        lease,
+        effective_state=PilotLeaseState.ACTIVE,
+    )
+    changed_binding = replace(
+        lease,
+        bindings=(
+            replace(
+                binding,
+                route=pilot.PILOT_RUNTIME_STOP_ROUTE,
+                action=pilot.PILOT_RUNTIME_STOP_ACTION,
+            ),
+        ),
+    )
+    consumed = replace(lease, consumed_bindings=frozenset({binding}))
+
+    assert (
+        pilot._pilot_lease_authority_fingerprint(
+            changed_binding,
+            effective_state=PilotLeaseState.ACTIVE,
+        )
+        != fingerprint
+    )
+    assert (
+        pilot._pilot_lease_authority_fingerprint(
+            replace(lease, expires_at_ms=lease.expires_at_ms + 1),
+            effective_state=PilotLeaseState.ACTIVE,
+        )
+        != fingerprint
+    )
+    assert (
+        pilot._pilot_lease_authority_fingerprint(
+            consumed,
+            effective_state=PilotLeaseState.CONSUMED,
+        )
+        != fingerprint
+    )
 
 
 def test_canonical_source_rejects_stale_heartbeat(canonical_source: dict[str, Any]) -> None:

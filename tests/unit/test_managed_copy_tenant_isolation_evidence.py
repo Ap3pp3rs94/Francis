@@ -165,6 +165,163 @@ def test_self_consistent_source_cannot_replace_owned_provision_lineage(isolated_
     assert result["blocker"] == "stage18_tenant_isolation_runtime_provisioning_lineage_invalid"
 
 
+def test_owned_lineage_uses_non_fixture_pilot_authority_and_stops_at_container_source(
+    isolated_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from francis import managed_copy_isolation
+    from francis import managed_copy_pilot_runtime
+    from francis import managed_copy_provisioning
+
+    source, _ = _write_canonical_source(isolated_data)
+    monkeypatch.setattr(
+        managed_copy_provisioning,
+        "managed_copy_provision_for_copy",
+        lambda *_args, **_kwargs: {
+            "tenant_key": source["tenant_key"],
+            "receipt_id": source["provisioning_receipt_id"],
+            "provision_fingerprint": source["provisioning_receipt_fingerprint"],
+        },
+    )
+    monkeypatch.setattr(
+        managed_copy_isolation,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda *_args, **_kwargs: {
+            "receipt_id": source["structural_isolation_receipt_id"],
+            "verification_fingerprint": source["structural_isolation_receipt_fingerprint"],
+            "live_state_aligned": True,
+        },
+    )
+    expected_authority = {
+        field: source[field]
+        for field in (
+            "tenant_key",
+            "copy_id",
+            "pilot_run_id",
+            "runtime_identity",
+            "runtime_start_receipt_id",
+            "runtime_start_receipt_fingerprint",
+            "operator_approval_receipt_id",
+            "operator_approval_receipt_fingerprint",
+            "actor_scope_lease_id",
+            "actor_scope_lease_fingerprint",
+        )
+    }
+    monkeypatch.setattr(
+        managed_copy_pilot_runtime,
+        "verify_pilot_runtime_authority_lineage",
+        lambda *_args: {
+            "valid": True,
+            "evidence_class": "canonical_runtime",
+            "authority_lineage": expected_authority,
+        },
+    )
+
+    result = isolation_evidence.verify_tenant_isolation_runtime_source(
+        source["receipt_id"], source["receipt_fingerprint"], now_ms=_NOW
+    )
+
+    assert result["valid"] is False
+    assert result["blocker"] == isolation_evidence.TENANT_ISOLATION_CONTAINER_SOURCE_MISSING
+
+
+def test_fixture_runtime_cannot_satisfy_owned_runtime_lineage(
+    isolated_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from francis import managed_copy_isolation
+    from francis import managed_copy_pilot_runtime
+    from francis import managed_copy_provisioning
+
+    source, _ = _write_canonical_source(isolated_data)
+    monkeypatch.setattr(
+        managed_copy_provisioning,
+        "managed_copy_provision_for_copy",
+        lambda *_args, **_kwargs: {
+            "tenant_key": source["tenant_key"],
+            "receipt_id": source["provisioning_receipt_id"],
+            "provision_fingerprint": source["provisioning_receipt_fingerprint"],
+        },
+    )
+    monkeypatch.setattr(
+        managed_copy_isolation,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda *_args, **_kwargs: {
+            "receipt_id": source["structural_isolation_receipt_id"],
+            "verification_fingerprint": source["structural_isolation_receipt_fingerprint"],
+            "live_state_aligned": True,
+        },
+    )
+    monkeypatch.setattr(
+        managed_copy_pilot_runtime,
+        "verify_pilot_runtime_authority_lineage",
+        lambda *_args: {"valid": True, "evidence_class": "isolated_fixture_runtime"},
+    )
+
+    result = isolation_evidence.verify_tenant_isolation_runtime_source(
+        source["receipt_id"], source["receipt_fingerprint"], now_ms=_NOW
+    )
+
+    assert result["blocker"] == "stage18_tenant_isolation_runtime_canonical_runtime_source_invalid"
+
+
+def test_caller_authored_authority_binding_cannot_replace_verified_lineage(
+    isolated_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from francis import managed_copy_isolation
+    from francis import managed_copy_pilot_runtime
+    from francis import managed_copy_provisioning
+
+    source, _ = _write_canonical_source(isolated_data)
+    monkeypatch.setattr(
+        managed_copy_provisioning,
+        "managed_copy_provision_for_copy",
+        lambda *_args, **_kwargs: {
+            "tenant_key": source["tenant_key"],
+            "receipt_id": source["provisioning_receipt_id"],
+            "provision_fingerprint": source["provisioning_receipt_fingerprint"],
+        },
+    )
+    monkeypatch.setattr(
+        managed_copy_isolation,
+        "latest_managed_copy_isolation_verification_for_provision",
+        lambda *_args, **_kwargs: {
+            "receipt_id": source["structural_isolation_receipt_id"],
+            "verification_fingerprint": source["structural_isolation_receipt_fingerprint"],
+            "live_state_aligned": True,
+        },
+    )
+    authority = {
+        field: source[field]
+        for field in (
+            "tenant_key",
+            "copy_id",
+            "pilot_run_id",
+            "runtime_identity",
+            "runtime_start_receipt_id",
+            "runtime_start_receipt_fingerprint",
+            "operator_approval_receipt_id",
+            "operator_approval_receipt_fingerprint",
+            "actor_scope_lease_id",
+            "actor_scope_lease_fingerprint",
+        )
+    }
+    authority["actor_scope_lease_fingerprint"] = _hash("different-lease")
+    monkeypatch.setattr(
+        managed_copy_pilot_runtime,
+        "verify_pilot_runtime_authority_lineage",
+        lambda *_args: {
+            "valid": True,
+            "evidence_class": "canonical_runtime",
+            "authority_lineage": authority,
+        },
+    )
+
+    result = isolation_evidence.verify_tenant_isolation_runtime_source(
+        source["receipt_id"], source["receipt_fingerprint"], now_ms=_NOW
+    )
+
+    assert result["blocker"] == "stage18_tenant_isolation_runtime_pilot_authority_lineage_invalid"
+
+
 def test_linked_domain_proof_is_independently_loaded_and_revalidated(
     isolated_data: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

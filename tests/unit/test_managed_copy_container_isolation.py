@@ -276,7 +276,18 @@ def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str,
         "pilot_run_id": payload["proof_run_id"],
         "runtime_nonce_hash": container_isolation._sha256_text(payload["runtime_nonce"]),
     }
-    briefing = container_isolation.build_work_briefing(payload["operation_input"])
+    operation_name = container_isolation.runtime_operation_name(payload["operation_input"])
+    if operation_name == container_isolation.TENANT_BOUNDARY_OPERATION:
+        output = container_isolation.build_tenant_boundary_probe(
+            payload["operation_input"],
+            approved_input_read=True,
+            sibling_boundary_absent=True,
+        )
+    else:
+        output = container_isolation.build_runtime_operation_preview(payload["operation_input"])
+    output_name = (
+        "tenant_boundary_probe" if operation_name == container_isolation.TENANT_BOUNDARY_OPERATION else "briefing"
+    )
     handshake = {
         "kind": "francis.stage18.managed_copies.runtime_handshake",
         "runtime_identity": container_isolation.RUNTIME_IDENTITY,
@@ -296,11 +307,11 @@ def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str,
     }
     operation = {
         "kind": "francis.stage18.managed_copies.runtime_operation_receipt",
-        "operation": "tenant_work_briefing",
+        "operation": operation_name,
         "status": "completed",
         **common,
-        "input_fingerprint": briefing["input_fingerprint"],
-        "output_fingerprint": briefing["output_fingerprint"],
+        "input_fingerprint": output.get("input_fingerprint", output.get("approved_tenant_input_fingerprint")),
+        "output_fingerprint": output["output_fingerprint"],
         "fixture_runtime": False,
         "recorded_at_unix_ms": int(time.time() * 1000),
     }
@@ -309,7 +320,7 @@ def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str,
         "handshake": handshake,
         "heartbeat": heartbeat,
         "operation": operation,
-        "briefing": briefing,
+        output_name: output,
     }.items():
         (state / f"{name}.json").write_text(json.dumps(value), encoding="utf-8")
 
@@ -732,7 +743,24 @@ def test_create_timeout_without_recoverable_identity_is_cleanup_required(
     assert result["error"] == "managed_copy_container_create_timeout_cleanup_unverified"
 
 
-def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: dict[str, Any]) -> None:
+@pytest.mark.parametrize(
+    "operation_input",
+    [
+        None,
+        {
+            "contract": container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT,
+            "probe_id": "tenant-boundary-probe-001",
+            "tenant_marker": "synthetic-tenant-a-marker",
+        },
+    ],
+    ids=("work-briefing", "tenant-boundary-probe"),
+)
+def test_fixed_docker_profile_launches_proves_and_cleans_up(
+    isolation_fixture: dict[str, Any],
+    operation_input: dict[str, Any] | None,
+) -> None:
+    if operation_input is not None:
+        isolation_fixture["payload"]["operation_input"] = operation_input
     _write_approval(isolation_fixture)
     payload = isolation_fixture["payload"]
     container_id = "9" * 64
@@ -840,7 +868,18 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: d
     assert result["receipt"]["controller_verifier_fingerprint"] == container_isolation._file_sha256(
         container_isolation.CONTROLLER_VERIFIER
     )
-    assert result["output"]["next_action"]["id"] == "work-1"
+    if operation_input is None:
+        assert result["output"]["next_action"]["id"] == "work-1"
+    else:
+        assert result["output"]["approved_tenant_input_read"] is True
+        assert result["output"]["sibling_tenant_boundary_absent"] is True
+        assert result["output"]["bounded_cross_tenant_denial"] is True
+        assert result["output"]["comprehensive_tenant_isolation_proven"] is False
+        assert result["receipt"]["tenant_boundary_probe_id"] == "tenant-boundary-probe-001"
+        assert result["receipt"]["approved_tenant_input_read"] is True
+        assert result["receipt"]["sibling_tenant_boundary_absent"] is True
+        assert result["receipt"]["comprehensive_tenant_isolation_proven"] is False
+        assert "synthetic-tenant-a-marker" not in " ".join(created_argv)
     assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
     assert "--read-only" in created_argv
     assert ["--cap-drop", "ALL"] == created_argv[
@@ -850,6 +889,69 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(isolation_fixture: d
     assert any(command[3:5] == ["container", "rm"] for command in commands)
     cleanup = Path(result["proof_root"]) / "receipts" / "cleanup.json"
     assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"
+
+
+def test_tenant_boundary_probe_tamper_is_rejected(isolation_fixture: dict[str, Any], tmp_path: Path) -> None:
+    payload = isolation_fixture["payload"]
+    payload["operation_input"] = {
+        "contract": container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT,
+        "probe_id": "tenant-boundary-probe-tamper",
+        "tenant_marker": "synthetic-tenant-a-marker",
+    }
+    _write_approval(isolation_fixture)
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    root = tmp_path / "proof"
+    (root / "state").mkdir(parents=True)
+    _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"])
+    output_path = root / "state" / "tenant_boundary_probe.json"
+    output = json.loads(output_path.read_text(encoding="utf-8"))
+    output["sibling_tenant_boundary_absent"] = False
+    output["bounded_cross_tenant_denial"] = False
+    output["output_fingerprint"] = container_isolation._fingerprint(
+        {key: value for key, value in output.items() if key != "output_fingerprint"}
+    )
+    output_path.write_text(json.dumps(output), encoding="utf-8")
+    operation_path = root / "state" / "operation.json"
+    operation = json.loads(operation_path.read_text(encoding="utf-8"))
+    operation["output_fingerprint"] = output["output_fingerprint"]
+    operation["receipt_fingerprint"] = container_isolation._fingerprint(
+        {key: value for key, value in operation.items() if key != "receipt_fingerprint"}
+    )
+    operation_path.write_text(json.dumps(operation), encoding="utf-8")
+    records = {
+        name: json.loads((root / "state" / f"{name}.json").read_text(encoding="utf-8"))
+        for name in ("handshake", "heartbeat", "operation", "tenant_boundary_probe")
+    }
+
+    assert (
+        container_isolation._runtime_records_blocker(
+            records,
+            plan["descriptor"],
+            operation_input=payload["operation_input"],
+        )
+        == "managed_copy_container_runtime_output_invalid"
+    )
+
+
+def test_tenant_boundary_probe_rejects_caller_selected_boundary(
+    isolation_fixture: dict[str, Any],
+) -> None:
+    payload = isolation_fixture["payload"]
+    payload["operation_input"] = {
+        "contract": container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT,
+        "probe_id": "tenant-boundary-caller-path",
+        "tenant_marker": "synthetic-tenant-a-marker",
+        "sibling_path": "C:/operator-selected",
+    }
+
+    result = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+
+    assert result["error"] == "managed_copy_tenant_boundary_probe_input_schema_invalid"
+    assert not container_isolation._proof_base().exists()
 
 
 def test_runtime_records_reject_tampered_useful_output(isolation_fixture: dict[str, Any], tmp_path: Path) -> None:

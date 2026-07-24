@@ -541,6 +541,89 @@ def verify_pilot_runtime_source(source_receipt_id: str, source_receipt_fingerpri
     }
 
 
+def verify_pilot_runtime_authority_lineage(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
+    """Return authority bindings only after the canonical runtime remains valid."""
+    with _LOCK:
+        source = verify_pilot_runtime_source(source_receipt_id, source_receipt_fingerprint)
+        if source.get("valid") is not True:
+            return {
+                "valid": False,
+                "blocker": _text(source.get("blocker")),
+                "evidence_class": "",
+                "authority_lineage": {},
+            }
+        receipt = _raw_startup_receipt(_identifier(source_receipt_id))
+        lease_observation = PILOT_RUNTIME_LEASES.lease_snapshot_with_state(_text(receipt.get("pilot_lease_id")))
+        approval = _read_json(data_dir() / "approvals" / "approved" / f"{receipt.get('approval_id')}.json")
+        if lease_observation is None:
+            return {
+                "valid": False,
+                "blocker": "managed_copy_pilot_runtime_source_lineage_mismatch",
+                "authority_lineage": {},
+            }
+        lease, lease_state = lease_observation
+        if lease_state is not PilotLeaseState.ACTIVE:
+            return {
+                "valid": False,
+                "blocker": "managed_copy_pilot_runtime_source_lineage_mismatch",
+                "evidence_class": "",
+                "authority_lineage": {},
+            }
+        return {
+            "valid": True,
+            "blocker": "",
+            "evidence_class": "canonical_runtime",
+            "authority_lineage": {
+                "tenant_key": receipt["tenant_key"],
+                "copy_id": receipt["copy_id"],
+                "pilot_run_id": receipt["pilot_run_id"],
+                "runtime_identity": receipt["runtime_identity"],
+                "runtime_start_receipt_id": receipt["receipt_id"],
+                "runtime_start_receipt_fingerprint": receipt["startup_fingerprint"],
+                "operator_approval_receipt_id": receipt["approval_id"],
+                "operator_approval_receipt_fingerprint": _fingerprint(approval),
+                "actor_scope_lease_id": lease.lease_id,
+                "actor_scope_lease_fingerprint": _pilot_lease_authority_fingerprint(
+                    lease,
+                    effective_state=lease_state,
+                ),
+            },
+        }
+
+
+def _pilot_lease_authority_fingerprint(
+    lease: PilotScopeLease,
+    *,
+    effective_state: PilotLeaseState,
+) -> str:
+    def binding_payload(binding: PilotLeaseBinding) -> dict[str, str]:
+        return {
+            "scope": binding.scope,
+            "route": binding.route,
+            "method": binding.method,
+            "action": binding.action,
+        }
+
+    return _fingerprint(
+        {
+            "lease_id": lease.lease_id,
+            "actor_id": lease.actor_id,
+            "package_id": lease.package_id,
+            "package_fingerprint": lease.package_fingerprint,
+            "pilot_run_id": lease.pilot_run_id,
+            "bindings": [binding_payload(binding) for binding in lease.bindings],
+            "issued_at_ms": lease.issued_at_ms,
+            "expires_at_ms": lease.expires_at_ms,
+            "runtime_nonce_hash": _sha256(lease.runtime_nonce),
+            "operator_decision_fingerprint": lease.operator_decision_fingerprint,
+            "effective_state": effective_state.value,
+            "consumed_bindings": [
+                binding_payload(binding) for binding in lease.bindings if binding in lease.consumed_bindings
+            ],
+        }
+    )
+
+
 def start_pilot_runtime(payload: dict[str, Any], *, actor: str, stage17_closed: bool) -> dict[str, Any]:
     plan = pilot_runtime_proposal(payload, actor=actor, stage17_closed=stage17_closed)
     if not plan["ok"]:
