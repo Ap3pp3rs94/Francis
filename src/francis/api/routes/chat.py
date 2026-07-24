@@ -403,6 +403,33 @@ def _chat_write_permission(actor: object, *, route: str, method: str) -> ApiPerm
     )
 
 
+def _chat_basic_mode_context() -> dict[str, Any]:
+    return {
+        "kind": "francis.stage7.telemetry.context",
+        "surface": "chat",
+        "status": "not_requested_basic_mode",
+        "prompt_lines": [],
+        "max_prompt_lines": 0,
+        "context_items": [],
+        "visible_indicator": False,
+        "hidden_sensing": False,
+        "telemetry_context_requested": False,
+        "continuity_context_requested": False,
+        "feedback_memory_assistance_context_requested": False,
+        "reads_memory": False,
+        "writes_memory": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "governance": {
+            "read_only": True,
+            "telemetry_is_untrusted_input": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+
+
 def _chat_feedback_memory_assistance_context(telemetry_context: dict[str, Any]) -> dict[str, Any]:
     context = dict(telemetry_context)
     try:
@@ -1005,8 +1032,11 @@ def send(payload: ChatIn) -> dict[str, object]:
                 next_step="configure_actor_scope_before_writing_chat_ledger",
                 reply="Chat request denied by permission gate.",
             )
-        telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
-        telemetry_context = _chat_continuity_prompt_context(telemetry_context, payload.message)
+        if payload.use_llm:
+            telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
+            telemetry_context = _chat_continuity_prompt_context(telemetry_context, payload.message)
+        else:
+            telemetry_context = _chat_basic_mode_context()
         telemetry_context = _chat_francis_surface_identity_context(
             telemetry_context,
             actor=actor,

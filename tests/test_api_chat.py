@@ -577,6 +577,15 @@ def test_chat_send_basic_mode_answers_voice_hearing_probe(monkeypatch, tmp_path:
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import chat as chat_route
+
+    def fail_if_prompt_context_is_built(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("basic chat mode must not build model-prompt context")
+
+    monkeypatch.setattr(chat_route, "telemetry_context_snapshot", fail_if_prompt_context_is_built)
+    monkeypatch.setattr(chat_route, "_chat_feedback_memory_assistance_context", fail_if_prompt_context_is_built)
+    monkeypatch.setattr(chat_route, "_chat_continuity_prompt_context", fail_if_prompt_context_is_built)
 
     client = TestClient(create_app())
 
@@ -620,6 +629,13 @@ def test_chat_send_basic_mode_answers_voice_hearing_probe(monkeypatch, tmp_path:
     assert body["execution_trace"]["model_or_tool_execution_span_captured"] is False
     assert body["execution_trace"]["grants_execution_authority"] is False
     assert body["execution_trace"]["grants_mutation_authority"] is False
+    assert body["telemetry_context"]["status"] == "not_requested_basic_mode"
+    assert body["telemetry_context"]["telemetry_context_requested"] is False
+    assert body["telemetry_context"]["continuity_context_requested"] is False
+    assert body["telemetry_context"]["feedback_memory_assistance_context_requested"] is False
+    assert body["telemetry_context"]["reads_memory"] is False
+    assert body["telemetry_context"]["calls_model"] is False
+    assert body["telemetry_context"]["francis_identity_context"]["status"] == "applied"
 
     ledger_path = data_root / "conversations" / "ledger" / "ledger.jsonl"
     ledger_entries = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines()]
