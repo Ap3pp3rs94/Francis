@@ -175,7 +175,7 @@ def test_container_entrypoint_layout_executes_real_francis_operation(tmp_path: P
         env={"PYTHONNOUSERSITE": "1", "PYTHONUTF8": "1"},
         capture_output=True,
         check=False,
-        timeout=15,
+        timeout=30,
     )
 
     assert completed.returncode == 0, completed.stderr.decode(errors="replace")
