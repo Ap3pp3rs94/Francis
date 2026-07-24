@@ -8,7 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from francis import managed_copy_safe_delta_runtime_invocation as invocation
+from francis import managed_copy_pilot_runtime
 from francis.api.app import create_app
+from francis.governance.pilot_scope_lease import PilotScopeLease, PilotScopeLeaseRegistry
 
 
 def _hash(character: str) -> str:
@@ -65,6 +67,10 @@ def _payload(**updates: Any) -> dict[str, Any]:
         "export_artifact_receipt_id": "export-artifact-001",
         "export_artifact_receipt_fingerprint": _hash("d"),
         "artifact_content_fingerprint": _hash("e"),
+        "pilot_lease_id": "lease-safe-delta-001",
+        "package_id": "package-safe-delta-001",
+        "pilot_run_id": "run-safe-delta-001",
+        "trace_id": "trace-safe-delta-001",
         "dry_run": True,
         "invocation_fingerprint": "",
         "confirm_runtime_invocation": False,
@@ -73,10 +79,28 @@ def _payload(**updates: Any) -> dict[str, Any]:
     return payload
 
 
+def _authority() -> dict[str, Any]:
+    return {
+        "valid": True,
+        "actor_id": "stage18.safe-delta-invoker",
+        "lease_id": "lease-safe-delta-001",
+        "package_id": "package-safe-delta-001",
+        "package_fingerprint": _hash("7"),
+        "pilot_run_id": "run-safe-delta-001",
+        "operator_decision_fingerprint": _hash("8"),
+        "effective_state": "active",
+        "consumed_binding_count": 1,
+        "operation_consumed_binding_count": 1,
+        "lease_authority_fingerprint": _hash("9"),
+        "consumed_prefix_fingerprints": [_hash("9")],
+    }
+
+
 @pytest.fixture
 def stubbed_lineage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     receipt_directory = tmp_path / "tenant-receipts" / "zi"
     monkeypatch.setattr(invocation, "_load_artifact_lineage", lambda request: (_lineage(), ""))
+    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
     monkeypatch.setattr(
         invocation,
         "_receipt_directory",
@@ -254,6 +278,7 @@ def test_confirmed_invocation_writes_one_redacted_immutable_receipt(stubbed_line
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
 
     assert recorded["ok"] is True
@@ -277,11 +302,13 @@ def test_exact_replay_is_idempotent_and_conflict_fails_closed(stubbed_lineage: P
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
     replay = invocation.record_safe_delta_runtime_invocation(
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
     path = next(stubbed_lineage.glob("*.json"))
     receipt = json.loads(path.read_text(encoding="utf-8"))
@@ -292,6 +319,7 @@ def test_exact_replay_is_idempotent_and_conflict_fails_closed(stubbed_lineage: P
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
 
     assert first["writes_receipt"] is True
@@ -312,6 +340,7 @@ def test_final_under_lock_revalidation_denies_lineage_drift(
         return (_lineage(), "") if calls == 1 else ({}, "safe_delta_runtime_invocation_artifact_tampered_or_drifted")
 
     monkeypatch.setattr(invocation, "_load_artifact_lineage", load)
+    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
     monkeypatch.setattr(invocation, "_base_lineage", lambda request: _lineage())
     monkeypatch.setattr(
         invocation,
@@ -324,6 +353,7 @@ def test_final_under_lock_revalidation_denies_lineage_drift(
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
 
     assert result["error"] == "safe_delta_runtime_invocation_lineage_drift"
@@ -345,6 +375,7 @@ def test_post_publication_lineage_drift_quarantines_receipt_and_replay_fails_clo
         return {}, "safe_delta_runtime_invocation_artifact_tampered_or_drifted"
 
     monkeypatch.setattr(invocation, "_load_artifact_lineage", load)
+    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
     monkeypatch.setattr(invocation, "_base_lineage", lambda request: _lineage())
     monkeypatch.setattr(
         invocation,
@@ -357,6 +388,7 @@ def test_post_publication_lineage_drift_quarantines_receipt_and_replay_fails_clo
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
     receipt_path = next(receipt_directory.glob("*.json"))
     preserved_bytes = receipt_path.read_bytes()
@@ -370,6 +402,7 @@ def test_post_publication_lineage_drift_quarantines_receipt_and_replay_fails_clo
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
 
     assert calls >= 4
@@ -405,6 +438,7 @@ def test_post_write_unverified_observation_does_not_claim_preserved_receipt(
 ) -> None:
     receipt_directory = tmp_path / "zi"
     monkeypatch.setattr(invocation, "_load_artifact_lineage", lambda request: (_lineage(), ""))
+    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
     monkeypatch.setattr(
         invocation,
         "_receipt_directory",
@@ -422,6 +456,7 @@ def test_post_write_unverified_observation_does_not_claim_preserved_receipt(
         plan,
         provided_fingerprint=plan["invocation_fingerprint"],
         confirmed=True,
+        authority=_authority(),
     )
 
     assert result["ok"] is False
@@ -470,6 +505,23 @@ def test_scoped_api_plan_write_and_readback_round_trip(
         "FRANCIS_API_ACTOR_SCOPES",
         json.dumps({actor: [invocation.PREFLIGHT_SCOPE, invocation.WRITE_SCOPE]}),
     )
+    registry = PilotScopeLeaseRegistry(clock_ms=lambda: 1_000)
+    registry.issue(
+        PilotScopeLease(
+            lease_id="lease-safe-delta-001",
+            actor_id=actor,
+            package_id="package-safe-delta-001",
+            package_fingerprint=_hash("7"),
+            pilot_run_id="run-safe-delta-001",
+            bindings=invocation.lease_bindings(),
+            issued_at_ms=900,
+            expires_at_ms=10_000,
+            runtime_nonce="runtime-nonce-safe-delta",
+            operator_decision_fingerprint=_hash("8"),
+        )
+    )
+    monkeypatch.setattr(managed_copy_pilot_runtime, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr("francis.api.routes.managed_copies.PILOT_RUNTIME_LEASES", registry)
     monkeypatch.setattr(invocation, "_load_artifact_lineage", lambda request: (lineage, ""))
     monkeypatch.setattr(invocation, "_base_lineage", lambda request: lineage)
     monkeypatch.setattr(

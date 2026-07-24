@@ -440,6 +440,12 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     invocation_write = entries["/managed-copies/safe-delta-runtime-invocation"]
     assert invocation_write["family"] == "managed_copies_safe_delta_runtime_invocation_write"
     assert invocation_write["required_scope"] == "managed_copies.safe_delta.runtime_invocation.write"
+    source_plan = entries["/managed-copies/safe-delta-runtime-source-plan"]
+    assert source_plan["family"] == "managed_copies_safe_delta_runtime_source_plan"
+    assert source_plan["required_scope"] == "managed_copies.safe_delta.runtime_source.preflight"
+    source_write = entries["/managed-copies/safe-delta-runtime-source"]
+    assert source_write["family"] == "managed_copies_safe_delta_runtime_source_write"
+    assert source_write["required_scope"] == "managed_copies.safe_delta.runtime_source.write"
     assert "metadata-only artifact" in artifact_write["receipt_behavior"]
 
     rogue_assessment = entries["/managed-copies/rogue-detection-assessment"]

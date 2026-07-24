@@ -8,7 +8,7 @@ from typing import Any
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
-SAFE_DELTA_RUNTIME_SOURCE_CONTRACT = "stage18_managed_copy_safe_delta_runtime_source_v2"
+SAFE_DELTA_RUNTIME_SOURCE_CONTRACT = "stage18_managed_copy_safe_delta_runtime_source_v3"
 SAFE_DELTA_RUNTIME_SOURCE_KIND = "francis.stage18.managed_copies.safe_delta_runtime_source_receipt"
 SAFE_DELTA_RUNTIME_SOURCE_MISSING = "stage18_safe_delta_runtime_source_receipt_missing"
 SAFE_DELTA_RUNTIME_PROOF_KIND = "safe_delta_runtime_receipt"
@@ -42,6 +42,16 @@ _FIELDS = frozenset(
         "runtime_invocation_receipt_fingerprint",
         "runtime_invocation_fingerprint",
         "runtime_invocation_result_fingerprint",
+        "pilot_lease_id",
+        "package_id",
+        "package_fingerprint",
+        "pilot_run_id",
+        "operator_decision_fingerprint",
+        "invocation_lease_authority_fingerprint",
+        "source_lease_authority_fingerprint",
+        "authority_route",
+        "authority_method",
+        "authority_action",
         "signal_class",
         "trace_id",
         "fixture_only",
@@ -61,6 +71,10 @@ _IDENTIFIER_FIELDS = (
     "export_authorization_decision_receipt_id",
     "export_artifact_receipt_id",
     "runtime_invocation_receipt_id",
+    "pilot_lease_id",
+    "package_id",
+    "pilot_run_id",
+    "authority_action",
     "signal_class",
     "trace_id",
 )
@@ -78,6 +92,10 @@ _HASH_FIELDS = (
     "runtime_invocation_receipt_fingerprint",
     "runtime_invocation_fingerprint",
     "runtime_invocation_result_fingerprint",
+    "package_fingerprint",
+    "operator_decision_fingerprint",
+    "invocation_lease_authority_fingerprint",
+    "source_lease_authority_fingerprint",
     "receipt_fingerprint",
 )
 
@@ -121,8 +139,12 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
         managed_copy_safe_delta_export_artifacts_readback,
     )
     from francis.managed_copy_safe_delta_runtime_invocation import (
+        SOURCE_ACTION,
+        SOURCE_ROUTE,
+        lease_bindings,
         safe_delta_runtime_invocations_readback,
     )
+    from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
 
     provision = managed_copy_provision_for_copy(
         source["copy_id"], provisioning_receipt_id=source["provisioning_receipt_id"]
@@ -242,11 +264,42 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
         or invocation.get("export_artifact_receipt_id") != source["export_artifact_receipt_id"]
         or invocation.get("export_artifact_receipt_fingerprint") != source["export_artifact_receipt_fingerprint"]
         or invocation.get("artifact_content_fingerprint") != source["artifact_content_fingerprint"]
+        or invocation.get("pilot_lease_id") != source["pilot_lease_id"]
+        or invocation.get("package_id") != source["package_id"]
+        or invocation.get("package_fingerprint") != source["package_fingerprint"]
+        or invocation.get("pilot_run_id") != source["pilot_run_id"]
+        or invocation.get("operator_decision_fingerprint") != source["operator_decision_fingerprint"]
+        or invocation.get("lease_authority_fingerprint") != source["invocation_lease_authority_fingerprint"]
+        or invocation.get("trace_id") != source["trace_id"]
         or result.get("classification") != "eligible_for_core_review"
         or result.get("eligible_for_core_review") is not True
     ):
         return "stage18_safe_delta_runtime_invocation_lineage_invalid"
-    return "stage18_safe_delta_runtime_canonical_source_receipt_recording_not_implemented"
+    authority = pilot_runtime_lease_authority_snapshot(
+        source["pilot_lease_id"],
+        actor=source["actor"],
+        expected_bindings=lease_bindings(),
+    )
+    prefixes = authority.get("consumed_prefix_fingerprints")
+    if (
+        authority.get("valid") is not True
+        or authority.get("package_id") != source["package_id"]
+        or authority.get("package_fingerprint") != source["package_fingerprint"]
+        or authority.get("pilot_run_id") != source["pilot_run_id"]
+        or authority.get("operator_decision_fingerprint") != source["operator_decision_fingerprint"]
+        or authority.get("operation_consumed_binding_count") != 2
+        or not isinstance(prefixes, list)
+        or prefixes
+        != [
+            source["invocation_lease_authority_fingerprint"],
+            source["source_lease_authority_fingerprint"],
+        ]
+        or source.get("authority_route") != SOURCE_ROUTE
+        or source.get("authority_method") != "POST"
+        or source.get("authority_action") != SOURCE_ACTION
+    ):
+        return "stage18_safe_delta_runtime_source_authority_lineage_invalid"
+    return ""
 
 
 def _valid_source(source: dict[str, Any]) -> bool:
@@ -290,6 +343,13 @@ def _lineage_hash(source: dict[str, Any]) -> str:
                 "runtime_invocation_receipt_fingerprint",
                 "runtime_invocation_fingerprint",
                 "runtime_invocation_result_fingerprint",
+                "pilot_lease_id",
+                "package_id",
+                "package_fingerprint",
+                "pilot_run_id",
+                "operator_decision_fingerprint",
+                "invocation_lease_authority_fingerprint",
+                "source_lease_authority_fingerprint",
             )
         }
     )

@@ -22,6 +22,7 @@ from francis.managed_copies import (
     MANAGED_COPIES_SAFE_DELTA_EXPORT_ARTIFACT_WRITE_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_PREFLIGHT_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_WRITE_SCOPE,
+    MANAGED_COPIES_SAFE_DELTA_RUNTIME_SOURCE_PREFLIGHT_SCOPE,
     MANAGED_COPIES_SLA_WRITE_SCOPE,
     managed_copies_status_snapshot,
     managed_copy_completion_review_snapshot,
@@ -72,6 +73,8 @@ from francis.managed_copies import (
     managed_copy_safe_delta_runtime_invocation_plan_snapshot,
     managed_copy_safe_delta_runtime_invocation_snapshot,
     managed_copy_safe_delta_runtime_invocations_snapshot,
+    managed_copy_safe_delta_runtime_source_plan_snapshot,
+    managed_copy_safe_delta_runtime_source_snapshot,
     managed_copy_sla_commitment_review_blocked_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
@@ -98,6 +101,7 @@ from francis.managed_copy_pilot_runtime import (
     PILOT_RUNTIME_START_ROUTE,
     PILOT_RUNTIME_STOP_ACTION,
     PILOT_RUNTIME_STOP_ROUTE,
+    pilot_runtime_lease_authority_snapshot,
     authorize_pilot_runtime_proposal,
     issue_pilot_runtime_lease,
     pilot_runtime_contract_snapshot,
@@ -107,6 +111,14 @@ from francis.managed_copy_pilot_runtime import (
     revoke_pilot_runtime_lease,
     start_pilot_runtime,
     stop_pilot_runtime,
+)
+from francis.managed_copy_safe_delta_runtime_invocation import (
+    SOURCE_ACTION as SAFE_DELTA_SOURCE_ACTION,
+    SOURCE_ROUTE as SAFE_DELTA_SOURCE_ROUTE,
+    SOURCE_SCOPE as SAFE_DELTA_SOURCE_SCOPE,
+    WRITE_ACTION as SAFE_DELTA_INVOCATION_ACTION,
+    WRITE_ROUTE as SAFE_DELTA_INVOCATION_ROUTE,
+    lease_bindings as safe_delta_lease_bindings,
 )
 
 router = APIRouter()
@@ -132,6 +144,41 @@ def _write_permission(actor: Any, *, required_scope: str, route: str, method: st
         required_scopes=[required_scope],
         route=route,
         method=method,
+    )
+
+
+def _pilot_write_permission(
+    actor: Any,
+    *,
+    lease_id: object,
+    package_id: object,
+    pilot_run_id: object,
+    required_scope: str,
+    route: str,
+    action: str,
+) -> ApiPermissionDecision:
+    context = PILOT_RUNTIME_LEASES.lease_context(lease_id)
+    if (
+        not context
+        or context.get("actor_id") != _safe_str(actor).strip()
+        or context.get("package_id") != _safe_str(package_id).strip()
+        or context.get("pilot_run_id") != _safe_str(pilot_run_id).strip()
+    ):
+        return ApiPermissionDecision(
+            False,
+            "pilot_lease_lineage_mismatch",
+            {"actor_present": bool(_safe_str(actor).strip()), "lease_bound": False},
+        )
+    return ApiPermissionGate.from_env(
+        pilot_lease_registry=PILOT_RUNTIME_LEASES,
+        require_pilot_lease=True,
+    ).check(
+        actor_id=actor,
+        required_scopes=[required_scope],
+        route=route,
+        method="POST",
+        action=action,
+        pilot_lease_id=lease_id,
     )
 
 
@@ -857,11 +904,14 @@ def safe_delta_runtime_invocation_plan(payload: dict[str, Any], request: Request
 @router.post("/safe-delta-runtime-invocation")
 def safe_delta_runtime_invocation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     actor = _managed_copy_write_actor(payload)
-    decision = _write_permission(
+    decision = _pilot_write_permission(
         actor,
+        lease_id=payload.get("pilot_lease_id"),
+        package_id=payload.get("package_id"),
+        pilot_run_id=payload.get("pilot_run_id"),
         required_scope=MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_WRITE_SCOPE,
-        route=request.url.path,
-        method=request.method,
+        route=SAFE_DELTA_INVOCATION_ROUTE,
+        action=SAFE_DELTA_INVOCATION_ACTION,
     )
     if not decision.allowed:
         return _permission_denied(
@@ -869,7 +919,12 @@ def safe_delta_runtime_invocation(payload: dict[str, Any], request: Request) -> 
             required_scope=MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_WRITE_SCOPE,
             next_step="configure_actor_scope_before_recording_safe_delta_runtime_invocation",
         )
-    return managed_copy_safe_delta_runtime_invocation_snapshot(payload, actor=actor)
+    authority = pilot_runtime_lease_authority_snapshot(
+        payload.get("pilot_lease_id"),
+        actor=actor,
+        expected_bindings=safe_delta_lease_bindings(),
+    )
+    return managed_copy_safe_delta_runtime_invocation_snapshot(payload, actor=actor, authority=authority)
 
 
 @router.get("/safe-delta-runtime-invocation")
@@ -887,6 +942,50 @@ def safe_delta_runtime_invocation_readback(
         invocation_fingerprint=invocation_fingerprint,
         limit=limit,
     )
+
+
+@router.post("/safe-delta-runtime-source-plan")
+def safe_delta_runtime_source_plan(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_SAFE_DELTA_RUNTIME_SOURCE_PREFLIGHT_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_SAFE_DELTA_RUNTIME_SOURCE_PREFLIGHT_SCOPE,
+            next_step="configure_actor_scope_before_planning_safe_delta_runtime_source",
+        )
+    return managed_copy_safe_delta_runtime_source_plan_snapshot(payload, actor=actor)
+
+
+@router.post("/safe-delta-runtime-source")
+def safe_delta_runtime_source(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _pilot_write_permission(
+        actor,
+        lease_id=payload.get("pilot_lease_id"),
+        package_id=payload.get("package_id"),
+        pilot_run_id=payload.get("pilot_run_id"),
+        required_scope=SAFE_DELTA_SOURCE_SCOPE,
+        route=SAFE_DELTA_SOURCE_ROUTE,
+        action=SAFE_DELTA_SOURCE_ACTION,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=SAFE_DELTA_SOURCE_SCOPE,
+            next_step="configure_actor_scope_and_exact_lease_before_recording_safe_delta_runtime_source",
+        )
+    authority = pilot_runtime_lease_authority_snapshot(
+        payload.get("pilot_lease_id"),
+        actor=actor,
+        expected_bindings=safe_delta_lease_bindings(),
+    )
+    return managed_copy_safe_delta_runtime_source_snapshot(payload, actor=actor, authority=authority)
 
 
 @router.get("/rogue-recovery-contract")

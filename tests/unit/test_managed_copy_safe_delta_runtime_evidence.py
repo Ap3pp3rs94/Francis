@@ -49,6 +49,16 @@ def _source() -> dict[str, Any]:
         "runtime_invocation_receipt_fingerprint": _hash("runtime-invocation-receipt"),
         "runtime_invocation_fingerprint": _hash("runtime-invocation"),
         "runtime_invocation_result_fingerprint": _hash("runtime-invocation-result"),
+        "pilot_lease_id": "lease-safe-delta-001",
+        "package_id": "package-safe-delta-001",
+        "package_fingerprint": _hash("package"),
+        "pilot_run_id": "run-safe-delta-001",
+        "operator_decision_fingerprint": _hash("operator-decision"),
+        "invocation_lease_authority_fingerprint": _hash("invocation-authority"),
+        "source_lease_authority_fingerprint": _hash("source-authority"),
+        "authority_route": "/managed-copies/safe-delta-runtime-source",
+        "authority_method": "POST",
+        "authority_action": "managed_copies.safe_delta.runtime_source.record",
         "signal_class": "approved_non_private_signal",
         "trace_id": "trace-safe-delta-runtime-001",
         "fixture_only": False,
@@ -123,7 +133,7 @@ def test_malformed_fixture_and_injected_sources_fail_exact_schema(
     assert result["blocker"] == "stage18_safe_delta_runtime_source_receipt_invalid"
 
 
-def test_owned_invocation_lineage_stops_at_canonical_source_recording_boundary(
+def test_owned_invocation_lineage_accepts_exact_recorded_canonical_source(
     isolated_data: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -201,6 +211,22 @@ def test_owned_invocation_lineage_stops_at_canonical_source_recording_boundary(
         },
     )
     monkeypatch.setattr(
+        "francis.managed_copy_pilot_runtime.pilot_runtime_lease_authority_snapshot",
+        lambda *args, **kwargs: {
+            "valid": True,
+            "package_id": source["package_id"],
+            "package_fingerprint": source["package_fingerprint"],
+            "pilot_run_id": source["pilot_run_id"],
+            "operator_decision_fingerprint": source["operator_decision_fingerprint"],
+            "consumed_binding_count": 2,
+            "operation_consumed_binding_count": 2,
+            "consumed_prefix_fingerprints": [
+                source["invocation_lease_authority_fingerprint"],
+                source["source_lease_authority_fingerprint"],
+            ],
+        },
+    )
+    monkeypatch.setattr(
         "francis.managed_copy_safe_delta_runtime_invocation.safe_delta_runtime_invocations_readback",
         lambda **kwargs: {
             "valid_count": 1,
@@ -212,6 +238,13 @@ def test_owned_invocation_lineage_stops_at_canonical_source_recording_boundary(
                 "export_artifact_receipt_id": source["export_artifact_receipt_id"],
                 "export_artifact_receipt_fingerprint": source["export_artifact_receipt_fingerprint"],
                 "artifact_content_fingerprint": source["artifact_content_fingerprint"],
+                "pilot_lease_id": source["pilot_lease_id"],
+                "package_id": source["package_id"],
+                "package_fingerprint": source["package_fingerprint"],
+                "pilot_run_id": source["pilot_run_id"],
+                "operator_decision_fingerprint": source["operator_decision_fingerprint"],
+                "lease_authority_fingerprint": source["invocation_lease_authority_fingerprint"],
+                "trace_id": source["trace_id"],
                 "invocation_result": {
                     "classification": "eligible_for_core_review",
                     "eligible_for_core_review": True,
@@ -222,10 +255,10 @@ def test_owned_invocation_lineage_stops_at_canonical_source_recording_boundary(
 
     result = safe_delta_evidence.verify_safe_delta_runtime_source(source["receipt_id"], source["receipt_fingerprint"])
 
-    assert result["valid"] is False
-    assert result["blocker"] == "stage18_safe_delta_runtime_canonical_source_receipt_recording_not_implemented"
-    assert result["evidence_class"] == ""
-    assert result["current_state_hash"] == ""
+    assert result["valid"] is True
+    assert result["blocker"] == ""
+    assert result["evidence_class"] == "canonical_runtime"
+    assert result["current_state_hash"] == source["export_artifact_receipt_fingerprint"]
 
 
 def test_owned_artifact_without_exact_invocation_lineage_fails_closed(

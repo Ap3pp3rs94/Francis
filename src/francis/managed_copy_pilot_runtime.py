@@ -595,6 +595,7 @@ def _pilot_lease_authority_fingerprint(
     lease: PilotScopeLease,
     *,
     effective_state: PilotLeaseState,
+    consumed_bindings: frozenset[PilotLeaseBinding] | None = None,
 ) -> str:
     def binding_payload(binding: PilotLeaseBinding) -> dict[str, str]:
         return {
@@ -604,6 +605,7 @@ def _pilot_lease_authority_fingerprint(
             "action": binding.action,
         }
 
+    consumed = lease.consumed_bindings if consumed_bindings is None else consumed_bindings
     return _fingerprint(
         {
             "lease_id": lease.lease_id,
@@ -617,11 +619,72 @@ def _pilot_lease_authority_fingerprint(
             "runtime_nonce_hash": _sha256(lease.runtime_nonce),
             "operator_decision_fingerprint": lease.operator_decision_fingerprint,
             "effective_state": effective_state.value,
-            "consumed_bindings": [
-                binding_payload(binding) for binding in lease.bindings if binding in lease.consumed_bindings
-            ],
+            "consumed_bindings": [binding_payload(binding) for binding in lease.bindings if binding in consumed],
         }
     )
+
+
+def pilot_runtime_lease_authority_snapshot(
+    lease_id: object,
+    *,
+    actor: object,
+    expected_bindings: tuple[PilotLeaseBinding, ...],
+) -> dict[str, Any]:
+    """Return a redacted atomic lease observation for an exact action sequence."""
+    safe_actor = _identifier(actor)
+    try:
+        bindings = tuple(binding.normalized() for binding in expected_bindings)
+    except (AttributeError, ValueError):
+        return {"valid": False, "blocker": "managed_copy_pilot_lease_binding_invalid"}
+    observation = PILOT_RUNTIME_LEASES.lease_snapshot_with_state(lease_id)
+    if observation is None:
+        return {"valid": False, "blocker": "missing_pilot_lease"}
+    lease, state = observation
+    matching_offsets = [
+        index
+        for index in range(0, len(lease.bindings) - len(bindings) + 1)
+        if lease.bindings[index : index + len(bindings)] == bindings
+    ]
+    if (
+        not safe_actor
+        or lease.actor_id != safe_actor
+        or len(bindings) != 2
+        or len(matching_offsets) != 1
+        or not lease.consumed_bindings
+        or state not in {PilotLeaseState.ACTIVE, PilotLeaseState.CONSUMED}
+    ):
+        return {"valid": False, "blocker": "managed_copy_pilot_lease_authority_lineage_mismatch"}
+    offset = matching_offsets[0]
+    consumed_count = len(lease.consumed_bindings)
+    if lease.consumed_bindings != frozenset(lease.bindings[:consumed_count]) or consumed_count not in {
+        offset + 1,
+        offset + 2,
+    }:
+        return {"valid": False, "blocker": "managed_copy_pilot_lease_authority_sequence_mismatch"}
+    operation_consumed_count = consumed_count - offset
+    prefix_fingerprints = [
+        _pilot_lease_authority_fingerprint(
+            lease,
+            effective_state=(PilotLeaseState.CONSUMED if count == len(lease.bindings) else PilotLeaseState.ACTIVE),
+            consumed_bindings=frozenset(lease.bindings[:count]),
+        )
+        for count in range(offset + 1, consumed_count + 1)
+    ]
+    return {
+        "valid": True,
+        "blocker": "",
+        "lease_id": lease.lease_id,
+        "actor_id": lease.actor_id,
+        "package_id": lease.package_id,
+        "package_fingerprint": lease.package_fingerprint,
+        "pilot_run_id": lease.pilot_run_id,
+        "operator_decision_fingerprint": lease.operator_decision_fingerprint,
+        "effective_state": state.value,
+        "consumed_binding_count": consumed_count,
+        "operation_consumed_binding_count": operation_consumed_count,
+        "lease_authority_fingerprint": prefix_fingerprints[-1],
+        "consumed_prefix_fingerprints": prefix_fingerprints,
+    }
 
 
 def start_pilot_runtime(payload: dict[str, Any], *, actor: str, stage17_closed: bool) -> dict[str, Any]:

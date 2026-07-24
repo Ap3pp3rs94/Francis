@@ -9,9 +9,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from francis.governance.pilot_scope_lease import PilotLeaseBinding
 from francis.managed_copy_isolation import managed_copy_isolation_guarded_subpath
 
-CONTRACT = "stage18_managed_copy_safe_delta_runtime_invocation_v1"
+CONTRACT = "stage18_managed_copy_safe_delta_runtime_invocation_v2"
 KIND = "francis.stage18.managed_copies.safe_delta_runtime_invocation"
 RECEIPT_KIND = "francis.stage18.managed_copies.safe_delta_runtime_invocation_receipt"
 READBACK_KIND = "francis.stage18.managed_copies.safe_delta_runtime_invocations"
@@ -19,6 +20,11 @@ ELIGIBLE = "eligible_for_core_review"
 INELIGIBLE = "ineligible_for_core_review"
 PREFLIGHT_SCOPE = "managed_copies.safe_delta.runtime_invocation.preflight"
 WRITE_SCOPE = "managed_copies.safe_delta.runtime_invocation.write"
+WRITE_ROUTE = "/managed-copies/safe-delta-runtime-invocation"
+WRITE_ACTION = "managed_copies.safe_delta.runtime_invocation.record"
+SOURCE_SCOPE = "managed_copies.safe_delta.runtime_source.write"
+SOURCE_ROUTE = "/managed-copies/safe-delta-runtime-source"
+SOURCE_ACTION = "managed_copies.safe_delta.runtime_source.record"
 _INPUT_FIELDS = {
     "request_actor",
     "copy_id",
@@ -31,6 +37,10 @@ _INPUT_FIELDS = {
     "dry_run",
     "invocation_fingerprint",
     "confirm_runtime_invocation",
+    "pilot_lease_id",
+    "package_id",
+    "pilot_run_id",
+    "trace_id",
 }
 _RECEIPT_FIELDS = {
     "ok",
@@ -40,6 +50,16 @@ _RECEIPT_FIELDS = {
     "receipt_fingerprint",
     "status",
     "actor",
+    "pilot_lease_id",
+    "package_id",
+    "package_fingerprint",
+    "pilot_run_id",
+    "operator_decision_fingerprint",
+    "lease_authority_fingerprint",
+    "authority_route",
+    "authority_method",
+    "authority_action",
+    "trace_id",
     "tenant_key",
     "copy_id",
     "provisioning_receipt_id",
@@ -113,6 +133,10 @@ def plan_safe_delta_runtime_invocation(payload: dict[str, Any], *, actor: str) -
             "export_artifact_receipt_id",
             "export_artifact_receipt_fingerprint",
             "artifact_content_fingerprint",
+            "pilot_lease_id",
+            "package_id",
+            "pilot_run_id",
+            "trace_id",
         )
     }
     if not all(
@@ -123,6 +147,10 @@ def plan_safe_delta_runtime_invocation(payload: dict[str, Any], *, actor: str) -
             "provisioning_receipt_id",
             "isolation_verification_receipt_id",
             "export_artifact_receipt_id",
+            "pilot_lease_id",
+            "package_id",
+            "pilot_run_id",
+            "trace_id",
         )
     ):
         blockers.append("safe_delta_runtime_invocation_identifier_invalid")
@@ -172,14 +200,23 @@ def plan_safe_delta_runtime_invocation(payload: dict[str, Any], *, actor: str) -
 
 
 def record_safe_delta_runtime_invocation(
-    plan: dict[str, Any], *, provided_fingerprint: str, confirmed: bool
+    plan: dict[str, Any],
+    *,
+    provided_fingerprint: str,
+    confirmed: bool,
+    authority: dict[str, Any],
 ) -> dict[str, Any]:
     if not confirmed:
         return _blocked("safe_delta_runtime_invocation_confirmation_required")
     expected = _text(plan.get("invocation_fingerprint"))
     if not expected or provided_fingerprint != expected:
         return _blocked("safe_delta_runtime_invocation_fingerprint_mismatch")
+    if not _valid_authority(authority, plan, consumed_count=1):
+        return _blocked("safe_delta_runtime_invocation_authority_lineage_invalid")
     with _LOCK:
+        current_authority = _reload_authority(plan)
+        if current_authority != authority or not _valid_authority(current_authority, plan, consumed_count=1):
+            return _blocked("safe_delta_runtime_invocation_authority_changed_under_lock")
         request = plan.get("request")
         request = dict(request) if isinstance(request, dict) else {}
         fresh = plan_safe_delta_runtime_invocation(
@@ -200,7 +237,7 @@ def record_safe_delta_runtime_invocation(
         if receipt_directory is None:
             return _blocked("safe_delta_runtime_invocation_path_invalid")
         receipt_path = receipt_directory / f"{expected[:16]}.json"
-        receipt = _receipt(fresh, lineage)
+        receipt = _receipt(fresh, lineage, authority)
         receipt_bytes = _encode(receipt)
         present, existing = _read(receipt_path)
         if present:
@@ -416,7 +453,7 @@ def _receipt_directory(lineage: dict[str, Any], *, create: bool) -> Path | None:
     )
 
 
-def _receipt(plan: dict[str, Any], lineage: dict[str, Any]) -> dict[str, Any]:
+def _receipt(plan: dict[str, Any], lineage: dict[str, Any], authority: dict[str, Any]) -> dict[str, Any]:
     request = plan["request"]
     result = plan["invocation_result"]
     fingerprint = plan["invocation_fingerprint"]
@@ -428,6 +465,16 @@ def _receipt(plan: dict[str, Any], lineage: dict[str, Any]) -> dict[str, Any]:
         "receipt_fingerprint": "",
         "status": "runtime_invocation_completed",
         "actor": plan["actor"],
+        "pilot_lease_id": authority["lease_id"],
+        "package_id": authority["package_id"],
+        "package_fingerprint": authority["package_fingerprint"],
+        "pilot_run_id": authority["pilot_run_id"],
+        "operator_decision_fingerprint": authority["operator_decision_fingerprint"],
+        "lease_authority_fingerprint": authority["lease_authority_fingerprint"],
+        "authority_route": WRITE_ROUTE,
+        "authority_method": "POST",
+        "authority_action": WRITE_ACTION,
+        "trace_id": request["trace_id"],
         "tenant_key": lineage["tenant_key"],
         "copy_id": request["copy_id"],
         "provisioning_receipt_id": request["provisioning_receipt_id"],
@@ -464,6 +511,11 @@ def _valid_receipt(receipt: dict[str, Any], path: Path, directory: Path) -> bool
             _identifier(receipt.get(field))
             for field in (
                 "actor",
+                "pilot_lease_id",
+                "package_id",
+                "pilot_run_id",
+                "trace_id",
+                "authority_action",
                 "copy_id",
                 "provisioning_receipt_id",
                 "isolation_verification_receipt_id",
@@ -474,6 +526,9 @@ def _valid_receipt(receipt: dict[str, Any], path: Path, directory: Path) -> bool
             _sha(receipt.get(field))
             for field in (
                 "tenant_key",
+                "package_fingerprint",
+                "operator_decision_fingerprint",
+                "lease_authority_fingerprint",
                 "provisioning_receipt_fingerprint",
                 "isolation_verification_receipt_fingerprint",
                 "artifact_plan_fingerprint",
@@ -499,6 +554,9 @@ def _valid_receipt(receipt: dict[str, Any], path: Path, directory: Path) -> bool
         and type(receipt.get("recorded_ts")) is int
         and receipt["recorded_ts"] > 0
         and receipt.get("governance") == GOVERNANCE
+        and receipt.get("authority_route") == WRITE_ROUTE
+        and receipt.get("authority_method") == "POST"
+        and receipt.get("authority_action") == WRITE_ACTION
         and receipt.get("receipt_fingerprint") == _fingerprint_without(receipt, "receipt_fingerprint")
         and path == directory / f"{fingerprint[:16]}.json"
     )
@@ -525,6 +583,55 @@ def _receipt_matches_lineage(receipt: dict[str, Any], lineage: dict[str, Any]) -
 def _same_binding(existing: dict[str, Any], expected: dict[str, Any]) -> bool:
     ignored = {"recorded_ts", "receipt_fingerprint"}
     return all(existing.get(key) == expected.get(key) for key in _RECEIPT_FIELDS - ignored)
+
+
+def lease_bindings() -> tuple[PilotLeaseBinding, PilotLeaseBinding]:
+    return (
+        PilotLeaseBinding(WRITE_SCOPE, WRITE_ROUTE, "POST", WRITE_ACTION),
+        PilotLeaseBinding(SOURCE_SCOPE, SOURCE_ROUTE, "POST", SOURCE_ACTION),
+    )
+
+
+def _valid_authority(
+    authority: dict[str, Any],
+    plan: dict[str, Any],
+    *,
+    consumed_count: int,
+) -> bool:
+    request = plan.get("request")
+    request = request if isinstance(request, dict) else {}
+    prefixes = authority.get("consumed_prefix_fingerprints")
+    return bool(
+        authority.get("valid") is True
+        and authority.get("actor_id") == plan.get("actor")
+        and authority.get("lease_id") == request.get("pilot_lease_id")
+        and authority.get("package_id") == request.get("package_id")
+        and authority.get("pilot_run_id") == request.get("pilot_run_id")
+        and authority.get("operation_consumed_binding_count") == consumed_count
+        and isinstance(prefixes, list)
+        and len(prefixes) >= consumed_count
+        and authority.get("lease_authority_fingerprint") == prefixes[consumed_count - 1]
+        and all(
+            _sha(authority.get(field))
+            for field in (
+                "package_fingerprint",
+                "operator_decision_fingerprint",
+                "lease_authority_fingerprint",
+            )
+        )
+    )
+
+
+def _reload_authority(plan: dict[str, Any]) -> dict[str, Any]:
+    from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
+
+    request = plan.get("request")
+    request = request if isinstance(request, dict) else {}
+    return pilot_runtime_lease_authority_snapshot(
+        request.get("pilot_lease_id"),
+        actor=plan.get("actor"),
+        expected_bindings=lease_bindings(),
+    )
 
 
 def _publish_exclusive(path: Path, content: bytes) -> None:
