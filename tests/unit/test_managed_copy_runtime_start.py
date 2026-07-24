@@ -360,7 +360,7 @@ def test_last_moment_approval_revocation_prevents_process_creation(
     assert list(runtime_fixture["tenant_root"].glob("receipts/runtime_start/*/failed.json"))
 
 
-def test_current_fixture_startup_records_software_evidence_without_runtime_readiness(
+def test_current_fixture_startup_cannot_satisfy_canonical_runtime_evidence(
     runtime_fixture: dict[str, Any],
 ) -> None:
     payload = runtime_fixture["payload"]
@@ -389,21 +389,9 @@ def test_current_fixture_startup_records_software_evidence_without_runtime_readi
             actor=payload["request_actor"],
             stage17_closed=True,
         )
-        assert plan["ok"] is True, plan
-        assert plan["evidence_class"] == "fixture_software_only"
-        evidence_payload.update(
-            dry_run=False,
-            record_fingerprint=plan["record_fingerprint"],
-            confirm_runtime_evidence=True,
-        )
-        recorded = runtime_evidence.record_runtime_evidence(
-            evidence_payload,
-            actor=payload["request_actor"],
-            stage17_closed=True,
-        )
-        assert recorded["ok"] is True, recorded
-        assert recorded["receipt_ready"] is False
-        assert runtime_evidence.receipt_satisfies_runtime_requirement(recorded["receipt"]) is False
+        assert plan["ok"] is False
+        assert plan["blockers"] == [runtime_evidence.COPY_CREATION_SOURCE_MISSING]
+        assert plan["receipt_ready"] is False
     finally:
         assert runtime_start.cleanup_fixture_runtime(startup)["ok"] is True
 
