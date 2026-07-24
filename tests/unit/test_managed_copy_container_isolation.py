@@ -10,7 +10,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from francis import managed_copy_container_isolation as container_isolation
+from francis import managed_copy_container_live_evidence as live_evidence
 from francis import managed_copy_pilot_runtime as pilot_runtime
+from francis import managed_copy_runtime_evidence as runtime_evidence
 from francis import managed_copy_runtime_start as runtime_start
 from francis.api.app import create_app
 from francis.api.routes import managed_copies as managed_copy_routes
@@ -86,23 +88,23 @@ def isolation_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[s
             else {}
         ),
     )
-    monkeypatch.setattr(
-        container_isolation,
-        "_pilot_lease_context",
-        lambda lease_id: (
-            {
-                "lease_id": lease_id,
-                "actor_id": "stage18.container-test",
-                "package_id": "stage18-container-pilot-package",
-                "package_fingerprint": "e" * 64,
-                "pilot_run_id": "mciso-test-1",
-                "runtime_nonce": "mciso-runtime-nonce-1",
-                "operator_decision_fingerprint": "f" * 64,
-            }
-            if lease_id == "mciso-lease-1"
-            else {}
-        ),
+    now_ms = int(time.time() * 1000)
+    registry = PilotScopeLeaseRegistry()
+    registry.issue(
+        PilotScopeLease(
+            lease_id="mciso-lease-1",
+            actor_id="stage18.container-test",
+            package_id="stage18-container-pilot-package",
+            package_fingerprint="e" * 64,
+            pilot_run_id="mciso-test-1",
+            bindings=container_isolation.container_isolation_lease_bindings(),
+            issued_at_ms=now_ms - 1_000,
+            expires_at_ms=now_ms + 120_000,
+            runtime_nonce="mciso-runtime-nonce-1",
+            operator_decision_fingerprint="f" * 64,
+        )
     )
+    monkeypatch.setattr(pilot_runtime, "PILOT_RUNTIME_LEASES", registry)
     server = {"Os": "linux", "Arch": "amd64", "Version": "fixture"}
     image_id = "sha256:" + "d" * 64
     image_config = {
@@ -141,6 +143,11 @@ def isolation_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[s
                 {"id": "work-1", "title": "Resolve intake", "priority": "critical", "status": "open"},
             ],
         },
+        "runtime_evidence_intent": {
+            "requirement_id": "copy_creation_runtime_proof",
+            "proof_kind": "managed_copy_creation_runtime_receipt",
+            "confirm_runtime_evidence": True,
+        },
     }
     return {
         "payload": payload,
@@ -149,7 +156,39 @@ def isolation_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[s
         "data": tmp_path / "data",
         "server": server,
         "image_config": image_config,
+        "registry": registry,
     }
+
+
+def _evidence_execution_kwargs(isolation_fixture: dict[str, Any]) -> dict[str, Any]:
+    payload = isolation_fixture["payload"]
+    registry: PilotScopeLeaseRegistry = isolation_fixture["registry"]
+    first = registry.authorize_binding(
+        lease_id=payload["lease_id"],
+        actor_id=payload["request_actor"],
+        scope=container_isolation.CONTAINER_ISOLATION_SCOPE,
+        route=container_isolation.CONTAINER_ISOLATION_ROUTE,
+        method="POST",
+        action=container_isolation.CONTAINER_ISOLATION_ACTION,
+    )
+    assert first.allowed is True
+    authority = pilot_runtime.pilot_runtime_lease_authority_snapshot(
+        payload["lease_id"],
+        actor=payload["request_actor"],
+        expected_bindings=container_isolation.container_isolation_lease_bindings(),
+    )
+
+    def authorize() -> bool:
+        return registry.authorize_binding(
+            lease_id=payload["lease_id"],
+            actor_id=payload["request_actor"],
+            scope=container_isolation.RUNTIME_EVIDENCE_SCOPE,
+            route=container_isolation.RUNTIME_EVIDENCE_ROUTE,
+            method="POST",
+            action=container_isolation.RUNTIME_EVIDENCE_ACTION,
+        ).allowed
+
+    return {"evidence_authority": authority, "authorize_runtime_evidence": authorize}
 
 
 def _write_approval(isolation_fixture: dict[str, Any]) -> None:
@@ -493,12 +532,19 @@ def test_cleanup_still_executes_after_security_diagnostic_creation(
     receipts = tmp_path / "receipts"
     receipts.mkdir()
     commands: list[list[str]] = []
+    removed = False
 
     def fake_cleanup(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        nonlocal removed
         commands.append(argv)
         if argv[3:5] == ["container", "inspect"]:
+            if removed:
+                return container_isolation.DockerResult(tuple(argv), 1, "", "not found")
             return inspected
-        if argv[3:5] in (["container", "stop"], ["container", "rm"]):
+        if argv[3:5] == ["container", "rm"]:
+            removed = True
+            return container_isolation.DockerResult(tuple(argv), 0, container_id, "")
+        if argv[3:5] == ["container", "stop"]:
             return container_isolation.DockerResult(tuple(argv), 0, container_id, "")
         raise AssertionError((argv, timeout))
 
@@ -540,6 +586,81 @@ def test_denials_happen_before_docker_or_receipt_creation(isolation_fixture: dic
     )
     assert result["error"] == "managed_copy_container_isolation_binding_invalid"
     assert called is False
+
+
+def test_missing_evidence_authority_blocks_before_docker_or_filesystem_effects(
+    isolation_fixture: dict[str, Any],
+) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    called = False
+
+    def forbidden(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        nonlocal called
+        called = True
+        raise AssertionError((argv, timeout))
+
+    result = container_isolation.execute_container_isolation(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+        run=forbidden,
+    )
+
+    assert result["error"] == "managed_copy_container_runtime_evidence_authority_invalid"
+    assert called is False
+    assert not container_isolation._proof_base().exists()
+
+
+@pytest.mark.parametrize("include_evidence_scope", [True, False])
+def test_route_requires_static_evidence_scope_before_exact_two_binding_sequence(
+    isolation_fixture: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    include_evidence_scope: bool,
+) -> None:
+    payload = isolation_fixture["payload"]
+    registry: PilotScopeLeaseRegistry = isolation_fixture["registry"]
+    monkeypatch.setattr(managed_copy_routes, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(
+        managed_copy_routes,
+        "managed_copies_status_snapshot",
+        lambda: {"stage17_closed_by_receipt": True},
+    )
+    scopes = [container_isolation.CONTAINER_ISOLATION_SCOPE]
+    if include_evidence_scope:
+        scopes.append(container_isolation.RUNTIME_EVIDENCE_SCOPE)
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({payload["request_actor"]: scopes}))
+    executed = False
+
+    def execute(
+        body: dict[str, Any],
+        *,
+        actor: str,
+        stage17_closed: bool,
+        evidence_authority: dict[str, Any],
+        authorize_runtime_evidence: Any,
+    ) -> dict[str, Any]:
+        nonlocal executed
+        executed = True
+        assert body == payload
+        assert actor == payload["request_actor"]
+        assert stage17_closed is True
+        assert evidence_authority["operation_consumed_binding_count"] == 1
+        assert authorize_runtime_evidence() is True
+        return {"ok": True, "status": "runtime_ready"}
+
+    monkeypatch.setattr(managed_copy_routes, "execute_container_isolation", execute)
+    result = TestClient(create_app()).post(container_isolation.CONTAINER_ISOLATION_ROUTE, json=payload).json()
+
+    if include_evidence_scope:
+        assert result["ok"] is True
+        assert executed is True
+        assert registry.state(payload["lease_id"]) is PilotLeaseState.CONSUMED
+    else:
+        assert result["error"] == "api_permission_denied"
+        assert result["required_scope"] == container_isolation.RUNTIME_EVIDENCE_SCOPE
+        assert executed is False
+        assert registry.state(payload["lease_id"]) is PilotLeaseState.ACTIVE
 
 
 def test_exact_approval_binding_rejects_changed_digest_and_runtime_approval(isolation_fixture: dict[str, Any]) -> None:
@@ -620,7 +741,11 @@ def test_daemon_identity_mismatch_blocks_before_proof_root_creation(isolation_fi
         raise AssertionError((argv, timeout))
 
     result = container_isolation.execute_container_isolation(
-        payload, actor=payload["request_actor"], stage17_closed=True, run=mismatched_daemon
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+        run=mismatched_daemon,
+        **_evidence_execution_kwargs(isolation_fixture),
     )
 
     assert result["error"] == "managed_copy_container_engine_identity_mismatch"
@@ -676,6 +801,7 @@ def test_create_timeout_recovers_only_proof_owned_container_and_surfaces_cleanup
     payload = isolation_fixture["payload"]
     container_id = "8" * 64
     commands: list[list[str]] = []
+    removed = False
     monkeypatch.setattr(container_isolation, "_docker_preflight", lambda run, descriptor: "")
 
     owned = [
@@ -701,19 +827,27 @@ def test_create_timeout_recovers_only_proof_owned_container_and_surfaces_cleanup
     ]
 
     def timed_out_create(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        nonlocal removed
         commands.append(argv)
         if argv[3:5] == ["container", "create"]:
             return container_isolation.DockerResult(tuple(argv), 124, "", "", timed_out=True)
         if argv[3:5] == ["container", "inspect"]:
+            if removed:
+                return container_isolation.DockerResult(tuple(argv), 1, "", "not found")
             return container_isolation.DockerResult(tuple(argv), 0, json.dumps(owned), "")
         if argv[3:5] == ["container", "stop"]:
             return container_isolation.DockerResult(tuple(argv), 0, container_id, "")
         if argv[3:5] == ["container", "rm"]:
+            removed = remove_exit == 0
             return container_isolation.DockerResult(tuple(argv), remove_exit, container_id, "")
         raise AssertionError((argv, timeout))
 
     result = container_isolation.execute_container_isolation(
-        payload, actor=payload["request_actor"], stage17_closed=True, run=timed_out_create
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+        run=timed_out_create,
+        **_evidence_execution_kwargs(isolation_fixture),
     )
 
     assert result["status"] == expected_status
@@ -736,7 +870,11 @@ def test_create_timeout_without_recoverable_identity_is_cleanup_required(
         raise AssertionError((argv, timeout))
 
     result = container_isolation.execute_container_isolation(
-        payload, actor=payload["request_actor"], stage17_closed=True, run=unresolved
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+        run=unresolved,
+        **_evidence_execution_kwargs(isolation_fixture),
     )
 
     assert result["status"] == "cleanup_required"
@@ -744,20 +882,26 @@ def test_create_timeout_without_recoverable_identity_is_cleanup_required(
 
 
 @pytest.mark.parametrize(
-    "operation_input",
+    ("operation_input", "evidence_failure"),
     [
-        None,
-        {
-            "contract": container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT,
-            "probe_id": "tenant-boundary-probe-001",
-            "tenant_marker": "synthetic-tenant-a-marker",
-        },
+        (None, False),
+        (
+            {
+                "contract": container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT,
+                "probe_id": "tenant-boundary-probe-001",
+                "tenant_marker": "synthetic-tenant-a-marker",
+            },
+            False,
+        ),
+        (None, True),
     ],
-    ids=("work-briefing", "tenant-boundary-probe"),
+    ids=("work-briefing", "tenant-boundary-probe", "evidence-failure"),
 )
 def test_fixed_docker_profile_launches_proves_and_cleans_up(
     isolation_fixture: dict[str, Any],
     operation_input: dict[str, Any] | None,
+    evidence_failure: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if operation_input is not None:
         isolation_fixture["payload"]["operation_input"] = operation_input
@@ -817,9 +961,10 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         return json.dumps(value)
 
     running = False
+    removed = False
 
     def fake_run(argv: list[str], timeout: float) -> container_isolation.DockerResult:
-        nonlocal running, created_argv
+        nonlocal running, removed, created_argv
         commands.append(argv)
         if argv[1:3] == ["context", "inspect"]:
             return container_isolation.DockerResult(tuple(argv), 0, '[{"Name":"desktop-linux"}]', "")
@@ -846,18 +991,191 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
             _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"])
             return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
         if argv[3:5] == ["container", "inspect"]:
+            if removed:
+                return container_isolation.DockerResult(tuple(argv), 1, "", "not found")
             return container_isolation.DockerResult(tuple(argv), 0, inspect_payload(running), "")
         if argv[3:5] == ["container", "stop"]:
             running = False
             return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
         if argv[3:5] == ["container", "rm"]:
+            removed = True
             return container_isolation.DockerResult(tuple(argv), 0, container_id + "\n", "")
         raise AssertionError((argv, timeout))
 
+    if evidence_failure:
+        monkeypatch.setattr(container_isolation, "plan_runtime_evidence", lambda *args, **kwargs: {"ok": False})
+    evidence_kwargs = _evidence_execution_kwargs(isolation_fixture)
     result = container_isolation.execute_container_isolation(
-        payload, actor=payload["request_actor"], stage17_closed=True, run=fake_run
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+        run=fake_run,
+        **evidence_kwargs,
     )
+    cleanup = container_isolation._proof_base() / payload["proof_run_id"] / "receipts" / "cleanup.json"
+    assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"
+    assert running is False
+    if evidence_failure:
+        assert result["ok"] is False
+        assert result["error"] == "managed_copy_container_runtime_evidence_failed"
+        assert list(runtime_evidence.receipt_directory().glob("*.json")) == []
+        return
     assert result["ok"] is True, result
+    assert result["runtime_evidence"]["receipt"]["requirement_id"] == runtime_evidence.COPY_CREATION_REQUIREMENT
+    assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
+    monkeypatch.setattr(pilot_runtime, "PILOT_RUNTIME_LEASES", PilotScopeLeaseRegistry())
+    assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
+    assert isolation_fixture["registry"].state(payload["lease_id"]) is PilotLeaseState.CONSUMED
+    assert sum(command[3:5] == ["container", "inspect"] for command in commands) >= 5
+    command_count = len(commands)
+    replay = container_isolation.execute_container_isolation(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+        run=fake_run,
+        **evidence_kwargs,
+    )
+    assert replay["error"] == "managed_copy_container_isolation_pilot_lease_lineage_invalid"
+    assert len(commands) == command_count
+    cleanup_value = json.loads(cleanup.read_text(encoding="utf-8"))
+    cleanup_value["status"] = "cleanup_required"
+    cleanup.write_text(json.dumps(cleanup_value), encoding="utf-8")
+    source = runtime_evidence.verify_copy_creation_runtime_source(
+        result["lifecycle_receipt"]["receipt_id"],
+        result["lifecycle_receipt"]["receipt_fingerprint"],
+    )
+    assert source["valid"] is False
+    assert source["blocker"] == "stage18_copy_creation_lifecycle_invalid"
+    cleanup_value["status"] = "removed"
+    cleanup.write_text(json.dumps(cleanup_value), encoding="utf-8")
+    if operation_input is None:
+        lifecycle_path = Path(result["proof_root"]) / "receipts" / "lifecycle-complete.json"
+        lifecycle_value = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+        assert lifecycle_value["receipt_id"].startswith("mclc_")
+        resolved = runtime_evidence.verify_copy_creation_runtime_source(
+            lifecycle_value["receipt_id"],
+            lifecycle_value["receipt_fingerprint"],
+        )
+        assert resolved["valid"] is True
+        assert resolved["current_state_hash"] == result["runtime_evidence"]["receipt"]["current_state_hash"]
+
+        lifecycle_path.unlink()
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
+
+        tampered_lifecycle = {**lifecycle_value, "unexpected": True}
+        lifecycle_path.write_text(json.dumps(tampered_lifecycle), encoding="utf-8")
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
+
+        ready_path = Path(result["proof_root"]) / "receipts" / "ready.json"
+        ready_value = json.loads(ready_path.read_text(encoding="utf-8"))
+        ready_path.write_text(json.dumps({**ready_value, "output_fingerprint": "0" * 64}), encoding="utf-8")
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        ready_path.write_text(json.dumps(ready_value), encoding="utf-8")
+
+        decoy_roots: list[Path] = []
+        for index in range(257):
+            decoy = container_isolation._proof_base() / f"000-decoy-{index:03d}" / "receipts"
+            decoy.mkdir(parents=True)
+            (decoy / "lifecycle-complete.json").write_text(
+                json.dumps({"receipt_id": f"mclc_decoy_{index:03d}"}),
+                encoding="utf-8",
+            )
+            decoy_roots.append(decoy)
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
+
+        duplicate = container_isolation._proof_base() / "zzz-duplicate" / "receipts"
+        duplicate.mkdir(parents=True)
+        (duplicate / "lifecycle-complete.json").write_text(json.dumps(lifecycle_value), encoding="utf-8")
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        (duplicate / "lifecycle-complete.json").unlink()
+        duplicate.rmdir()
+        duplicate.parent.rmdir()
+        for decoy in decoy_roots:
+            (decoy / "lifecycle-complete.json").unlink()
+            decoy.rmdir()
+            decoy.parent.rmdir()
+
+        approval_path = isolation_fixture["data"] / "approvals" / "approved" / f"{payload['approval_id']}.json"
+        approval_value = json.loads(approval_path.read_text(encoding="utf-8"))
+        approval_value["payload"]["revoked"] = True
+        approval_path.write_text(json.dumps(approval_value), encoding="utf-8")
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        approval_value["payload"]["revoked"] = False
+        approval_path.write_text(json.dumps(approval_value), encoding="utf-8")
+
+        original_provision = container_isolation.managed_copy_provision_for_copy
+        monkeypatch.setattr(container_isolation, "managed_copy_provision_for_copy", lambda *args, **kwargs: {})
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        monkeypatch.setattr(container_isolation, "managed_copy_provision_for_copy", original_provision)
+
+        original_isolation = container_isolation.latest_managed_copy_isolation_verification_for_provision
+        monkeypatch.setattr(
+            container_isolation,
+            "latest_managed_copy_isolation_verification_for_provision",
+            lambda *args, **kwargs: {},
+        )
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
+        monkeypatch.setattr(
+            container_isolation,
+            "latest_managed_copy_isolation_verification_for_provision",
+            original_isolation,
+        )
+
+        ambiguous_cleanup = {**cleanup_value, "post_removal_inspect_exit_code": 0}
+        ambiguous_cleanup["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in ambiguous_cleanup.items() if key != "receipt_fingerprint"}
+        )
+        cleanup.write_text(json.dumps(ambiguous_cleanup), encoding="utf-8")
+        ambiguous_lifecycle = {
+            **lifecycle_value,
+            "cleanup_receipt_fingerprint": ambiguous_cleanup["receipt_fingerprint"],
+        }
+        ambiguous_lifecycle["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in ambiguous_lifecycle.items() if key != "receipt_fingerprint"}
+        )
+        lifecycle_path.write_text(json.dumps(ambiguous_lifecycle), encoding="utf-8")
+        assert (
+            runtime_evidence.verify_copy_creation_runtime_source(
+                ambiguous_lifecycle["receipt_id"],
+                ambiguous_lifecycle["receipt_fingerprint"],
+            )["valid"]
+            is False
+        )
+        cleanup.write_text(json.dumps(cleanup_value), encoding="utf-8")
+        lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
+
+        fabricated_ready = {**ready_value, "unexpected_rehashed_field": True}
+        fabricated_ready["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in fabricated_ready.items() if key != "receipt_fingerprint"}
+        )
+        ready_path.write_text(json.dumps(fabricated_ready), encoding="utf-8")
+        fabricated_cleanup = {**cleanup_value, "container_id": "8" * 64}
+        fabricated_cleanup["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in fabricated_cleanup.items() if key != "receipt_fingerprint"}
+        )
+        cleanup.write_text(json.dumps(fabricated_cleanup), encoding="utf-8")
+        fabricated_lifecycle = {
+            **lifecycle_value,
+            "ready_receipt_fingerprint": fabricated_ready["receipt_fingerprint"],
+            "cleanup_receipt_fingerprint": fabricated_cleanup["receipt_fingerprint"],
+        }
+        fabricated_lifecycle["receipt_id"] = live_evidence._lifecycle_id(fabricated_lifecycle)
+        fabricated_lifecycle["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in fabricated_lifecycle.items() if key != "receipt_fingerprint"}
+        )
+        lifecycle_path.write_text(json.dumps(fabricated_lifecycle), encoding="utf-8")
+        assert (
+            runtime_evidence.verify_copy_creation_runtime_source(
+                fabricated_lifecycle["receipt_id"],
+                fabricated_lifecycle["receipt_fingerprint"],
+            )["valid"]
+            is False
+        )
+        ready_path.write_text(json.dumps(ready_value), encoding="utf-8")
+        cleanup.write_text(json.dumps(cleanup_value), encoding="utf-8")
+        lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
     assert result["receipt"]["bounded_cross_tenant_mount_denial"] is True
     assert result["receipt"]["cross_tenant_production_isolation_proven"] is False
     assert result["receipt"]["runtime_gate_ready"] is False
@@ -889,6 +1207,78 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
     assert any(command[3:5] == ["container", "rm"] for command in commands)
     cleanup = Path(result["proof_root"]) / "receipts" / "cleanup.json"
     assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"
+
+
+def test_live_verifier_rejects_tampered_or_stopped_historical_source(
+    isolation_fixture: dict[str, Any],
+) -> None:
+    _write_approval(isolation_fixture)
+    payload = isolation_fixture["payload"]
+    plan = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+    authority_args = _evidence_execution_kwargs(isolation_fixture)
+    assert authority_args["authorize_runtime_evidence"]() is True
+    authority = pilot_runtime.pilot_runtime_lease_authority_snapshot(
+        payload["lease_id"],
+        actor=payload["request_actor"],
+        expected_bindings=container_isolation.container_isolation_lease_bindings(),
+    )
+    root = container_isolation._proof_base() / payload["proof_run_id"]
+    (root / "receipts").mkdir(parents=True)
+    (root / "state").mkdir()
+    (root / "tenant").mkdir()
+    (root / "tenant" / "work_items.json").write_text(
+        json.dumps(payload["operation_input"], sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    _write_runtime_records(root, payload, isolation_fixture["provision"]["tenant_key"])
+    records = {
+        name: json.loads((root / "state" / f"{name}.json").read_text(encoding="utf-8"))
+        for name in ("handshake", "heartbeat", "operation", "briefing")
+    }
+    ready = container_isolation._receipt(
+        plan,
+        "ready",
+        {
+            "container_id": "9" * 64,
+            "container_name": f"francis-mciso-{payload['proof_run_id']}",
+            "container_host_pid": 65532,
+            "handshake_fingerprint": container_isolation._fingerprint(records["handshake"]),
+            "heartbeat_fingerprint": container_isolation._fingerprint(records["heartbeat"]),
+            "operation_receipt_fingerprint": records["operation"]["receipt_fingerprint"],
+            "output_fingerprint": records["briefing"]["output_fingerprint"],
+            "fixture_only": False,
+        },
+    )
+    (root / "receipts" / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
+    running = True
+
+    def inspect(argv: list[str], timeout: float) -> container_isolation.DockerResult:
+        assert argv[3:5] == ["container", "inspect"]
+        item = _owned_inspect_item(plan["descriptor"], root, host_pid=65532)
+        item["State"]["Running"] = running
+        return container_isolation.DockerResult(tuple(argv), 0, json.dumps([item]), "")
+
+    verifier = live_evidence.live_container_source_verifier(
+        plan=plan,
+        proof_root=root,
+        operation_input=payload["operation_input"],
+        run=inspect,
+        expected_authority=authority,
+    )
+    assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is True
+
+    records["heartbeat"]["sequence"] = 2
+    (root / "state" / "heartbeat.json").write_text(json.dumps(records["heartbeat"]), encoding="utf-8")
+    assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is False
+
+    (root / "state" / "heartbeat.json").write_text(
+        json.dumps({**records["heartbeat"], "sequence": 1}),
+        encoding="utf-8",
+    )
+    running = False
+    assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is False
 
 
 def test_tenant_boundary_probe_tamper_is_rejected(isolation_fixture: dict[str, Any], tmp_path: Path) -> None:
@@ -1250,6 +1640,12 @@ def test_real_fixed_docker_fixture_proof(
                     "POST",
                     container_isolation.CONTAINER_ISOLATION_ACTION,
                 ),
+                PilotLeaseBinding(
+                    container_isolation.RUNTIME_EVIDENCE_SCOPE,
+                    container_isolation.RUNTIME_EVIDENCE_ROUTE,
+                    "POST",
+                    container_isolation.RUNTIME_EVIDENCE_ACTION,
+                ),
             ),
             issued_at_ms=now_ms - 1_000,
             expires_at_ms=now_ms + 120_000,
@@ -1271,6 +1667,7 @@ def test_real_fixed_docker_fixture_proof(
             {
                 payload["request_actor"]: [
                     container_isolation.CONTAINER_ISOLATION_SCOPE,
+                    container_isolation.RUNTIME_EVIDENCE_SCOPE,
                 ]
             }
         ),
@@ -1285,6 +1682,7 @@ def test_real_fixed_docker_fixture_proof(
     assert result["receipt"]["bounded_cross_tenant_mount_denial"] is True
     assert result["receipt"]["fixture_only"] is False
     assert result["receipt"]["runtime_gate_ready"] is False
+    assert result["runtime_evidence"]["receipt"]["requirement_id"] == runtime_evidence.COPY_CREATION_REQUIREMENT
     assert result["output"]["next_action"]["id"] == "pilot-001"
     cleanup = Path(result["proof_root"]) / "receipts" / "cleanup.json"
     assert json.loads(cleanup.read_text(encoding="utf-8"))["status"] == "removed"

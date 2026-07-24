@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -199,6 +200,82 @@ def test_fixture_lineage_records_one_immutable_software_only_receipt(isolated_da
     assert [path.relative_to(isolated_data).as_posix() for path in isolated_data.rglob("*") if path.is_file()] == [
         f"logs/managed_copies/runtime_evidence/{receipt['receipt_id']}.json"
     ]
+
+
+def test_copy_creation_source_dispatch_preserves_live_and_startup_verifiers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from francis import managed_copy_container_live_evidence as live_evidence
+    from francis import managed_copy_pilot_runtime as pilot_runtime
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        live_evidence,
+        "verify_server_resolved_lifecycle_source",
+        lambda receipt_id, fingerprint: (
+            calls.append("lifecycle") or {"receipt_id": receipt_id, "fingerprint": fingerprint}
+        ),
+    )
+    monkeypatch.setattr(
+        pilot_runtime,
+        "verify_pilot_runtime_source",
+        lambda receipt_id, fingerprint: (
+            calls.append("startup") or {"receipt_id": receipt_id, "fingerprint": fingerprint}
+        ),
+    )
+
+    live = runtime_evidence.verify_copy_creation_runtime_source("mclc_" + "a" * 24, "b" * 64)
+    startup = runtime_evidence.verify_copy_creation_runtime_source("mcpr_startup_1", "c" * 64)
+
+    assert live["receipt_id"].startswith("mclc_")
+    assert startup["receipt_id"] == "mcpr_startup_1"
+    assert calls == ["lifecycle", "startup"]
+
+
+@pytest.mark.parametrize(
+    ("reason", "invoke_operation"),
+    [
+        ("pilot_lease_revocation_pending", False),
+        ("pilot_lease_expired", False),
+        ("pilot_lease_registry_replaced_during_transaction", True),
+    ],
+)
+def test_runtime_evidence_lease_transaction_fails_closed_and_rolls_back(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_data: Path,
+    reason: str,
+    invoke_operation: bool,
+) -> None:
+    from francis import managed_copy_pilot_runtime as pilot_runtime
+
+    payload = _record_payload()
+    authority = {
+        "valid": True,
+        "actor_id": "stage18.test-writer",
+        "lease_id": "lease-runtime-evidence-1",
+        "operation_consumed_binding_count": 2,
+        "sequence_prefix_fingerprints": ["a" * 64, "b" * 64],
+    }
+
+    def transaction(lease_id: str, **kwargs: Any) -> tuple[bool, str, dict[str, Any]]:
+        assert lease_id == authority["lease_id"]
+        result = kwargs["operation"](authority) if invoke_operation else {}
+        return False, reason, result
+
+    monkeypatch.setattr(pilot_runtime, "execute_pilot_runtime_lease_authority_transaction", transaction)
+    result = runtime_evidence.record_runtime_evidence_with_lease_transaction(
+        payload,
+        actor=authority["actor_id"],
+        stage17_closed=True,
+        lease_id=authority["lease_id"],
+        expected_bindings=(object(), object()),
+        expected_authority=authority,
+        source_verifier_factory=lambda locked: _fixture_source,
+    )
+
+    assert result["ok"] is False
+    assert reason in result["error"]
+    assert list(runtime_evidence.receipt_directory().glob("*.json")) == []
 
 
 def test_exact_replay_is_idempotent(isolated_data: Path) -> None:

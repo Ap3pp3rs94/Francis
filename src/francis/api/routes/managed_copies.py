@@ -91,6 +91,10 @@ from francis.managed_copy_container_isolation import (
     CONTAINER_ISOLATION_ACTION,
     CONTAINER_ISOLATION_ROUTE,
     CONTAINER_ISOLATION_SCOPE,
+    RUNTIME_EVIDENCE_ACTION,
+    RUNTIME_EVIDENCE_ROUTE,
+    RUNTIME_EVIDENCE_SCOPE,
+    container_isolation_lease_bindings,
     container_isolation_contract_snapshot,
     execute_container_isolation,
 )
@@ -512,11 +516,48 @@ def container_isolation(payload: dict[str, Any], request: Request) -> dict[str, 
             required_scope=CONTAINER_ISOLATION_SCOPE,
             next_step="configure_exact_managed_copy_container_isolation_scope_and_approval",
         )
+    evidence_decision = _write_permission(
+        actor,
+        required_scope=RUNTIME_EVIDENCE_SCOPE,
+        route=RUNTIME_EVIDENCE_ROUTE,
+        method=request.method,
+    )
+    if not evidence_decision.allowed:
+        return _permission_denied(
+            evidence_decision,
+            required_scope=RUNTIME_EVIDENCE_SCOPE,
+            next_step="configure_exact_copy_creation_runtime_evidence_scope",
+        )
+    authority = pilot_runtime_lease_authority_snapshot(
+        payload.get("lease_id"),
+        actor=actor,
+        expected_bindings=container_isolation_lease_bindings(),
+    )
+    if authority.get("valid") is not True:
+        return _permission_denied(
+            ApiPermissionDecision(False, "pilot_lease_lineage_mismatch", decision.evidence),
+            required_scope=RUNTIME_EVIDENCE_SCOPE,
+            next_step="attach_exact_copy_creation_runtime_evidence_lease_binding",
+        )
+
+    def authorize_runtime_evidence() -> bool:
+        return _pilot_write_permission(
+            actor,
+            lease_id=payload.get("lease_id"),
+            package_id=authority.get("package_id"),
+            pilot_run_id=authority.get("pilot_run_id"),
+            required_scope=RUNTIME_EVIDENCE_SCOPE,
+            route=RUNTIME_EVIDENCE_ROUTE,
+            action=RUNTIME_EVIDENCE_ACTION,
+        ).allowed
+
     managed_status = managed_copies_status_snapshot()
     return execute_container_isolation(
         payload,
         actor=actor,
         stage17_closed=bool(managed_status["stage17_closed_by_receipt"]),
+        evidence_authority=authority,
+        authorize_runtime_evidence=authorize_runtime_evidence,
     )
 
 

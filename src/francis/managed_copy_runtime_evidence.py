@@ -104,6 +104,10 @@ def verify_copy_creation_runtime_source(
     source_receipt_fingerprint: str,
 ) -> dict[str, Any]:
     """Validate independently loaded managed-copy startup evidence."""
+    if source_receipt_id.startswith("mclc_"):
+        from francis.managed_copy_container_live_evidence import verify_server_resolved_lifecycle_source
+
+        return verify_server_resolved_lifecycle_source(source_receipt_id, source_receipt_fingerprint)
     from francis.managed_copy_pilot_runtime import verify_pilot_runtime_source
 
     return verify_pilot_runtime_source(source_receipt_id, source_receipt_fingerprint)
@@ -324,6 +328,50 @@ def record_safe_delta_runtime_evidence_with_lease(
         context["pilot_lease_id"],
         actor=actor,
         expected_bindings=lease_bindings(include_runtime_evidence=True),
+        operation=operation,
+    )
+    if committed:
+        return result
+    return _runtime_evidence_transaction_failed(result, reason)
+
+
+def record_runtime_evidence_with_lease_transaction(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+    stage17_closed: bool,
+    lease_id: str,
+    expected_bindings: tuple[Any, ...],
+    expected_authority: dict[str, Any],
+    source_verifier_factory: Callable[[dict[str, Any]], SourceVerifier],
+) -> dict[str, Any]:
+    """Record evidence while exact lease authority and revocation exclusion are held."""
+    from francis.managed_copy_pilot_runtime import execute_pilot_runtime_lease_authority_transaction
+
+    def operation(authority: dict[str, Any]) -> dict[str, Any]:
+        if (
+            authority.get("valid") is not True
+            or authority.get("actor_id") != actor
+            or authority.get("lease_id") != lease_id
+            or authority.get("operation_consumed_binding_count") != len(expected_bindings)
+            or authority.get("sequence_prefix_fingerprints") != expected_authority.get("sequence_prefix_fingerprints")
+        ):
+            return _blocked_from_payload(
+                payload,
+                actor=actor,
+                error="stage18_runtime_evidence_authority_changed_under_lock",
+            )
+        return record_runtime_evidence(
+            payload,
+            actor=actor,
+            stage17_closed=stage17_closed,
+            source_verifier=source_verifier_factory(authority),
+        )
+
+    committed, reason, result = execute_pilot_runtime_lease_authority_transaction(
+        lease_id,
+        actor=actor,
+        expected_bindings=expected_bindings,
         operation=operation,
     )
     if committed:

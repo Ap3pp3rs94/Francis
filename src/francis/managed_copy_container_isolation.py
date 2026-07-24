@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from francis.kernel.paths import data_dir, repo_root
+from francis.governance.pilot_scope_lease import PilotLeaseBinding
 from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
 from francis.managed_copy_provisioning import managed_copy_provision_for_copy
 from francis.managed_copy_runtime import (
@@ -31,10 +32,19 @@ from francis.managed_copy_runtime import (
     runtime_operation_name,
 )
 from francis.managed_copy_runtime_start import validate_runtime_start_approval_reference
+from francis.managed_copy_runtime_evidence import (
+    COPY_CREATION_PROOF_KIND,
+    COPY_CREATION_REQUIREMENT,
+    plan_runtime_evidence,
+    record_runtime_evidence_with_lease_transaction,
+)
 
 CONTAINER_ISOLATION_SCOPE = "managed_copies.container_isolation.execute"
 CONTAINER_ISOLATION_ACTION = "managed_copies.container_isolation"
 CONTAINER_ISOLATION_ROUTE = "/managed-copies/container-isolation"
+RUNTIME_EVIDENCE_SCOPE = "managed_copies.runtime_evidence.write"
+RUNTIME_EVIDENCE_ROUTE = "/managed-copies/runtime-evidence-readback"
+RUNTIME_EVIDENCE_ACTION = "managed_copies.runtime_evidence"
 CONTAINER_ISOLATION_CONTRACT = "stage18_managed_copy_docker_isolation_v2"
 FIXED_IMAGE_REPOSITORY = "francis/managed-copy-runtime"
 FIXED_IMAGE_TAG = "stage18-v1"
@@ -43,6 +53,7 @@ FIXED_CONTAINER_USER = "65532:65532"
 RUNTIME_PROGRAM = repo_root() / "src" / "francis" / "managed_copy_runtime.py"
 RUNTIME_DOCKERFILE = repo_root() / "infra" / "managed-copy-runtime" / "Dockerfile"
 CONTROLLER_VERIFIER = Path(__file__).resolve()
+LIVE_EVIDENCE_VERIFIER = Path(__file__).with_name("managed_copy_container_live_evidence.py").resolve()
 RUNTIME_PROGRAM_CONTAINER_PATH = "/opt/francis/managed_copy_runtime.py"
 SECURITY_PROFILE_DIAGNOSTIC_CONTRACT = "stage18_managed_copy_docker_security_profile_diagnostic_v1"
 DIAGNOSTIC_PREDECESSOR_PROOF_RUN_ID = "mciso-20260716t170613z"
@@ -72,8 +83,10 @@ _PAYLOAD_FIELDS = frozenset(
         "lease_seconds",
         "confirm_container_isolation",
         "operation_input",
+        "runtime_evidence_intent",
     }
 )
+_RUNTIME_EVIDENCE_INTENT_FIELDS = frozenset({"requirement_id", "proof_kind", "confirm_runtime_evidence"})
 _APPROVAL_FIELDS = frozenset(
     {"id", "ts", "action", "reason", "payload", "status", "decision", "decision_actor", "decided_ts"}
 )
@@ -152,6 +165,8 @@ def container_isolation_contract_snapshot() -> dict[str, Any]:
         "approval_action": CONTAINER_ISOLATION_ACTION,
         "runtime_start_approval_also_required": True,
         "pilot_lease_required": True,
+        "runtime_evidence_scope": RUNTIME_EVIDENCE_SCOPE,
+        "runtime_evidence_pilot_binding_required": True,
         "backend": "docker_desktop_wsl2_linux",
         "fixed_image_repository": FIXED_IMAGE_REPOSITORY,
         "fixed_image_tag": FIXED_IMAGE_TAG,
@@ -162,6 +177,7 @@ def container_isolation_contract_snapshot() -> dict[str, Any]:
         "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
         "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
         "controller_verifier_fingerprint": _file_sha256(CONTROLLER_VERIFIER),
+        "live_evidence_verifier_fingerprint": _file_sha256(LIVE_EVIDENCE_VERIFIER),
         "caller_selected_image": False,
         "caller_selected_command": False,
         "network": "none",
@@ -187,6 +203,15 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         blockers.append("stage17_prerequisite_not_closed")
     if type(payload.get("confirm_container_isolation")) is not bool:
         blockers.append("managed_copy_container_isolation_confirmation_invalid")
+    evidence_intent = payload.get("runtime_evidence_intent")
+    if (
+        not isinstance(evidence_intent, dict)
+        or set(evidence_intent) != _RUNTIME_EVIDENCE_INTENT_FIELDS
+        or evidence_intent.get("requirement_id") != COPY_CREATION_REQUIREMENT
+        or evidence_intent.get("proof_kind") != COPY_CREATION_PROOF_KIND
+        or evidence_intent.get("confirm_runtime_evidence") is not True
+    ):
+        blockers.append("managed_copy_container_runtime_evidence_intent_invalid")
     lease_seconds = _exact_int(payload.get("lease_seconds"), minimum=2, maximum=30)
     keys = (
         "approval_id",
@@ -301,12 +326,31 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
     }
 
 
+def container_isolation_lease_bindings() -> tuple[PilotLeaseBinding, ...]:
+    return (
+        PilotLeaseBinding(
+            CONTAINER_ISOLATION_SCOPE,
+            CONTAINER_ISOLATION_ROUTE,
+            "POST",
+            CONTAINER_ISOLATION_ACTION,
+        ),
+        PilotLeaseBinding(
+            RUNTIME_EVIDENCE_SCOPE,
+            RUNTIME_EVIDENCE_ROUTE,
+            "POST",
+            RUNTIME_EVIDENCE_ACTION,
+        ),
+    )
+
+
 def execute_container_isolation(
     payload: dict[str, Any],
     *,
     actor: str,
     stage17_closed: bool,
     run: DockerRunner = default_docker_runner,
+    evidence_authority: dict[str, Any] | None = None,
+    authorize_runtime_evidence: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     initial = container_isolation_proposal(payload, actor=actor, stage17_closed=stage17_closed)
     if not initial["ok"]:
@@ -317,10 +361,27 @@ def execute_container_isolation(
         final = container_isolation_proposal(payload, actor=actor, stage17_closed=stage17_closed)
         if not final["ok"] or final["descriptor_fingerprint"] != initial["descriptor_fingerprint"]:
             return _blocked(initial, "managed_copy_container_isolation_changed_under_lock")
-        return _execute(final, operation_input=payload["operation_input"], run=run)
+        return _execute(
+            final,
+            operation_input=payload["operation_input"],
+            run=run,
+            evidence_authority=evidence_authority or {},
+            authorize_runtime_evidence=authorize_runtime_evidence,
+        )
 
 
-def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner) -> dict[str, Any]:
+def _execute(
+    plan: dict[str, Any],
+    *,
+    operation_input: object,
+    run: DockerRunner,
+    evidence_authority: dict[str, Any],
+    authorize_runtime_evidence: Callable[[], bool] | None,
+) -> dict[str, Any]:
+    if not _valid_pre_effect_evidence_authority(plan, evidence_authority):
+        return _blocked(plan, "managed_copy_container_runtime_evidence_authority_invalid")
+    if authorize_runtime_evidence is None:
+        return _blocked(plan, "managed_copy_container_runtime_evidence_authorizer_missing")
     d = plan["descriptor"]
     preflight = _docker_preflight(run, d)
     if preflight:
@@ -388,6 +449,7 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
             "error": "managed_copy_container_id_invalid_cleanup_unverified",
             "proof_root": str(root),
         }
+    cleanup_attempted = False
     try:
         if _mount_source_snapshot(root, descriptor=d) != source_snapshot:
             return _fail(plan, receipts, "managed_copy_container_mount_source_changed", created)
@@ -444,15 +506,115 @@ def _execute(plan: dict[str, Any], *, operation_input: object, run: DockerRunner
             },
         )
         _write_immutable(receipts / "ready.json", proof)
+        from francis.managed_copy_container_live_evidence import (
+            historical_lifecycle_source_verifier,
+            live_container_source_verifier,
+            write_lifecycle_complete_receipt,
+        )
+
+        verifier = live_container_source_verifier(
+            plan=plan,
+            proof_root=root,
+            operation_input=operation_input,
+            run=run,
+            expected_authority=evidence_authority,
+        )
+        live_source = verifier(proof["receipt_id"], proof["receipt_fingerprint"])
+        if live_source.get("valid") is not True:
+            return _fail(plan, receipts, "managed_copy_container_runtime_evidence_failed", inspected)
+        if not authorize_runtime_evidence():
+            return _fail(plan, receipts, "managed_copy_container_runtime_evidence_authority_denied", inspected)
+        from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
+
+        publication_authority = pilot_runtime_lease_authority_snapshot(
+            d["lease_id"],
+            actor=plan["actor"],
+            expected_bindings=container_isolation_lease_bindings(),
+        )
+        cleanup_status = _cleanup_exact(run, container_id, name=name, receipts=receipts, plan=plan)
+        cleanup_attempted = True
+        if cleanup_status != "removed":
+            return {
+                "ok": False,
+                "status": "cleanup_required",
+                "error": "managed_copy_container_cleanup_failed",
+                "proof_root": str(root),
+            }
+        cleanup_receipt = _read_json(receipts / "cleanup.json")
+        lifecycle = write_lifecycle_complete_receipt(
+            plan=plan,
+            proof_root=root,
+            ready=proof,
+            cleanup=cleanup_receipt,
+            output=output,
+            authority=publication_authority,
+        )
+        if not lifecycle:
+            return _fail(plan, receipts, "managed_copy_container_lifecycle_receipt_failed", inspected)
+        historical_verifier = historical_lifecycle_source_verifier(
+            plan=plan,
+            proof_root=root,
+            expected_authority=publication_authority,
+        )
+        evidence_payload = {
+            "request_actor": plan["actor"],
+            "requirement_id": COPY_CREATION_REQUIREMENT,
+            "proof_kind": COPY_CREATION_PROOF_KIND,
+            "source_receipt_id": lifecycle["receipt_id"],
+            "source_receipt_fingerprint": lifecycle["receipt_fingerprint"],
+            "trace_id": d["trace_id"],
+            "dry_run": True,
+            "record_fingerprint": "",
+            "confirm_runtime_evidence": False,
+        }
+        evidence_plan = plan_runtime_evidence(
+            evidence_payload,
+            actor=plan["actor"],
+            stage17_closed=True,
+            source_verifier=historical_verifier,
+        )
+        if not evidence_plan["ok"]:
+            return _fail(plan, receipts, "managed_copy_container_runtime_evidence_failed", inspected)
+        evidence_payload.update(
+            {
+                "dry_run": False,
+                "record_fingerprint": evidence_plan["record_fingerprint"],
+                "confirm_runtime_evidence": True,
+            }
+        )
+
+        def verifier_factory(authority: dict[str, Any]) -> Callable[[str, str], dict[str, Any]]:
+            return historical_lifecycle_source_verifier(
+                plan=plan,
+                proof_root=root,
+                expected_authority=authority,
+            )
+
+        evidence = record_runtime_evidence_with_lease_transaction(
+            evidence_payload,
+            actor=plan["actor"],
+            stage17_closed=True,
+            lease_id=d["lease_id"],
+            expected_bindings=container_isolation_lease_bindings(),
+            expected_authority=evidence_authority,
+            source_verifier_factory=verifier_factory,
+        )
+        if evidence.get("ok") is not True:
+            return _fail(plan, receipts, "managed_copy_container_runtime_evidence_failed", inspected)
         return {
             "ok": True,
-            "status": "runtime_ready",
+            "status": "lifecycle_complete",
             "receipt": proof,
+            "lifecycle_receipt": lifecycle,
+            "runtime_evidence": evidence,
             "output": output,
             "proof_root": str(root),
         }
     finally:
-        cleanup_status = _cleanup_exact(run, container_id, name=name, receipts=receipts, plan=plan)
+        if not cleanup_attempted:
+            cleanup_status = _cleanup_exact(run, container_id, name=name, receipts=receipts, plan=plan)
+        else:
+            cleanup_status = "removed"
         if cleanup_status != "removed":
             return {
                 "ok": False,
@@ -736,6 +898,7 @@ def _descriptor(
         "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
         "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
         "controller_verifier_fingerprint": _file_sha256(CONTROLLER_VERIFIER),
+        "live_evidence_verifier_fingerprint": _file_sha256(LIVE_EVIDENCE_VERIFIER),
         "entrypoint_fingerprint": _fingerprint(["python", RUNTIME_PROGRAM_CONTAINER_PATH]),
         "mount_set_fingerprint": _fingerprint(mounts),
         "security_profile_fingerprint": _fingerprint(security),
@@ -754,9 +917,31 @@ def _descriptor(
         "runtime_nonce": values["runtime_nonce"],
         "action_nonce": values["action_nonce"],
         "trace_id": values["trace_id"],
+        "runtime_evidence_intent_fingerprint": _fingerprint(payload["runtime_evidence_intent"]),
         "lease_seconds": _exact_int(payload["lease_seconds"], minimum=2, maximum=30),
         "fixture_only": False,
     }
+
+
+def _valid_pre_effect_evidence_authority(plan: dict[str, Any], authority: dict[str, Any]) -> bool:
+    from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
+
+    descriptor = plan["descriptor"]
+    current = pilot_runtime_lease_authority_snapshot(
+        descriptor["lease_id"],
+        actor=plan["actor"],
+        expected_bindings=container_isolation_lease_bindings(),
+    )
+    return bool(
+        authority.get("valid") is True
+        and current == authority
+        and authority.get("actor_id") == plan["actor"]
+        and authority.get("lease_id") == descriptor["lease_id"]
+        and authority.get("pilot_run_id") == descriptor["proof_run_id"]
+        and authority.get("operation_consumed_binding_count") == 1
+        and authority.get("effective_state") == "active"
+        and len(authority.get("sequence_prefix_fingerprints", [])) == 2
+    )
 
 
 def _inspect(run: DockerRunner, container_id: str) -> DockerResult:
@@ -1067,8 +1252,21 @@ def _cleanup_exact(run: DockerRunner, container_id: str, *, name: str, receipts:
     if identity_ok:
         run([*_docker_prefix(), "container", "stop", "--timeout", "3", container_id], 10.0)
         removed = run([*_docker_prefix(), "container", "rm", container_id], 10.0)
-        status = "removed" if removed.exit_code == 0 else "cleanup_required"
-    receipt = _receipt(plan, "cleanup", {"container_id": container_id, "container_name": name, "status": status})
+        post_removal = _inspect(run, container_id) if removed.exit_code == 0 else removed
+        status = "removed" if removed.exit_code == 0 and post_removal.exit_code != 0 else "cleanup_required"
+    else:
+        post_removal = inspected
+    receipt = _receipt(
+        plan,
+        "cleanup",
+        {
+            "container_id": container_id,
+            "container_name": name,
+            "status": status,
+            "post_removal_inspect_absent": status == "removed",
+            "post_removal_inspect_exit_code": post_removal.exit_code,
+        },
+    )
     try:
         _write_immutable(receipts / "cleanup.json", receipt)
     except (OSError, FileExistsError):
