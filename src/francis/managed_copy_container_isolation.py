@@ -26,6 +26,7 @@ from francis.managed_copy_runtime import (
     TENANT_BOUNDARY_OPERATION,
     TENANT_BOUNDARY_OUTPUT_CONTRACT,
     WORK_BRIEFING_OPERATION,
+    ManagedCopyRuntimeInputError,
     build_runtime_operation_preview,
     build_tenant_boundary_probe,
     build_work_briefing,
@@ -245,8 +246,8 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         blockers.append("managed_copy_container_isolation_fixed_image_mismatch")
     try:
         operation_preview = build_runtime_operation_preview(payload.get("operation_input"))
-    except ValueError as exc:
-        blockers.append(str(exc))
+    except ManagedCopyRuntimeInputError as exc:
+        blockers.append(exc.blocker)
         operation_preview = {}
 
     provision: dict[str, Any] = {}

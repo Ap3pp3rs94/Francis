@@ -20,27 +20,48 @@ TENANT_BOUNDARY_ID = "fixed_sibling_tenant_boundary_v1"
 TENANT_BOUNDARY_RELATIVE_PATH = "tenant-b"
 _PRIORITIES = ("critical", "high", "normal", "low")
 _STATUSES = ("open", "blocked", "done")
+_PUBLIC_INPUT_BLOCKERS = frozenset(
+    {
+        "managed_copy_work_briefing_input_schema_invalid",
+        "managed_copy_work_briefing_contract_invalid",
+        "managed_copy_work_briefing_items_invalid",
+        "managed_copy_work_briefing_item_schema_invalid",
+        "managed_copy_work_briefing_item_invalid",
+        "managed_copy_tenant_boundary_probe_input_schema_invalid",
+        "managed_copy_tenant_boundary_probe_contract_invalid",
+        "managed_copy_tenant_boundary_probe_input_invalid",
+        "managed_copy_tenant_boundary_probe_observation_invalid",
+    }
+)
+
+
+class ManagedCopyRuntimeInputError(ValueError):
+    """A fixed public blocker raised by managed-copy input validation."""
+
+    def __init__(self, blocker: str) -> None:
+        self.blocker = blocker if blocker in _PUBLIC_INPUT_BLOCKERS else "managed_copy_runtime_input_invalid"
+        super().__init__(self.blocker)
 
 
 def build_work_briefing(payload: object) -> dict[str, Any]:
     if not isinstance(payload, dict) or set(payload) != {"contract", "items"}:
-        raise ValueError("managed_copy_work_briefing_input_schema_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_work_briefing_input_schema_invalid")
     if payload.get("contract") != INPUT_CONTRACT:
-        raise ValueError("managed_copy_work_briefing_contract_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_work_briefing_contract_invalid")
     items = payload.get("items")
     if not isinstance(items, list) or not 1 <= len(items) <= 100:
-        raise ValueError("managed_copy_work_briefing_items_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_work_briefing_items_invalid")
     normalized: list[dict[str, str]] = []
     seen: set[str] = set()
     for item in items:
         if not isinstance(item, dict) or set(item) != {"id", "title", "priority", "status"}:
-            raise ValueError("managed_copy_work_briefing_item_schema_invalid")
+            raise ManagedCopyRuntimeInputError("managed_copy_work_briefing_item_schema_invalid")
         item_id = _bounded(item.get("id"), 80)
         title = _bounded(item.get("title"), 240)
         priority = _bounded(item.get("priority"), 16)
         status = _bounded(item.get("status"), 16)
         if not item_id or item_id in seen or not title or priority not in _PRIORITIES or status not in _STATUSES:
-            raise ValueError("managed_copy_work_briefing_item_invalid")
+            raise ManagedCopyRuntimeInputError("managed_copy_work_briefing_item_invalid")
         seen.add(item_id)
         normalized.append({"id": item_id, "title": title, "priority": priority, "status": status})
     candidates = sorted(
@@ -67,15 +88,15 @@ def build_tenant_boundary_probe(
     sibling_boundary_absent: bool,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or set(payload) != {"contract", "probe_id", "tenant_marker"}:
-        raise ValueError("managed_copy_tenant_boundary_probe_input_schema_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_input_schema_invalid")
     if payload.get("contract") != TENANT_BOUNDARY_INPUT_CONTRACT:
-        raise ValueError("managed_copy_tenant_boundary_probe_contract_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_contract_invalid")
     probe_id = _bounded(payload.get("probe_id"), 80)
     tenant_marker = _bounded(payload.get("tenant_marker"), 160)
     if not probe_id or not tenant_marker:
-        raise ValueError("managed_copy_tenant_boundary_probe_input_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_input_invalid")
     if type(approved_input_read) is not bool or type(sibling_boundary_absent) is not bool:
-        raise ValueError("managed_copy_tenant_boundary_probe_observation_invalid")
+        raise ManagedCopyRuntimeInputError("managed_copy_tenant_boundary_probe_observation_invalid")
     result = {
         "contract": TENANT_BOUNDARY_OUTPUT_CONTRACT,
         "operation": TENANT_BOUNDARY_OPERATION,

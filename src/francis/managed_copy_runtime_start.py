@@ -534,13 +534,13 @@ def _launch(plan: dict[str, Any]) -> dict[str, Any]:
         )
         _write_immutable(state_dir / "startup.json", receipt)
         return {"ok": True, "status": "ready", "receipt": receipt, "writes_receipt": True}
-    except Exception as exc:
+    except Exception:
         _cleanup_created_process(process, creation_token=creation_token, state_dir=state_dir)
         failed = {
             **attempt,
             "kind": "francis.stage18.managed_copies.runtime_start_failed_receipt",
             "status": "failed",
-            "error": redact_secret_text(str(exc))[:160],
+            "error": "managed_copy_runtime_start_runtime_failed",
             "pid": process.pid,
             "process_creation_token": creation_token,
         }

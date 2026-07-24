@@ -329,6 +329,28 @@ def test_process_creation_failure_records_failed_attempt_and_consumes_approval(
     assert replay["error"] == "managed_copy_runtime_start_approval_already_consumed"
 
 
+def test_runtime_failure_receipt_does_not_expose_exception_text(
+    runtime_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = runtime_fixture["payload"]
+    _approve(runtime_fixture)
+
+    def raise_sensitive_error(*args: object, **kwargs: object) -> str:
+        raise RuntimeError(r"C:\operator\secret.txt")
+
+    monkeypatch.setattr(runtime_start, "_runtime_records_blocker", raise_sensitive_error)
+    result = runtime_start.start_fixture_runtime(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+
+    assert result["error"] == "managed_copy_runtime_start_runtime_failed"
+    serialized = json.dumps(result["receipt"])
+    assert "operator" not in serialized
+    assert "secret" not in serialized
+
+
 def test_last_moment_approval_revocation_prevents_process_creation(
     runtime_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

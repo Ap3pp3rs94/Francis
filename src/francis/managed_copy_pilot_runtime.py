@@ -22,7 +22,12 @@ from francis.managed_copy_isolation import (
     managed_copy_isolation_guarded_subpath,
 )
 from francis.managed_copy_provisioning import managed_copy_provision_for_copy
-from francis.managed_copy_runtime import HEARTBEAT_IDENTITY, INPUT_CONTRACT, RUNTIME_IDENTITY
+from francis.managed_copy_runtime import (
+    HEARTBEAT_IDENTITY,
+    INPUT_CONTRACT,
+    RUNTIME_IDENTITY,
+    ManagedCopyRuntimeInputError,
+)
 from francis.process_identity import process_identity, terminate_owned_process
 
 PILOT_RUNTIME_SCOPE = "managed_copies.pilot_runtime.execute"
@@ -181,8 +186,8 @@ def issue_pilot_runtime_lease(payload: dict[str, Any]) -> dict[str, Any]:
             return _blocked("managed_copy_pilot_lease_conflicting_replay")
         try:
             issued = PILOT_RUNTIME_LEASES.issue(lease)
-        except ValueError as exc:
-            return _blocked(str(exc))
+        except ValueError:
+            return _blocked("managed_copy_pilot_lease_registry_rejected")
         _PILOT_LEASES[issued.lease_id] = issued
         _PILOT_LEASE_APPROVAL_FINGERPRINTS[issued.lease_id] = final["approval_fingerprint"]
         _PILOT_LEASE_ISSUERS[issued.lease_id] = actor
@@ -244,8 +249,8 @@ def _pilot_lease_from_approval(approval_id: str, *, issuer_actor: str) -> dict[s
             runtime_nonce=descriptor["runtime_nonce"],
             operator_decision_fingerprint=descriptor["operator_decision_fingerprint"],
         ).validated()
-    except (KeyError, TypeError, ValueError) as exc:
-        return _lease_approval_blocked(str(exc) or "managed_copy_pilot_lease_invalid")
+    except (KeyError, TypeError, ValueError):
+        return _lease_approval_blocked("managed_copy_pilot_lease_invalid")
     return {
         "error": "",
         "lease": lease,
@@ -354,8 +359,8 @@ def pilot_runtime_proposal(payload: dict[str, Any], *, actor: str, stage17_close
         from francis.managed_copy_runtime import build_work_briefing
 
         preview = build_work_briefing(operation_input)
-    except ValueError as exc:
-        blockers.append(str(exc))
+    except ManagedCopyRuntimeInputError as exc:
+        blockers.append(exc.blocker)
         preview = {}
     provision = managed_copy_provision_for_copy(copy_id, provisioning_receipt_id=provision_id)
     if not provision:

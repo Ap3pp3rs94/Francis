@@ -133,6 +133,14 @@ def test_work_briefing_is_deterministic_and_actionable() -> None:
     assert len(result["output_fingerprint"]) == 64
 
 
+def test_runtime_input_error_does_not_expose_unrecognized_exception_text() -> None:
+    error = pilot.ManagedCopyRuntimeInputError(r"C:\operator\secret.txt")
+
+    assert error.blocker == "managed_copy_runtime_input_invalid"
+    assert "operator" not in str(error)
+    assert "secret" not in str(error)
+
+
 def test_container_entrypoint_layout_executes_real_francis_operation(tmp_path: Path) -> None:
     tenant_root = tmp_path / "tenant"
     input_path = tenant_root / "data" / "work_items.json"
@@ -594,6 +602,51 @@ def test_lease_issue_rejects_invalid_approval(
 
     assert result["error"] == expected
     assert pilot._PILOT_LEASES == {}
+
+
+def test_lease_issue_does_not_expose_registry_exception_text(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    operator = "lease.operator"
+    now = int(time.time() * 1000)
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    registry = PilotScopeLeaseRegistry()
+    monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", registry)
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {})
+    _write_lease_approval(tmp_path, issuer=operator, now=now)
+
+    def reject_lease(_lease: PilotScopeLease) -> PilotScopeLease:
+        raise ValueError(r"C:\operator\secret.txt")
+
+    monkeypatch.setattr(registry, "issue", reject_lease)
+    result = pilot.issue_pilot_runtime_lease(
+        {"request_actor": operator, "approval_id": "lease-approval-api-001", "confirm_issue": True}
+    )
+
+    assert result["error"] == "managed_copy_pilot_lease_registry_rejected"
+    assert "operator" not in json.dumps(result)
+    assert "secret" not in json.dumps(result)
+
+
+def test_lease_issue_does_not_expose_approval_validation_exception_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    operator = "lease.operator"
+    now = int(time.time() * 1000)
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(pilot, "PILOT_RUNTIME_LEASES", PilotScopeLeaseRegistry())
+    monkeypatch.setattr(pilot, "_PILOT_LEASES", {})
+    _write_lease_approval(tmp_path, issuer=operator, now=now)
+
+    def reject_descriptor(_lease: PilotScopeLease) -> PilotScopeLease:
+        raise ValueError(r"C:\operator\secret.txt")
+
+    monkeypatch.setattr(PilotScopeLease, "validated", reject_descriptor)
+    result = pilot.issue_pilot_runtime_lease(
+        {"request_actor": operator, "approval_id": "lease-approval-api-001", "confirm_issue": True}
+    )
+
+    assert result["error"] == "managed_copy_pilot_lease_invalid"
+    assert "operator" not in json.dumps(result)
+    assert "secret" not in json.dumps(result)
 
 
 def test_lease_issue_rejects_tampered_descriptor_and_changed_under_lock(
