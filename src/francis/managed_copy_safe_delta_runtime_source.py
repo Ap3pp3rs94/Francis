@@ -133,63 +133,85 @@ def record_safe_delta_runtime_source(
     if not _valid_authority(authority, plan):
         return _blocked("safe_delta_runtime_source_authority_lineage_invalid")
     with _LOCK:
-        current_authority = _reload_authority(plan)
-        if current_authority != authority or not _valid_authority(current_authority, plan):
-            return _blocked("safe_delta_runtime_source_authority_changed_under_lock")
+        from francis.managed_copy_pilot_runtime import execute_pilot_runtime_lease_authority_transaction
+        from francis.managed_copy_safe_delta_runtime_invocation import lease_bindings
+
         request = plan.get("request")
-        request = dict(request) if isinstance(request, dict) else {}
-        fresh = plan_safe_delta_runtime_source(
-            {**request, "dry_run": True, "source_fingerprint": expected, "confirm_source_recording": False},
-            actor=_text(plan.get("actor")),
+        request = request if isinstance(request, dict) else {}
+        committed, reason, result = execute_pilot_runtime_lease_authority_transaction(
+            request.get("pilot_lease_id"),
+            actor=plan.get("actor"),
+            expected_bindings=lease_bindings(),
+            operation=lambda current: (
+                _record_under_authority_transaction(plan, expected, current)
+                if current == authority
+                else _blocked("safe_delta_runtime_source_authority_changed_under_lock")
+            ),
         )
-        if not fresh.get("ok") or fresh.get("source_fingerprint") != expected:
-            return _blocked("safe_delta_runtime_source_lineage_drift")
-        lineage, blocker = _load_lineage(request)
-        if blocker:
-            return _blocked(blocker)
-        receipt = _receipt(fresh, lineage, authority)
-        path = safe_delta_runtime_source_directory() / f"{receipt['receipt_id']}.json"
-        content = _encode(receipt)
-        present, existing = _read(path)
-        if present:
-            if _valid_existing(existing, path) and _same_binding(existing, receipt):
-                verified = verify_safe_delta_runtime_source(
-                    _text(existing.get("receipt_id")),
-                    _text(existing.get("receipt_fingerprint")),
-                )
-                if verified.get("valid") is True:
-                    return _recorded(existing, writes=False)
-            return _blocked("safe_delta_runtime_source_conflict")
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _publish_exclusive(path, content)
-        except OSError:
-            return _blocked("safe_delta_runtime_source_write_failed")
-        present, written = _read(path)
-        if not present or written != receipt or not _exact_bytes(path, content) or not _valid_existing(written, path):
-            return _cleanup_required(
-                "safe_delta_runtime_source_write_verification_failed_after_publication",
-                receipt,
-                path,
-                content,
+        if committed:
+            return result
+        return _transaction_failed(result, reason)
+
+
+def _record_under_authority_transaction(
+    plan: dict[str, Any],
+    expected: str,
+    authority: dict[str, Any],
+) -> dict[str, Any]:
+    request = plan.get("request")
+    request = dict(request) if isinstance(request, dict) else {}
+    fresh = plan_safe_delta_runtime_source(
+        {**request, "dry_run": True, "source_fingerprint": expected, "confirm_source_recording": False},
+        actor=_text(plan.get("actor")),
+    )
+    if not fresh.get("ok") or fresh.get("source_fingerprint") != expected:
+        return _blocked("safe_delta_runtime_source_lineage_drift")
+    lineage, blocker = _load_lineage(request)
+    if blocker:
+        return _blocked(blocker)
+    receipt = _receipt(fresh, lineage, authority)
+    path = safe_delta_runtime_source_directory() / f"{receipt['receipt_id']}.json"
+    content = _encode(receipt)
+    present, existing = _read(path)
+    if present:
+        if _valid_existing(existing, path) and _same_binding(existing, receipt):
+            verified = verify_safe_delta_runtime_source(
+                _text(existing.get("receipt_id")),
+                _text(existing.get("receipt_fingerprint")),
             )
-        current, current_blocker = _load_lineage(request)
-        if current_blocker or _source_lineage(current) != _source_lineage(lineage):
-            return _cleanup_required(
-                "safe_delta_runtime_source_post_write_lineage_drift",
-                receipt,
-                path,
-                content,
-            )
-        verified = verify_safe_delta_runtime_source(receipt["receipt_id"], receipt["receipt_fingerprint"])
-        if verified.get("valid") is not True:
-            return _cleanup_required(
-                "safe_delta_runtime_source_post_write_verification_failed",
-                receipt,
-                path,
-                content,
-            )
-        return _recorded(receipt, writes=True)
+            if verified.get("valid") is True:
+                return _recorded(existing, writes=False)
+        return _blocked("safe_delta_runtime_source_conflict")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _publish_exclusive(path, content)
+    except OSError:
+        return _blocked("safe_delta_runtime_source_write_failed")
+    present, written = _read(path)
+    if not present or written != receipt or not _exact_bytes(path, content) or not _valid_existing(written, path):
+        return _cleanup_required(
+            "safe_delta_runtime_source_write_verification_failed_after_publication",
+            receipt,
+            path,
+            content,
+        )
+    current, current_blocker = _load_lineage(request)
+    if current_blocker or _source_lineage(current) != _source_lineage(lineage):
+        return _cleanup_required(
+            "safe_delta_runtime_source_post_write_lineage_drift",
+            receipt,
+            path,
+            content,
+        )
+    verified = verify_safe_delta_runtime_source(receipt["receipt_id"], receipt["receipt_fingerprint"])
+    if verified.get("valid") is not True:
+        return _cleanup_required(
+            "safe_delta_runtime_source_post_write_verification_failed",
+            receipt,
+            path,
+            content,
+        )
+    return _recorded(receipt, writes=True)
 
 
 def _load_lineage(request: dict[str, str]) -> tuple[dict[str, Any], str]:
@@ -346,16 +368,17 @@ def _valid_authority(authority: dict[str, Any], plan: dict[str, Any]) -> bool:
     )
 
 
-def _reload_authority(plan: dict[str, Any]) -> dict[str, Any]:
-    from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
-    from francis.managed_copy_safe_delta_runtime_invocation import lease_bindings
-
-    request = plan.get("request")
-    request = request if isinstance(request, dict) else {}
-    return pilot_runtime_lease_authority_snapshot(
-        request.get("pilot_lease_id"),
-        actor=plan.get("actor"),
-        expected_bindings=lease_bindings(),
+def _transaction_failed(result: dict[str, Any], reason: str) -> dict[str, Any]:
+    receipt = result.get("receipt")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    if result.get("writes_receipt") is not True or not receipt:
+        return _blocked(f"safe_delta_runtime_source_authority_transaction_{reason}")
+    path = safe_delta_runtime_source_directory() / f"{_text(receipt.get('receipt_id'))}.json"
+    return _cleanup_required(
+        f"safe_delta_runtime_source_authority_transaction_{reason}",
+        receipt,
+        path,
+        _encode(receipt),
     )
 
 
@@ -427,12 +450,12 @@ def _cleanup_required(error: str, receipt: dict[str, Any], path: Path, content: 
     preserved = _exact_bytes(path, content)
     return {
         **_blocked(error),
+        **_governance(False),
         "status": "cleanup_required",
         "writes_receipt": preserved,
         "quarantined_receipt_id": receipt["receipt_id"] if preserved else "",
         "quarantined_receipt_fingerprint": receipt["receipt_fingerprint"] if preserved else "",
         "quarantined_receipt_preserved": preserved,
-        **_governance(preserved),
     }
 
 

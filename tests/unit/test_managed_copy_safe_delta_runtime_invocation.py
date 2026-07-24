@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -96,11 +98,23 @@ def _authority() -> dict[str, Any]:
     }
 
 
+def _stub_authority_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        managed_copy_pilot_runtime,
+        "execute_pilot_runtime_lease_authority_transaction",
+        lambda lease_id, *, actor, expected_bindings, operation: (
+            True,
+            "pilot_lease_authority_transaction_committed",
+            operation(_authority()),
+        ),
+    )
+
+
 @pytest.fixture
 def stubbed_lineage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     receipt_directory = tmp_path / "tenant-receipts" / "zi"
     monkeypatch.setattr(invocation, "_load_artifact_lineage", lambda request: (_lineage(), ""))
-    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
+    _stub_authority_transaction(monkeypatch)
     monkeypatch.setattr(
         invocation,
         "_receipt_directory",
@@ -340,7 +354,7 @@ def test_final_under_lock_revalidation_denies_lineage_drift(
         return (_lineage(), "") if calls == 1 else ({}, "safe_delta_runtime_invocation_artifact_tampered_or_drifted")
 
     monkeypatch.setattr(invocation, "_load_artifact_lineage", load)
-    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
+    _stub_authority_transaction(monkeypatch)
     monkeypatch.setattr(invocation, "_base_lineage", lambda request: _lineage())
     monkeypatch.setattr(
         invocation,
@@ -375,7 +389,7 @@ def test_post_publication_lineage_drift_quarantines_receipt_and_replay_fails_clo
         return {}, "safe_delta_runtime_invocation_artifact_tampered_or_drifted"
 
     monkeypatch.setattr(invocation, "_load_artifact_lineage", load)
-    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
+    _stub_authority_transaction(monkeypatch)
     monkeypatch.setattr(invocation, "_base_lineage", lambda request: _lineage())
     monkeypatch.setattr(
         invocation,
@@ -438,7 +452,7 @@ def test_post_write_unverified_observation_does_not_claim_preserved_receipt(
 ) -> None:
     receipt_directory = tmp_path / "zi"
     monkeypatch.setattr(invocation, "_load_artifact_lineage", lambda request: (_lineage(), ""))
-    monkeypatch.setattr(invocation, "_reload_authority", lambda plan: _authority())
+    _stub_authority_transaction(monkeypatch)
     monkeypatch.setattr(
         invocation,
         "_receipt_directory",
@@ -468,6 +482,82 @@ def test_post_write_unverified_observation_does_not_claim_preserved_receipt(
     assert result["quarantined_receipt_fingerprint"] == ""
     assert result["quarantined_receipt_preservation_status"] == "preservation_unverified"
     assert bool(list(receipt_directory.glob("*.json"))) is path_exists
+
+
+def test_concurrent_revocation_during_invocation_publication_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    actor = "stage18.safe-delta-invoker"
+    registry = PilotScopeLeaseRegistry(clock_ms=lambda: 1_000)
+    registry.issue(
+        PilotScopeLease(
+            lease_id="lease-safe-delta-001",
+            actor_id=actor,
+            package_id="package-safe-delta-001",
+            package_fingerprint=_hash("7"),
+            pilot_run_id="run-safe-delta-001",
+            bindings=invocation.lease_bindings(),
+            issued_at_ms=900,
+            expires_at_ms=10_000,
+            runtime_nonce="runtime-nonce-safe-delta",
+            operator_decision_fingerprint=_hash("8"),
+        )
+    )
+    first = invocation.lease_bindings()[0]
+    assert registry.authorize_binding(
+        lease_id="lease-safe-delta-001",
+        actor_id=actor,
+        scope=first.scope,
+        route=first.route,
+        method=first.method,
+        action=first.action,
+    ).allowed
+    monkeypatch.setattr(managed_copy_pilot_runtime, "PILOT_RUNTIME_LEASES", registry)
+    receipt_directory = tmp_path / "zi"
+    monkeypatch.setattr(invocation, "_load_artifact_lineage", lambda request: (_lineage(), ""))
+    monkeypatch.setattr(invocation, "_base_lineage", lambda request: _lineage())
+    monkeypatch.setattr(
+        invocation,
+        "_receipt_directory",
+        lambda lineage, *, create: _directory(receipt_directory, create=create),
+    )
+    authority = managed_copy_pilot_runtime.pilot_runtime_lease_authority_snapshot(
+        "lease-safe-delta-001",
+        actor=actor,
+        expected_bindings=invocation.lease_bindings(),
+    )
+    original_publish = invocation._publish_exclusive
+    revoker: threading.Thread | None = None
+
+    def publish(path: Path, content: bytes) -> None:
+        nonlocal revoker
+        revoker = threading.Thread(target=registry.revoke, args=("lease-safe-delta-001",))
+        revoker.start()
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            with registry._intent_lock:
+                if "lease-safe-delta-001" in registry._pending_revocations:
+                    break
+            time.sleep(0.001)
+        else:
+            pytest.fail("revocation intent was not observed")
+        original_publish(path, content)
+
+    monkeypatch.setattr(invocation, "_publish_exclusive", publish)
+    plan = _plan()
+    result = invocation.record_safe_delta_runtime_invocation(
+        plan,
+        provided_fingerprint=plan["invocation_fingerprint"],
+        confirmed=True,
+        authority=authority,
+    )
+    assert revoker is not None
+    revoker.join(timeout=1)
+
+    assert result["status"] == "cleanup_required"
+    assert "revocation_pending_during_transaction" in result["error"]
+    assert result["quarantined_receipt_preserved"] is True
 
 
 def test_unscoped_api_denial_precedes_lineage_and_filesystem_effects(

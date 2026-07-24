@@ -114,7 +114,15 @@ def isolated_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     directory = tmp_path / "safe-delta-runtime"
     monkeypatch.setattr(source, "safe_delta_runtime_source_directory", lambda: directory)
     monkeypatch.setattr(source, "_load_lineage", lambda request: (_lineage(), ""))
-    monkeypatch.setattr(source, "_reload_authority", lambda plan: _authority())
+    monkeypatch.setattr(
+        managed_copy_pilot_runtime,
+        "execute_pilot_runtime_lease_authority_transaction",
+        lambda lease_id, *, actor, expected_bindings, operation: (
+            True,
+            "pilot_lease_authority_transaction_committed",
+            operation(_authority()),
+        ),
+    )
     monkeypatch.setattr(
         source,
         "verify_safe_delta_runtime_source",
@@ -227,7 +235,15 @@ def test_source_revalidates_authority_under_lock(
     monkeypatch: pytest.MonkeyPatch,
     isolated_source: Path,
 ) -> None:
-    monkeypatch.setattr(source, "_reload_authority", lambda plan: _authority(1))
+    monkeypatch.setattr(
+        managed_copy_pilot_runtime,
+        "execute_pilot_runtime_lease_authority_transaction",
+        lambda lease_id, *, actor, expected_bindings, operation: (
+            True,
+            "pilot_lease_authority_transaction_committed",
+            operation(_authority(1)),
+        ),
+    )
     plan = _plan()
 
     result = source.record_safe_delta_runtime_source(
@@ -267,6 +283,79 @@ def test_post_write_lineage_drift_is_cleanup_required(
     assert result["status"] == "cleanup_required"
     assert result["error"] == "safe_delta_runtime_source_post_write_lineage_drift"
     assert result["quarantined_receipt_preserved"] is True
+    assert result["canonical_runtime_evidence"] is False
+    assert result["runtime_gate_ready"] is False
+
+
+@pytest.mark.parametrize("race", ["expiry", "registry_replacement"])
+def test_authority_race_during_source_publication_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    race: str,
+) -> None:
+    actor = "stage18.safe-delta-invoker"
+    now = [1_000]
+    registry = PilotScopeLeaseRegistry(clock_ms=lambda: now[0])
+    registry.issue(
+        PilotScopeLease(
+            lease_id="lease-safe-delta-001",
+            actor_id=actor,
+            package_id="package-safe-delta-001",
+            package_fingerprint=_hash("package"),
+            pilot_run_id="run-safe-delta-001",
+            bindings=invocation.lease_bindings(),
+            issued_at_ms=900,
+            expires_at_ms=10_000,
+            runtime_nonce="runtime-nonce-safe-delta",
+            operator_decision_fingerprint=_hash("decision"),
+        )
+    )
+    for binding in invocation.lease_bindings():
+        assert registry.authorize_binding(
+            lease_id="lease-safe-delta-001",
+            actor_id=actor,
+            scope=binding.scope,
+            route=binding.route,
+            method=binding.method,
+            action=binding.action,
+        ).allowed
+    monkeypatch.setattr(managed_copy_pilot_runtime, "PILOT_RUNTIME_LEASES", registry)
+    directory = tmp_path / "safe-delta-runtime"
+    monkeypatch.setattr(source, "safe_delta_runtime_source_directory", lambda: directory)
+    monkeypatch.setattr(source, "_load_lineage", lambda request: (_lineage(), ""))
+    monkeypatch.setattr(
+        source,
+        "verify_safe_delta_runtime_source",
+        lambda receipt_id, fingerprint: {"valid": True, "blocker": ""},
+    )
+    authority = managed_copy_pilot_runtime.pilot_runtime_lease_authority_snapshot(
+        "lease-safe-delta-001",
+        actor=actor,
+        expected_bindings=invocation.lease_bindings(),
+    )
+    original_publish = source._publish_exclusive
+
+    def publish(path: Path, content: bytes) -> None:
+        original_publish(path, content)
+        if race == "expiry":
+            now[0] = 10_000
+        else:
+            managed_copy_pilot_runtime.PILOT_RUNTIME_LEASES = PilotScopeLeaseRegistry()
+
+    monkeypatch.setattr(source, "_publish_exclusive", publish)
+    plan = _plan()
+    result = source.record_safe_delta_runtime_source(
+        plan,
+        provided_fingerprint=plan["source_fingerprint"],
+        confirmed=True,
+        authority=authority,
+    )
+
+    assert result["status"] == "cleanup_required"
+    assert result["quarantined_receipt_preserved"] is True
+    assert result["canonical_runtime_evidence"] is False
+    assert result["runtime_gate_ready"] is False
+    assert "authority_transaction" in result["error"]
 
 
 def _registry() -> PilotScopeLeaseRegistry:

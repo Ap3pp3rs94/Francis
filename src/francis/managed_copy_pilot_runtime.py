@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from francis.governance.pilot_scope_lease import (
     PilotLeaseBinding,
@@ -631,7 +631,6 @@ def pilot_runtime_lease_authority_snapshot(
     expected_bindings: tuple[PilotLeaseBinding, ...],
 ) -> dict[str, Any]:
     """Return a redacted atomic lease observation for an exact action sequence."""
-    safe_actor = _identifier(actor)
     try:
         bindings = tuple(binding.normalized() for binding in expected_bindings)
     except (AttributeError, ValueError):
@@ -640,6 +639,48 @@ def pilot_runtime_lease_authority_snapshot(
     if observation is None:
         return {"valid": False, "blocker": "missing_pilot_lease"}
     lease, state = observation
+    return _lease_authority_snapshot(lease, state, actor=actor, bindings=bindings)
+
+
+def execute_pilot_runtime_lease_authority_transaction(
+    lease_id: object,
+    *,
+    actor: object,
+    expected_bindings: tuple[PilotLeaseBinding, ...],
+    operation: Callable[[dict[str, Any]], dict[str, Any]],
+) -> tuple[bool, str, dict[str, Any]]:
+    """Publish through one lease-held transaction and report commit truth."""
+    try:
+        bindings = tuple(binding.normalized() for binding in expected_bindings)
+    except (AttributeError, ValueError):
+        return False, "managed_copy_pilot_lease_binding_invalid", {}
+
+    def guarded(lease: PilotScopeLease, state: PilotLeaseState) -> dict[str, Any]:
+        authority = _lease_authority_snapshot(lease, state, actor=actor, bindings=bindings)
+        if authority.get("valid") is not True:
+            return {"authority": authority, "result": {}}
+        return {"authority": authority, "result": operation(authority)}
+
+    registry = PILOT_RUNTIME_LEASES
+    decision, transaction = registry.execute_authority_transaction(lease_id, guarded)
+    if registry is not PILOT_RUNTIME_LEASES:
+        return False, "pilot_lease_registry_replaced_during_transaction", transaction.get("result", {})
+    authority = transaction.get("authority")
+    result = transaction.get("result")
+    if not isinstance(authority, dict) or authority.get("valid") is not True:
+        blocker = authority.get("blocker") if isinstance(authority, dict) else decision.reason
+        return False, _text(blocker) or decision.reason, {}
+    return decision.allowed, decision.reason, result if isinstance(result, dict) else {}
+
+
+def _lease_authority_snapshot(
+    lease: PilotScopeLease,
+    state: PilotLeaseState,
+    *,
+    actor: object,
+    bindings: tuple[PilotLeaseBinding, ...],
+) -> dict[str, Any]:
+    safe_actor = _identifier(actor)
     matching_offsets = [
         index
         for index in range(0, len(lease.bindings) - len(bindings) + 1)

@@ -214,66 +214,87 @@ def record_safe_delta_runtime_invocation(
     if not _valid_authority(authority, plan, consumed_count=1):
         return _blocked("safe_delta_runtime_invocation_authority_lineage_invalid")
     with _LOCK:
-        current_authority = _reload_authority(plan)
-        if current_authority != authority or not _valid_authority(current_authority, plan, consumed_count=1):
-            return _blocked("safe_delta_runtime_invocation_authority_changed_under_lock")
+        from francis.managed_copy_pilot_runtime import execute_pilot_runtime_lease_authority_transaction
+
         request = plan.get("request")
-        request = dict(request) if isinstance(request, dict) else {}
-        fresh = plan_safe_delta_runtime_invocation(
-            {
-                **request,
-                "dry_run": True,
-                "invocation_fingerprint": expected,
-                "confirm_runtime_invocation": True,
-            },
-            actor=_text(plan.get("actor")),
+        request = request if isinstance(request, dict) else {}
+        committed, reason, result = execute_pilot_runtime_lease_authority_transaction(
+            request.get("pilot_lease_id"),
+            actor=plan.get("actor"),
+            expected_bindings=lease_bindings(),
+            operation=lambda current: (
+                _record_under_authority_transaction(plan, expected, current)
+                if current == authority
+                else _blocked("safe_delta_runtime_invocation_authority_changed_under_lock")
+            ),
         )
-        if not fresh.get("ok") or fresh.get("invocation_fingerprint") != expected:
-            return _blocked("safe_delta_runtime_invocation_lineage_drift")
-        lineage, blocker = _load_artifact_lineage(request)
-        if blocker:
-            return _blocked(blocker)
-        receipt_directory = _receipt_directory(lineage, create=True)
-        if receipt_directory is None:
-            return _blocked("safe_delta_runtime_invocation_path_invalid")
-        receipt_path = receipt_directory / f"{expected[:16]}.json"
-        receipt = _receipt(fresh, lineage, authority)
-        receipt_bytes = _encode(receipt)
-        present, existing = _read(receipt_path)
-        if present:
-            if _valid_receipt(existing, receipt_path, receipt_directory) and _same_binding(existing, receipt):
-                current, current_blocker = _load_artifact_lineage(request)
-                if current_blocker or not _receipt_matches_lineage(existing, current):
-                    return _blocked("safe_delta_runtime_invocation_lineage_drift")
-                return _recorded(existing, writes=False)
-            return _blocked("safe_delta_runtime_invocation_conflict")
-        try:
-            _publish_exclusive(receipt_path, receipt_bytes)
-        except OSError:
-            return _blocked("safe_delta_runtime_invocation_write_failed")
-        present, written = _read(receipt_path)
-        if (
-            not present
-            or not _exact_bytes(receipt_path, receipt_bytes)
-            or written != receipt
-            or not _valid_receipt(written, receipt_path, receipt_directory)
-            or not _receipt_matches_lineage(written, lineage)
-        ):
-            return _cleanup_required(
-                "safe_delta_runtime_invocation_write_verification_failed_after_publication",
-                receipt,
-                receipt_path,
-                receipt_bytes,
-            )
-        current, current_blocker = _load_artifact_lineage(request)
-        if current_blocker or not _receipt_matches_lineage(written, current):
-            return _cleanup_required(
-                "safe_delta_runtime_invocation_post_write_lineage_drift",
-                receipt,
-                receipt_path,
-                receipt_bytes,
-            )
-        return _recorded(receipt, writes=True)
+        if committed:
+            return result
+        return _transaction_failed(result, reason)
+
+
+def _record_under_authority_transaction(
+    plan: dict[str, Any],
+    expected: str,
+    authority: dict[str, Any],
+) -> dict[str, Any]:
+    request = plan.get("request")
+    request = dict(request) if isinstance(request, dict) else {}
+    fresh = plan_safe_delta_runtime_invocation(
+        {
+            **request,
+            "dry_run": True,
+            "invocation_fingerprint": expected,
+            "confirm_runtime_invocation": True,
+        },
+        actor=_text(plan.get("actor")),
+    )
+    if not fresh.get("ok") or fresh.get("invocation_fingerprint") != expected:
+        return _blocked("safe_delta_runtime_invocation_lineage_drift")
+    lineage, blocker = _load_artifact_lineage(request)
+    if blocker:
+        return _blocked(blocker)
+    receipt_directory = _receipt_directory(lineage, create=True)
+    if receipt_directory is None:
+        return _blocked("safe_delta_runtime_invocation_path_invalid")
+    receipt_path = receipt_directory / f"{expected[:16]}.json"
+    receipt = _receipt(fresh, lineage, authority)
+    receipt_bytes = _encode(receipt)
+    present, existing = _read(receipt_path)
+    if present:
+        if _valid_receipt(existing, receipt_path, receipt_directory) and _same_binding(existing, receipt):
+            current, current_blocker = _load_artifact_lineage(request)
+            if current_blocker or not _receipt_matches_lineage(existing, current):
+                return _blocked("safe_delta_runtime_invocation_lineage_drift")
+            return _recorded(existing, writes=False)
+        return _blocked("safe_delta_runtime_invocation_conflict")
+    try:
+        _publish_exclusive(receipt_path, receipt_bytes)
+    except OSError:
+        return _blocked("safe_delta_runtime_invocation_write_failed")
+    present, written = _read(receipt_path)
+    if (
+        not present
+        or not _exact_bytes(receipt_path, receipt_bytes)
+        or written != receipt
+        or not _valid_receipt(written, receipt_path, receipt_directory)
+        or not _receipt_matches_lineage(written, lineage)
+    ):
+        return _cleanup_required(
+            "safe_delta_runtime_invocation_write_verification_failed_after_publication",
+            receipt,
+            receipt_path,
+            receipt_bytes,
+        )
+    current, current_blocker = _load_artifact_lineage(request)
+    if current_blocker or not _receipt_matches_lineage(written, current):
+        return _cleanup_required(
+            "safe_delta_runtime_invocation_post_write_lineage_drift",
+            receipt,
+            receipt_path,
+            receipt_bytes,
+        )
+    return _recorded(receipt, writes=True)
 
 
 def safe_delta_runtime_invocations_readback(
@@ -622,15 +643,29 @@ def _valid_authority(
     )
 
 
-def _reload_authority(plan: dict[str, Any]) -> dict[str, Any]:
-    from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
-
-    request = plan.get("request")
-    request = request if isinstance(request, dict) else {}
-    return pilot_runtime_lease_authority_snapshot(
-        request.get("pilot_lease_id"),
-        actor=plan.get("actor"),
-        expected_bindings=lease_bindings(),
+def _transaction_failed(result: dict[str, Any], reason: str) -> dict[str, Any]:
+    receipt = result.get("receipt")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    if result.get("writes_receipt") is not True or not receipt:
+        return _blocked(f"safe_delta_runtime_invocation_authority_transaction_{reason}")
+    request = {
+        key: _text(receipt.get(key))
+        for key in (
+            "copy_id",
+            "provisioning_receipt_id",
+            "isolation_verification_receipt_id",
+        )
+    }
+    lineage = _base_lineage(request)
+    directory = _receipt_directory(lineage, create=False) if lineage else None
+    if directory is None:
+        return _blocked("safe_delta_runtime_invocation_authority_transaction_receipt_unresolved")
+    path = directory / f"{_text(receipt.get('invocation_fingerprint'))[:16]}.json"
+    return _cleanup_required(
+        f"safe_delta_runtime_invocation_authority_transaction_{reason}",
+        receipt,
+        path,
+        _encode(receipt),
     )
 
 
