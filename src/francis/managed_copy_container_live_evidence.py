@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -40,6 +41,7 @@ _READY_FIELDS = _BASE_RECEIPT_FIELDS | {
     "security_profile_fingerprint",
     "handshake_fingerprint",
     "heartbeat_fingerprint",
+    "heartbeat_sequence",
     "operation",
     "operation_receipt_fingerprint",
     "output_fingerprint",
@@ -133,9 +135,17 @@ def live_container_source_verifier(
         if isolation._runtime_records_blocker(records, descriptor, operation_input=operation_input):
             return _blocked("stage18_copy_creation_live_runtime_invalid")
         output = isolation._runtime_output(records, descriptor)
+        heartbeat_sequence = records["heartbeat"].get("sequence")
+        ready_heartbeat_sequence = ready.get("heartbeat_sequence")
         if (
             isolation._fingerprint(records["handshake"]) != ready.get("handshake_fingerprint")
-            or isolation._fingerprint(records["heartbeat"]) != ready.get("heartbeat_fingerprint")
+            or type(heartbeat_sequence) is not int
+            or type(ready_heartbeat_sequence) is not int
+            or heartbeat_sequence < ready_heartbeat_sequence
+            or (
+                heartbeat_sequence == ready_heartbeat_sequence
+                and isolation._fingerprint(records["heartbeat"]) != ready.get("heartbeat_fingerprint")
+            )
             or records["operation"].get("receipt_fingerprint") != ready.get("operation_receipt_fingerprint")
             or output.get("output_fingerprint") != ready.get("output_fingerprint")
         ):
@@ -241,18 +251,19 @@ def verify_server_resolved_lifecycle_source(
     source_receipt_fingerprint: str,
 ) -> dict[str, Any]:
     matches: list[tuple[Path, dict[str, Any]]] = []
-    base = isolation._proof_base()
-    if not base.exists() or not isolation._safe_existing_chain(base):
+    bases = _canonical_proof_bases()
+    if not bases:
         return _blocked("stage18_copy_creation_live_proof_root_missing")
-    for lifecycle_path in sorted(base.glob("*/receipts/lifecycle-complete.json")):
-        lifecycle = isolation._read_json(lifecycle_path)
-        if lifecycle.get("receipt_id") == source_receipt_id:
-            matches.append((lifecycle_path.parent.parent, lifecycle))
+    for base in bases:
+        for lifecycle_path in sorted(base.glob("*/receipts/lifecycle-complete.json")):
+            lifecycle = isolation._read_json(lifecycle_path)
+            if lifecycle.get("receipt_id") == source_receipt_id:
+                matches.append((lifecycle_path.parent.parent, lifecycle))
     if len(matches) != 1:
         return _blocked("stage18_copy_creation_live_receipt_not_unique")
     proof_root, lifecycle = matches[0]
     if (
-        proof_root.parent.resolve() != base.resolve()
+        proof_root.parent.resolve() not in {base.resolve() for base in bases}
         or not isolation._safe_existing_chain(proof_root)
         or lifecycle.get("receipt_fingerprint") != source_receipt_fingerprint
         or lifecycle.get("proof_run_id") != proof_root.name
@@ -296,6 +307,28 @@ def verify_server_resolved_lifecycle_source(
         proof_root=proof_root,
         expected_authority=authority,
     )
+
+
+def _canonical_proof_bases() -> tuple[Path, ...]:
+    candidates = [isolation._proof_base()]
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    if local_app_data:
+        journeys = Path(local_app_data) / "Francis" / "proof-journeys"
+        if journeys.exists() and isolation._safe_existing_chain(journeys):
+            try:
+                candidates.extend(path for path in journeys.iterdir() if path.is_dir())
+            except OSError:
+                return ()
+    resolved: dict[str, Path] = {}
+    for candidate in candidates:
+        if not candidate.exists() or not isolation._safe_existing_chain(candidate):
+            continue
+        try:
+            canonical = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        resolved[str(canonical).casefold()] = canonical
+    return tuple(resolved[key] for key in sorted(resolved))
 
 
 def _verify_historical_lifecycle(

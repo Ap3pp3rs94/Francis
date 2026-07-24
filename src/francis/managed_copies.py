@@ -5077,7 +5077,7 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
                 else _safe_str(item.get("proof_kind")).strip(),
                 "trace_id": _safe_str(item.get("trace_id")).strip(),
                 "source_contract_route": requirement["source_contract_route"],
-                "blocker": requirement["blocker"],
+                "blocker": "" if receipt_ready else requirement["blocker"],
                 "evidence": (
                     f"validated prerequisite receipt {receipt_id}"
                     if prerequisite_ready

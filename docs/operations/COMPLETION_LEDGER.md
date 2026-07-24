@@ -60,11 +60,13 @@ Stage 17 / Capability Economy is ledger-closed by governed receipt
 `stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
 `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
 criteria read ready.
-The current goal is the first authorized production Stage 18 runtime proof. A
-dedicated managed-copy runtime-start authority contract and fixed fixture producer
-now exercise the copy-creation proof path in isolated test state, but no persistent
-actor holds that scope and no production startup receipt exists. Production copy
-creation and incident determination still require
+The current goal is continued Stage 18 runtime-evidence closure. A governed
+synthetic local managed-copy lifecycle now executes the real Francis
+`tenant_work_briefing` runtime in a constrained Docker container and supplies the
+canonical copy-creation receipt, advancing the completion audit to 2 of 8. No
+persistent actor holds the temporary proof scopes, and no production tenant or
+customer startup receipt exists. Production copy creation and incident
+determination still require
 real operator-supplied tenant, policy, runtime, and incident facts; those facts
 are not inferred or fabricated.
 
@@ -127,6 +129,48 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-24 - Stage 18 copy-creation runtime proof accepted
+
+Current posture: Stage 18 remains open and now reads 2 of 8. The governed
+copy-creation path used a temporary actor scope and exact one-run lease to start
+the real Francis `tenant_work_briefing` runtime in a constrained local Docker
+container. It independently verified useful output, wrote immutable ready,
+cleanup, lifecycle, and canonical runtime-evidence receipts, consumed the lease,
+denied replay, and removed the exact proof-owned container.
+
+Evidence:
+
+- Execution base `3755f14979a36ae267978a9b2a7ba4adcf04d793` had terminal-success
+  CI run `30106315056` and CodeQL run `30106315070`.
+- Proof run `mciso-20260724t180103z-final2` selected `pilot-001` from the
+  synthetic tenant input and produced ready receipt
+  `mcir_ready_60ba7c6034c1435f97d2019b`, lifecycle receipt
+  `mclc_f20cb2f14421298a2df09781`, and canonical runtime-evidence receipt
+  `mcre_343b8d15387ff7acb8bd135e`.
+- The canonical evidence receipt binds source fingerprint
+  `28eed77d59d45ea3ca809a82714570c26ebc260fd1fb124516484857c85a07ea`
+  and record fingerprint
+  `343b8d15387ff7acb8bd135e6055917c33257893003d93eacb96552e44cf2d39`.
+- The exact pilot lease reached `consumed`; replay returned
+  `api_permission_denied`. Cleanup removed the exact container, post-removal
+  inspection failed as required, and zero Francis proof containers remained.
+- Durable readback without a process-scoped proof-root override validates the
+  server-resolved lifecycle source, clears the copy-creation blocker, reports
+  2 of 8, and names
+  `stage18_tenant_isolation_runtime_source_receipt_missing` as the next gap.
+- The complete managed-copy container-isolation unit suite passed with the
+  separately authorized real-proof test skipped. Ruff, formatting, targeted
+  mypy, and scoped diff checks passed.
+
+Boundaries:
+
+- The proof used synthetic local tenant data and temporary process-local
+  authority. It created no persistent actor grant, production tenant, customer
+  fact, external network action, Orb/VSC-1 interaction, or production evidence.
+- The result closes only `copy_creation_runtime_proof`. It does not prove
+  production tenant isolation, clear FR-018, close Stage 18, or satisfy any of
+  the six remaining Stage 18 runtime gates.
 
 ### 2026-07-17 - Real Francis runtime composed with governed Docker lifecycle
 

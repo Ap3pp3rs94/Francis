@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from francis import managed_copies
 from francis import managed_copy_container_isolation as container_isolation
 from francis import managed_copy_container_live_evidence as live_evidence
 from francis import managed_copy_pilot_runtime as pilot_runtime
@@ -48,10 +49,71 @@ def test_explicit_proof_base_override_remains_authoritative(
     assert container_isolation._proof_base() == configured
 
 
+def test_mount_snapshot_allows_expected_writable_state_updates(tmp_path: Path) -> None:
+    root = tmp_path / "proof"
+    tenant = root / "tenant"
+    state = root / "state"
+    tenant.mkdir(parents=True)
+    state.mkdir()
+    operation_input = {"contract": container_isolation.INPUT_CONTRACT, "items": []}
+    input_path = tenant / "work_items.json"
+    input_path.write_text(json.dumps(operation_input), encoding="utf-8")
+    descriptor = {
+        "operation_input_file_fingerprint": container_isolation._file_sha256(input_path),
+    }
+    before = container_isolation._mount_source_snapshot(root, descriptor=descriptor)
+
+    (state / "handshake.json").write_text('{"pid":1}\n', encoding="utf-8")
+    (state / "heartbeat.json").write_text('{"sequence":1}\n', encoding="utf-8")
+
+    assert before
+    assert container_isolation._mount_source_snapshot(root, descriptor=descriptor) == before
+
+
+def test_mount_snapshot_rejects_state_directory_replacement(tmp_path: Path) -> None:
+    root = tmp_path / "proof"
+    tenant = root / "tenant"
+    state = root / "state"
+    tenant.mkdir(parents=True)
+    state.mkdir()
+    input_path = tenant / "work_items.json"
+    input_path.write_text('{"contract":"stage18_managed_copy_work_briefing_input_v1","items":[]}', encoding="utf-8")
+    descriptor = {
+        "operation_input_file_fingerprint": container_isolation._file_sha256(input_path),
+    }
+    before = container_isolation._mount_source_snapshot(root, descriptor=descriptor)
+
+    state.rmdir()
+    state.mkdir()
+
+    assert before
+    assert container_isolation._mount_source_snapshot(root, descriptor=descriptor) != before
+
+
+def test_mount_snapshot_rejects_tenant_input_tampering(tmp_path: Path) -> None:
+    root = tmp_path / "proof"
+    tenant = root / "tenant"
+    (root / "state").mkdir(parents=True)
+    tenant.mkdir()
+    input_path = tenant / "work_items.json"
+    input_path.write_text('{"contract":"stage18_managed_copy_work_briefing_input_v1","items":[]}', encoding="utf-8")
+    descriptor = {
+        "operation_input_file_fingerprint": container_isolation._file_sha256(input_path),
+    }
+    assert container_isolation._mount_source_snapshot(root, descriptor=descriptor)
+
+    input_path.write_text('{"contract":"tampered","items":[]}', encoding="utf-8")
+
+    assert container_isolation._mount_source_snapshot(root, descriptor=descriptor) == {}
+
+
 @pytest.fixture
 def isolation_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT", str(tmp_path / "proofs"))
+    local_app_data = tmp_path / "LocalAppData"
+    proof_base = local_app_data / "Francis" / "proof-journeys" / "MC-ISO-TEST"
+    monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+    monkeypatch.setenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT", str(proof_base))
     tenant_key = "a" * 64
     provision = {
         "copy_id": "managed_copy_aaaaaaaaaaaaaaaa",
@@ -1023,6 +1085,12 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
     assert result["ok"] is True, result
     assert result["runtime_evidence"]["receipt"]["requirement_id"] == runtime_evidence.COPY_CREATION_REQUIREMENT
     assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
+    readbacks = managed_copies.managed_copy_runtime_evidence_readbacks_snapshot()
+    copy_check = next(
+        check for check in readbacks["checks"] if check["id"] == runtime_evidence.COPY_CREATION_REQUIREMENT
+    )
+    assert copy_check["passed"] is True
+    assert copy_check["blocker"] == ""
     monkeypatch.setattr(pilot_runtime, "PILOT_RUNTIME_LEASES", PilotScopeLeaseRegistry())
     assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
     assert isolation_fixture["registry"].state(payload["lease_id"]) is PilotLeaseState.CONSUMED
@@ -1058,6 +1126,9 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         )
         assert resolved["valid"] is True
         assert resolved["current_state_hash"] == result["runtime_evidence"]["receipt"]["current_state_hash"]
+        monkeypatch.delenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT")
+        assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
+        monkeypatch.setenv("FRANCIS_MANAGED_COPY_DOCKER_PROOF_ROOT", str(Path(result["proof_root"]).parent))
 
         lifecycle_path.unlink()
         assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is False
@@ -1246,6 +1317,7 @@ def test_live_verifier_rejects_tampered_or_stopped_historical_source(
             "container_host_pid": 65532,
             "handshake_fingerprint": container_isolation._fingerprint(records["handshake"]),
             "heartbeat_fingerprint": container_isolation._fingerprint(records["heartbeat"]),
+            "heartbeat_sequence": records["heartbeat"]["sequence"],
             "operation_receipt_fingerprint": records["operation"]["receipt_fingerprint"],
             "output_fingerprint": records["briefing"]["output_fingerprint"],
             "fixture_only": False,
@@ -1271,12 +1343,21 @@ def test_live_verifier_rejects_tampered_or_stopped_historical_source(
 
     records["heartbeat"]["sequence"] = 2
     (root / "state" / "heartbeat.json").write_text(json.dumps(records["heartbeat"]), encoding="utf-8")
-    assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is False
+    assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is True
 
     (root / "state" / "heartbeat.json").write_text(
-        json.dumps({**records["heartbeat"], "sequence": 1}),
+        json.dumps(
+            {
+                **records["heartbeat"],
+                "sequence": ready["heartbeat_sequence"],
+                "observed_at_unix_ms": records["heartbeat"]["observed_at_unix_ms"] + 1,
+            }
+        ),
         encoding="utf-8",
     )
+    assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is False
+
+    (root / "state" / "heartbeat.json").write_text(json.dumps(records["heartbeat"]), encoding="utf-8")
     running = False
     assert verifier(ready["receipt_id"], ready["receipt_fingerprint"])["valid"] is False
 

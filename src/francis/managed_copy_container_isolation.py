@@ -490,6 +490,7 @@ def _execute(
                 "security_profile_fingerprint": d["security_profile_fingerprint"],
                 "handshake_fingerprint": _fingerprint(records["handshake"]),
                 "heartbeat_fingerprint": _fingerprint(records["heartbeat"]),
+                "heartbeat_sequence": records["heartbeat"]["sequence"],
                 "operation": d["operation"],
                 "operation_receipt_fingerprint": records["operation"]["receipt_fingerprint"],
                 "output_fingerprint": output["output_fingerprint"],
@@ -815,17 +816,18 @@ def _mount_source_snapshot(root: Path, *, descriptor: dict[str, Any]) -> dict[st
             }:
                 return {}
             stat = path.lstat()
-            snapshot[key] = (
+            identity = (
                 str(path.resolve(strict=True)).casefold(),
                 stat.st_dev,
                 stat.st_ino,
                 stat.st_mode,
-                stat.st_size,
-                stat.st_mtime_ns,
                 getattr(stat, "st_file_attributes", 0),
             )
-        if _file_sha256(root / "tenant" / "work_items.json") != descriptor["operation_input_file_fingerprint"]:
+            snapshot[key] = (*identity, stat.st_size, stat.st_mtime_ns) if key == "tenant" else identity
+        input_fingerprint = _file_sha256(root / "tenant" / "work_items.json")
+        if input_fingerprint != descriptor["operation_input_file_fingerprint"]:
             return {}
+        snapshot["tenant_input"] = (input_fingerprint,)
     except OSError:
         return {}
     return snapshot
