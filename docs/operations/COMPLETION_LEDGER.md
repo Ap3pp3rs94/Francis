@@ -172,6 +172,12 @@ Boundaries:
   production tenant isolation, clear FR-018, close Stage 18, or satisfy any of
   the six remaining Stage 18 runtime gates.
 
+Remaining truthful gap:
+
+Produce and canonically record the independently verified
+`tenant_isolation_runtime_proof`; current readback reports
+`stage18_tenant_isolation_runtime_source_receipt_missing`.
+
 ### 2026-07-17 - Real Francis runtime composed with governed Docker lifecycle
 
 Current posture: Phase 2 and Stage 18 remain open. The fixed Docker lifecycle
