@@ -689,7 +689,7 @@ def _lease_authority_snapshot(
     if (
         not safe_actor
         or lease.actor_id != safe_actor
-        or len(bindings) != 2
+        or len(bindings) not in {2, 3}
         or len(matching_offsets) != 1
         or not lease.consumed_bindings
         or state not in {PilotLeaseState.ACTIVE, PilotLeaseState.CONSUMED}
@@ -697,10 +697,11 @@ def _lease_authority_snapshot(
         return {"valid": False, "blocker": "managed_copy_pilot_lease_authority_lineage_mismatch"}
     offset = matching_offsets[0]
     consumed_count = len(lease.consumed_bindings)
-    if lease.consumed_bindings != frozenset(lease.bindings[:consumed_count]) or consumed_count not in {
-        offset + 1,
-        offset + 2,
-    }:
+    valid_consumed_counts = set(range(offset + 1, offset + len(bindings) + 1))
+    if (
+        lease.consumed_bindings != frozenset(lease.bindings[:consumed_count])
+        or consumed_count not in valid_consumed_counts
+    ):
         return {"valid": False, "blocker": "managed_copy_pilot_lease_authority_sequence_mismatch"}
     operation_consumed_count = consumed_count - offset
     prefix_fingerprints = [
@@ -710,6 +711,14 @@ def _lease_authority_snapshot(
             consumed_bindings=frozenset(lease.bindings[:count]),
         )
         for count in range(offset + 1, consumed_count + 1)
+    ]
+    sequence_prefix_fingerprints = [
+        _pilot_lease_authority_fingerprint(
+            lease,
+            effective_state=(PilotLeaseState.CONSUMED if count == len(lease.bindings) else PilotLeaseState.ACTIVE),
+            consumed_bindings=frozenset(lease.bindings[:count]),
+        )
+        for count in range(offset + 1, offset + len(bindings) + 1)
     ]
     return {
         "valid": True,
@@ -725,6 +734,7 @@ def _lease_authority_snapshot(
         "operation_consumed_binding_count": operation_consumed_count,
         "lease_authority_fingerprint": prefix_fingerprints[-1],
         "consumed_prefix_fingerprints": prefix_fingerprints,
+        "sequence_prefix_fingerprints": sequence_prefix_fingerprints,
     }
 
 

@@ -10,10 +10,12 @@ from francis.economy.stage17_closure import (
 )
 from francis.managed_copy_runtime_evidence import (
     COPY_CREATION_REQUIREMENT,
+    SAFE_DELTA_REQUIREMENT,
     SOURCE_NOT_IMPLEMENTED,
     load_runtime_evidence_receipts,
     receipt_satisfies_runtime_requirement,
     record_runtime_evidence,
+    record_safe_delta_runtime_evidence_with_lease,
 )
 from francis.managed_copy_creation import (
     latest_managed_copy_creation_plan_receipt_for_preflight,
@@ -5146,11 +5148,31 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
     governance = _governance()
     contract = managed_copy_runtime_evidence_contract_snapshot()
     blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
-    result = record_runtime_evidence(
-        payload,
-        actor=actor,
-        stage17_closed=bool(contract["stage17_closed_by_receipt"]),
-    )
+    if _safe_str(payload.get("requirement_id")).strip() == SAFE_DELTA_REQUIREMENT:
+        from francis.managed_copy_safe_delta_runtime_evidence import (
+            verify_safe_delta_runtime_source_for_final_plan,
+        )
+
+        result = (
+            record_safe_delta_runtime_evidence_with_lease(
+                payload,
+                actor=actor,
+                stage17_closed=bool(contract["stage17_closed_by_receipt"]),
+            )
+            if payload.get("dry_run") is False
+            else record_runtime_evidence(
+                payload,
+                actor=actor,
+                stage17_closed=bool(contract["stage17_closed_by_receipt"]),
+                source_verifier=verify_safe_delta_runtime_source_for_final_plan,
+            )
+        )
+    else:
+        result = record_runtime_evidence(
+            payload,
+            actor=actor,
+            stage17_closed=bool(contract["stage17_closed_by_receipt"]),
+        )
     requirement_id = _safe_str(result.get("requirement_id")).strip()
     proof_kind = _safe_str(result.get("proof_kind")).strip()
     return {

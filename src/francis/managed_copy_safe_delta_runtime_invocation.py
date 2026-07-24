@@ -25,6 +25,9 @@ WRITE_ACTION = "managed_copies.safe_delta.runtime_invocation.record"
 SOURCE_SCOPE = "managed_copies.safe_delta.runtime_source.write"
 SOURCE_ROUTE = "/managed-copies/safe-delta-runtime-source"
 SOURCE_ACTION = "managed_copies.safe_delta.runtime_source.record"
+RUNTIME_EVIDENCE_SCOPE = "managed_copies.runtime_evidence.write"
+RUNTIME_EVIDENCE_ROUTE = "/managed-copies/runtime-evidence-readback"
+RUNTIME_EVIDENCE_ACTION = "managed_copies.runtime_evidence.record"
 _INPUT_FIELDS = {
     "request_actor",
     "copy_id",
@@ -606,10 +609,21 @@ def _same_binding(existing: dict[str, Any], expected: dict[str, Any]) -> bool:
     return all(existing.get(key) == expected.get(key) for key in _RECEIPT_FIELDS - ignored)
 
 
-def lease_bindings() -> tuple[PilotLeaseBinding, PilotLeaseBinding]:
-    return (
+def lease_bindings(*, include_runtime_evidence: bool = False) -> tuple[PilotLeaseBinding, ...]:
+    bindings = (
         PilotLeaseBinding(WRITE_SCOPE, WRITE_ROUTE, "POST", WRITE_ACTION),
         PilotLeaseBinding(SOURCE_SCOPE, SOURCE_ROUTE, "POST", SOURCE_ACTION),
+    )
+    if not include_runtime_evidence:
+        return bindings
+    return (
+        *bindings,
+        PilotLeaseBinding(
+            RUNTIME_EVIDENCE_SCOPE,
+            RUNTIME_EVIDENCE_ROUTE,
+            "POST",
+            RUNTIME_EVIDENCE_ACTION,
+        ),
     )
 
 

@@ -279,6 +279,58 @@ def record_runtime_evidence(
             return _recorded_result(receipt, writes_receipt=True, status="recorded")
 
 
+def record_safe_delta_runtime_evidence_with_lease(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+    stage17_closed: bool,
+) -> dict[str, Any]:
+    """Record final safe-delta evidence while exact lease authority is held."""
+    from francis.managed_copy_pilot_runtime import execute_pilot_runtime_lease_authority_transaction
+    from francis.managed_copy_safe_delta_runtime_evidence import (
+        safe_delta_runtime_source_authority_context,
+        verify_safe_delta_runtime_source_for_final_evidence,
+    )
+    from francis.managed_copy_safe_delta_runtime_invocation import lease_bindings
+
+    context = safe_delta_runtime_source_authority_context(
+        _identifier(payload.get("source_receipt_id")),
+        _exact_hash(payload.get("source_receipt_fingerprint")),
+        include_runtime_evidence=True,
+        required_consumed_count=3,
+    )
+    if context.get("valid") is not True or context.get("actor_id") != _identifier(actor):
+        return _blocked_from_payload(
+            payload,
+            actor=actor,
+            error=_exact_text(context.get("blocker")) or "stage18_safe_delta_runtime_evidence_authority_invalid",
+        )
+
+    def operation(authority: dict[str, Any]) -> dict[str, Any]:
+        if not _authority_matches_context(authority, context):
+            return _blocked_from_payload(
+                payload,
+                actor=actor,
+                error="stage18_safe_delta_runtime_evidence_authority_changed_under_lock",
+            )
+        return record_runtime_evidence(
+            payload,
+            actor=actor,
+            stage17_closed=stage17_closed,
+            source_verifier=verify_safe_delta_runtime_source_for_final_evidence,
+        )
+
+    committed, reason, result = execute_pilot_runtime_lease_authority_transaction(
+        context["pilot_lease_id"],
+        actor=actor,
+        expected_bindings=lease_bindings(include_runtime_evidence=True),
+        operation=operation,
+    )
+    if committed:
+        return result
+    return _runtime_evidence_transaction_failed(result, reason)
+
+
 def load_runtime_evidence_receipts(*, limit: int = 100) -> list[dict[str, Any]]:
     root = receipt_directory()
     if not root.exists():
@@ -439,6 +491,76 @@ def _blocked_source(blocker: str) -> dict[str, Any]:
 
 def _blocked_from_plan(plan: dict[str, Any], error: str) -> dict[str, Any]:
     return {**plan, "ok": False, "status": "blocked", "error": error, "blockers": [error]}
+
+
+def _blocked_from_payload(payload: dict[str, Any], *, actor: str, error: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "status": "blocked",
+        "error": error,
+        "blockers": [error],
+        "actor": _redacted_text(actor),
+        "requirement_id": _identifier(payload.get("requirement_id")),
+        "proof_kind": _identifier(payload.get("proof_kind")),
+        "trace_id": _identifier(payload.get("trace_id")),
+        "record_fingerprint": "",
+        "receipt_ready": False,
+        "writes_receipt": False,
+        "writes_tenant_state": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+    }
+
+
+def _authority_matches_context(authority: dict[str, Any], context: dict[str, Any]) -> bool:
+    return bool(
+        authority.get("valid") is True
+        and authority.get("operation_consumed_binding_count") == 3
+        and authority.get("actor_id") == context.get("actor_id")
+        and authority.get("lease_id") == context.get("pilot_lease_id")
+        and authority.get("package_id") == context.get("package_id")
+        and authority.get("package_fingerprint") == context.get("package_fingerprint")
+        and authority.get("pilot_run_id") == context.get("pilot_run_id")
+        and authority.get("operator_decision_fingerprint") == context.get("operator_decision_fingerprint")
+        and authority.get("lease_authority_fingerprint") == context.get("lease_authority_fingerprint")
+    )
+
+
+def _runtime_evidence_transaction_failed(result: dict[str, Any], reason: str) -> dict[str, Any]:
+    receipt = result.get("receipt")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    if result.get("writes_receipt") is not True or not valid_runtime_evidence_receipt(receipt):
+        return {
+            **result,
+            "ok": False,
+            "status": "blocked",
+            "error": f"stage18_runtime_evidence_authority_transaction_{reason}",
+            "blockers": [f"stage18_runtime_evidence_authority_transaction_{reason}"],
+            "writes_receipt": False,
+            "receipt_ready": False,
+            "cleanup_completed": True,
+        }
+    path = receipt_directory() / f"{receipt['receipt_id']}.json"
+    removed = False
+    if _read_json(path) == receipt:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        removed = not path.exists()
+    error = f"stage18_runtime_evidence_authority_transaction_{reason}"
+    return {
+        **result,
+        "ok": False,
+        "status": "blocked" if removed else "cleanup_required",
+        "error": error,
+        "blockers": [error],
+        "writes_receipt": not removed,
+        "receipt_ready": False,
+        "cleanup_completed": removed,
+        "quarantined_receipt_id": "" if removed else receipt["receipt_id"],
+    }
 
 
 def _recorded_result(receipt: dict[str, Any], *, writes_receipt: bool, status: str) -> dict[str, Any]:

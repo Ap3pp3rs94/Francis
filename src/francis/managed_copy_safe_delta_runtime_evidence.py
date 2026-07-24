@@ -106,28 +106,150 @@ def safe_delta_runtime_source_directory() -> Path:
 
 def verify_safe_delta_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
     """Validate canonical safe-delta lineage without executing or exporting."""
-    if not _identifier(source_receipt_id) or not _is_hash(source_receipt_fingerprint):
-        return _blocked("stage18_safe_delta_runtime_source_binding_invalid")
-    source = _read_json(safe_delta_runtime_source_directory() / f"{source_receipt_id}.json")
-    if not source:
-        return _blocked(SAFE_DELTA_RUNTIME_SOURCE_MISSING)
-    if not _valid_source(source):
-        return _blocked("stage18_safe_delta_runtime_source_receipt_invalid")
-    if source["receipt_fingerprint"] != source_receipt_fingerprint:
-        return _blocked("stage18_safe_delta_runtime_source_receipt_hash_mismatch")
-    blocker = _owned_lineage_blocker(source)
+    source = _verify_safe_delta_runtime_source(
+        source_receipt_id,
+        source_receipt_fingerprint,
+        include_runtime_evidence=False,
+    )
+    if source.get("blocker") != "stage18_safe_delta_runtime_source_authority_lineage_invalid":
+        return source
+    return verify_safe_delta_runtime_source_for_final_evidence(
+        source_receipt_id,
+        source_receipt_fingerprint,
+    )
+
+
+def verify_safe_delta_runtime_source_for_final_evidence(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+) -> dict[str, Any]:
+    """Validate canonical lineage after the final evidence binding is consumed."""
+    return _verify_safe_delta_runtime_source(
+        source_receipt_id,
+        source_receipt_fingerprint,
+        include_runtime_evidence=True,
+        required_consumed_count=3,
+    )
+
+
+def verify_safe_delta_runtime_source_for_final_plan(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+) -> dict[str, Any]:
+    """Validate source lineage and the unconsumed final binding for planning."""
+    return _verify_safe_delta_runtime_source(
+        source_receipt_id,
+        source_receipt_fingerprint,
+        include_runtime_evidence=True,
+        required_consumed_count=2,
+    )
+
+
+def safe_delta_runtime_source_authority_context(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+    *,
+    include_runtime_evidence: bool = False,
+    required_consumed_count: int | None = None,
+) -> dict[str, Any]:
+    """Return redacted authority only after independent source validation."""
+    source, blocker = _load_valid_source(
+        source_receipt_id,
+        source_receipt_fingerprint,
+        include_runtime_evidence=include_runtime_evidence,
+        required_consumed_count=required_consumed_count,
+    )
+    if blocker:
+        return {"valid": False, "blocker": blocker}
+    authority = _authority_snapshot(source, include_runtime_evidence=include_runtime_evidence)
+    return {
+        "valid": True,
+        "blocker": "",
+        "actor_id": source["actor"],
+        "pilot_lease_id": source["pilot_lease_id"],
+        "package_id": source["package_id"],
+        "package_fingerprint": source["package_fingerprint"],
+        "pilot_run_id": source["pilot_run_id"],
+        "operator_decision_fingerprint": source["operator_decision_fingerprint"],
+        "lease_authority_fingerprint": authority["lease_authority_fingerprint"],
+    }
+
+
+def _verify_safe_delta_runtime_source(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+    *,
+    include_runtime_evidence: bool,
+    required_consumed_count: int | None = None,
+) -> dict[str, Any]:
+    source, blocker = _load_valid_source(
+        source_receipt_id,
+        source_receipt_fingerprint,
+        include_runtime_evidence=include_runtime_evidence,
+        required_consumed_count=required_consumed_count,
+    )
     if blocker:
         return _blocked(blocker)
+    authority = _authority_snapshot(source, include_runtime_evidence=include_runtime_evidence)
+    if not include_runtime_evidence:
+        return {
+            "valid": True,
+            "blocker": "",
+            "evidence_class": "canonical_runtime",
+            "source_lineage_hash": _lineage_hash(source),
+            "current_state_hash": source["export_artifact_receipt_fingerprint"],
+        }
+    final_authority_fingerprint = _final_sequence_fingerprint(authority)
     return {
         "valid": True,
         "blocker": "",
         "evidence_class": "canonical_runtime",
-        "source_lineage_hash": _lineage_hash(source),
-        "current_state_hash": source["export_artifact_receipt_fingerprint"],
+        "source_lineage_hash": _lineage_hash(source, final_authority_fingerprint),
+        "current_state_hash": _fingerprint(
+            {
+                "export_artifact_receipt_fingerprint": source["export_artifact_receipt_fingerprint"],
+                "lease_authority_fingerprint": final_authority_fingerprint,
+            }
+        ),
     }
 
 
-def _owned_lineage_blocker(source: dict[str, Any]) -> str:
+def _load_valid_source(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+    *,
+    include_runtime_evidence: bool,
+    required_consumed_count: int | None,
+) -> tuple[dict[str, Any], str]:
+    if not _identifier(source_receipt_id) or not _is_hash(source_receipt_fingerprint):
+        return {}, "stage18_safe_delta_runtime_source_binding_invalid"
+    source = _read_json(safe_delta_runtime_source_directory() / f"{source_receipt_id}.json")
+    if not source:
+        return {}, SAFE_DELTA_RUNTIME_SOURCE_MISSING
+    if not _valid_source(source):
+        return {}, "stage18_safe_delta_runtime_source_receipt_invalid"
+    if source["receipt_fingerprint"] != source_receipt_fingerprint:
+        return {}, "stage18_safe_delta_runtime_source_receipt_hash_mismatch"
+    blocker = (
+        _owned_lineage_blocker(source)
+        if not include_runtime_evidence and required_consumed_count is None
+        else _owned_lineage_blocker(
+            source,
+            include_runtime_evidence=include_runtime_evidence,
+            required_consumed_count=required_consumed_count,
+        )
+    )
+    if blocker:
+        return {}, blocker
+    return source, ""
+
+
+def _owned_lineage_blocker(
+    source: dict[str, Any],
+    *,
+    include_runtime_evidence: bool = False,
+    required_consumed_count: int | None = None,
+) -> str:
     from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
     from francis.managed_copy_provisioning import managed_copy_provision_for_copy
     from francis.managed_copy_safe_delta import managed_copy_safe_delta_review_receipts_readback
@@ -278,8 +400,9 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     authority = pilot_runtime_lease_authority_snapshot(
         source["pilot_lease_id"],
         actor=source["actor"],
-        expected_bindings=lease_bindings(),
+        expected_bindings=lease_bindings(include_runtime_evidence=include_runtime_evidence),
     )
+    expected_count = required_consumed_count or (3 if include_runtime_evidence else 2)
     prefixes = authority.get("consumed_prefix_fingerprints")
     if (
         authority.get("valid") is not True
@@ -287,9 +410,10 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
         or authority.get("package_fingerprint") != source["package_fingerprint"]
         or authority.get("pilot_run_id") != source["pilot_run_id"]
         or authority.get("operator_decision_fingerprint") != source["operator_decision_fingerprint"]
-        or authority.get("operation_consumed_binding_count") != 2
+        or authority.get("operation_consumed_binding_count") != expected_count
         or not isinstance(prefixes, list)
-        or prefixes
+        or len(prefixes) != expected_count
+        or prefixes[:2]
         != [
             source["invocation_lease_authority_fingerprint"],
             source["source_lease_authority_fingerprint"],
@@ -300,6 +424,17 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     ):
         return "stage18_safe_delta_runtime_source_authority_lineage_invalid"
     return ""
+
+
+def _authority_snapshot(source: dict[str, Any], *, include_runtime_evidence: bool) -> dict[str, Any]:
+    from francis.managed_copy_pilot_runtime import pilot_runtime_lease_authority_snapshot
+    from francis.managed_copy_safe_delta_runtime_invocation import lease_bindings
+
+    return pilot_runtime_lease_authority_snapshot(
+        source["pilot_lease_id"],
+        actor=source["actor"],
+        expected_bindings=lease_bindings(include_runtime_evidence=include_runtime_evidence),
+    )
 
 
 def _valid_source(source: dict[str, Any]) -> bool:
@@ -318,41 +453,52 @@ def _valid_source(source: dict[str, Any]) -> bool:
     )
 
 
-def _lineage_hash(source: dict[str, Any]) -> str:
-    return _fingerprint(
-        {
-            key: source[key]
-            for key in (
-                "tenant_key",
-                "copy_id",
-                "provisioning_receipt_id",
-                "provisioning_receipt_fingerprint",
-                "isolation_verification_receipt_id",
-                "isolation_verification_receipt_fingerprint",
-                "review_receipt_id",
-                "review_receipt_fingerprint",
-                "safe_delta_decision_receipt_id",
-                "safe_delta_decision_receipt_fingerprint",
-                "export_authorization_decision_receipt_id",
-                "export_authorization_decision_receipt_fingerprint",
-                "artifact_plan_fingerprint",
-                "export_artifact_receipt_id",
-                "export_artifact_receipt_fingerprint",
-                "artifact_content_fingerprint",
-                "runtime_invocation_receipt_id",
-                "runtime_invocation_receipt_fingerprint",
-                "runtime_invocation_fingerprint",
-                "runtime_invocation_result_fingerprint",
-                "pilot_lease_id",
-                "package_id",
-                "package_fingerprint",
-                "pilot_run_id",
-                "operator_decision_fingerprint",
-                "invocation_lease_authority_fingerprint",
-                "source_lease_authority_fingerprint",
-            )
-        }
-    )
+def _lineage_hash(source: dict[str, Any], final_authority_fingerprint: str = "") -> str:
+    lineage = {
+        key: source[key]
+        for key in (
+            "tenant_key",
+            "copy_id",
+            "provisioning_receipt_id",
+            "provisioning_receipt_fingerprint",
+            "isolation_verification_receipt_id",
+            "isolation_verification_receipt_fingerprint",
+            "review_receipt_id",
+            "review_receipt_fingerprint",
+            "safe_delta_decision_receipt_id",
+            "safe_delta_decision_receipt_fingerprint",
+            "export_authorization_decision_receipt_id",
+            "export_authorization_decision_receipt_fingerprint",
+            "artifact_plan_fingerprint",
+            "export_artifact_receipt_id",
+            "export_artifact_receipt_fingerprint",
+            "artifact_content_fingerprint",
+            "runtime_invocation_receipt_id",
+            "runtime_invocation_receipt_fingerprint",
+            "runtime_invocation_fingerprint",
+            "runtime_invocation_result_fingerprint",
+            "pilot_lease_id",
+            "package_id",
+            "package_fingerprint",
+            "pilot_run_id",
+            "operator_decision_fingerprint",
+            "invocation_lease_authority_fingerprint",
+            "source_lease_authority_fingerprint",
+        )
+    }
+    if final_authority_fingerprint:
+        return _fingerprint(
+            {
+                "source": lineage,
+                "lease_authority_fingerprint": final_authority_fingerprint,
+            }
+        )
+    return _fingerprint(lineage)
+
+
+def _final_sequence_fingerprint(authority: dict[str, Any]) -> str:
+    sequence = authority.get("sequence_prefix_fingerprints")
+    return sequence[-1] if isinstance(sequence, list) and sequence and _is_hash(sequence[-1]) else ""
 
 
 def _read_json(path: Path) -> dict[str, Any]:

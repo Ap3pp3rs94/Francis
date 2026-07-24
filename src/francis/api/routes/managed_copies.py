@@ -85,6 +85,8 @@ from francis.managed_copy_runtime_start import (
     runtime_start_status_snapshot,
     start_fixture_runtime,
 )
+from francis.managed_copy_runtime_evidence import SAFE_DELTA_REQUIREMENT
+from francis.managed_copy_safe_delta_runtime_evidence import safe_delta_runtime_source_authority_context
 from francis.managed_copy_container_isolation import (
     CONTAINER_ISOLATION_ACTION,
     CONTAINER_ISOLATION_ROUTE,
@@ -113,6 +115,7 @@ from francis.managed_copy_pilot_runtime import (
     stop_pilot_runtime,
 )
 from francis.managed_copy_safe_delta_runtime_invocation import (
+    RUNTIME_EVIDENCE_ACTION as SAFE_DELTA_RUNTIME_EVIDENCE_ACTION,
     SOURCE_ACTION as SAFE_DELTA_SOURCE_ACTION,
     SOURCE_ROUTE as SAFE_DELTA_SOURCE_ROUTE,
     SOURCE_SCOPE as SAFE_DELTA_SOURCE_SCOPE,
@@ -1227,4 +1230,37 @@ def runtime_evidence_readback(payload: dict[str, Any], request: Request) -> dict
             required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
             next_step="configure_actor_scope_before_recording_managed_copy_runtime_evidence",
         )
+    if payload.get("requirement_id") == SAFE_DELTA_REQUIREMENT and payload.get("dry_run") is False:
+        authority = safe_delta_runtime_source_authority_context(
+            payload.get("source_receipt_id", ""),
+            payload.get("source_receipt_fingerprint", ""),
+            include_runtime_evidence=True,
+            required_consumed_count=2,
+        )
+        if authority.get("valid") is not True:
+            return _permission_denied(
+                ApiPermissionDecision(
+                    False,
+                    _safe_str(authority.get("blocker")).strip()
+                    or "stage18_safe_delta_runtime_evidence_authority_invalid",
+                    {"actor_present": bool(actor), "lease_bound": False},
+                ),
+                required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+                next_step="attach_exact_safe_delta_runtime_evidence_lease_binding",
+            )
+        decision = _pilot_write_permission(
+            actor,
+            lease_id=authority.get("pilot_lease_id"),
+            package_id=authority.get("package_id"),
+            pilot_run_id=authority.get("pilot_run_id"),
+            required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+            route=request.url.path,
+            action=SAFE_DELTA_RUNTIME_EVIDENCE_ACTION,
+        )
+        if not decision.allowed:
+            return _permission_denied(
+                decision,
+                required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+                next_step="attach_exact_safe_delta_runtime_evidence_lease_binding",
+            )
     return managed_copy_runtime_evidence_readback_blocked_snapshot(payload, actor=actor)
