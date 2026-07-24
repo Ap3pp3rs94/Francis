@@ -75,6 +75,17 @@ from francis.managed_copy_safe_delta_export_artifact import (
     managed_copy_safe_delta_export_artifacts_readback,
     materialize_managed_copy_safe_delta_export_artifact,
 )
+from francis.managed_copy_safe_delta_runtime_invocation import (
+    PREFLIGHT_SCOPE as MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_PREFLIGHT_SCOPE,
+)
+from francis.managed_copy_safe_delta_runtime_invocation import (
+    WRITE_SCOPE as MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_WRITE_SCOPE,
+)
+from francis.managed_copy_safe_delta_runtime_invocation import (
+    plan_safe_delta_runtime_invocation,
+    record_safe_delta_runtime_invocation,
+    safe_delta_runtime_invocations_readback,
+)
 from francis.managed_copy_rogue_detection_assessment import (
     managed_copy_rogue_detection_assessment_plan,
     managed_copy_rogue_detection_assessments_readback,
@@ -3396,6 +3407,40 @@ def managed_copy_safe_delta_export_artifact_snapshot(payload: dict[str, Any], *,
 
 def managed_copy_safe_delta_export_artifacts_snapshot(**kwargs: Any) -> dict[str, Any]:
     return managed_copy_safe_delta_export_artifacts_readback(**kwargs)
+
+
+def managed_copy_safe_delta_runtime_invocation_plan_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    return {
+        **plan_safe_delta_runtime_invocation(payload, actor=actor),
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_PREFLIGHT_SCOPE,
+    }
+
+
+def managed_copy_safe_delta_runtime_invocation_snapshot(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+    plan = plan_safe_delta_runtime_invocation(payload, actor=actor)
+    outcome: dict[str, Any] = plan
+    if payload.get("dry_run") is False:
+        plan_payload = {**payload, "dry_run": True}
+        plan = plan_safe_delta_runtime_invocation(plan_payload, actor=actor)
+        outcome = record_safe_delta_runtime_invocation(
+            plan,
+            provided_fingerprint=_safe_str(payload.get("invocation_fingerprint")).strip(),
+            confirmed=payload.get("confirm_runtime_invocation") is True,
+        )
+    return {
+        **plan,
+        **outcome,
+        "kind": "francis.stage18.managed_copies.safe_delta_runtime_invocation_write",
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_RUNTIME_INVOCATION_WRITE_SCOPE,
+    }
+
+
+def managed_copy_safe_delta_runtime_invocations_snapshot(**kwargs: Any) -> dict[str, Any]:
+    return safe_delta_runtime_invocations_readback(**kwargs)
 
 
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:

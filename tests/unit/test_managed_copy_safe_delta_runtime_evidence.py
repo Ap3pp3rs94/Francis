@@ -45,6 +45,10 @@ def _source() -> dict[str, Any]:
         "export_artifact_receipt_id": "export-artifact-001",
         "export_artifact_receipt_fingerprint": _hash("export-artifact"),
         "artifact_content_fingerprint": _hash("artifact-content"),
+        "runtime_invocation_receipt_id": "runtime-invocation-001",
+        "runtime_invocation_receipt_fingerprint": _hash("runtime-invocation-receipt"),
+        "runtime_invocation_fingerprint": _hash("runtime-invocation"),
+        "runtime_invocation_result_fingerprint": _hash("runtime-invocation-result"),
         "signal_class": "approved_non_private_signal",
         "trace_id": "trace-safe-delta-runtime-001",
         "fixture_only": False,
@@ -119,7 +123,7 @@ def test_malformed_fixture_and_injected_sources_fail_exact_schema(
     assert result["blocker"] == "stage18_safe_delta_runtime_source_receipt_invalid"
 
 
-def test_owned_artifact_lineage_stops_at_missing_canonical_invocation_receipt(
+def test_owned_invocation_lineage_stops_at_canonical_source_recording_boundary(
     isolated_data: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -196,13 +200,53 @@ def test_owned_artifact_lineage_stops_at_missing_canonical_invocation_receipt(
             },
         },
     )
+    monkeypatch.setattr(
+        "francis.managed_copy_safe_delta_runtime_invocation.safe_delta_runtime_invocations_readback",
+        lambda **kwargs: {
+            "valid_count": 1,
+            "latest_valid_receipt": {
+                "receipt_id": source["runtime_invocation_receipt_id"],
+                "receipt_fingerprint": source["runtime_invocation_receipt_fingerprint"],
+                "invocation_fingerprint": source["runtime_invocation_fingerprint"],
+                "invocation_result_fingerprint": source["runtime_invocation_result_fingerprint"],
+                "export_artifact_receipt_id": source["export_artifact_receipt_id"],
+                "export_artifact_receipt_fingerprint": source["export_artifact_receipt_fingerprint"],
+                "artifact_content_fingerprint": source["artifact_content_fingerprint"],
+                "invocation_result": {
+                    "classification": "eligible_for_core_review",
+                    "eligible_for_core_review": True,
+                },
+            },
+        },
+    )
 
     result = safe_delta_evidence.verify_safe_delta_runtime_source(source["receipt_id"], source["receipt_fingerprint"])
 
     assert result["valid"] is False
-    assert result["blocker"] == "stage18_safe_delta_runtime_canonical_invocation_receipt_not_implemented"
+    assert result["blocker"] == "stage18_safe_delta_runtime_canonical_source_receipt_recording_not_implemented"
     assert result["evidence_class"] == ""
     assert result["current_state_hash"] == ""
+
+
+def test_owned_artifact_without_exact_invocation_lineage_fails_closed(
+    isolated_data: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _source()
+    _write_source(isolated_data, source)
+    monkeypatch.setattr(
+        safe_delta_evidence,
+        "_owned_lineage_blocker",
+        lambda item: "stage18_safe_delta_runtime_invocation_lineage_invalid",
+    )
+
+    result = safe_delta_evidence.verify_safe_delta_runtime_source(
+        source["receipt_id"],
+        source["receipt_fingerprint"],
+    )
+
+    assert result["valid"] is False
+    assert result["blocker"] == "stage18_safe_delta_runtime_invocation_lineage_invalid"
 
 
 def test_runtime_recorder_selects_safe_delta_verifier_and_proof_kind(isolated_data: Path) -> None:
