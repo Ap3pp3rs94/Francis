@@ -11,6 +11,7 @@ from typing import Any
 
 from francis.governance.pilot_scope_lease import PilotLeaseBinding
 from francis.managed_copy_isolation import managed_copy_isolation_guarded_subpath
+from francis.managed_copy_runtime import build_safe_delta_core_review
 
 CONTRACT = "stage18_managed_copy_safe_delta_runtime_invocation_v2"
 KIND = "francis.stage18.managed_copies.safe_delta_runtime_invocation"
@@ -350,35 +351,32 @@ def safe_delta_runtime_invocations_readback(
 
 
 def evaluate_core_review_eligibility(artifact: Any) -> dict[str, Any]:
-    candidate = artifact.get("candidate") if isinstance(artifact, dict) else None
-    candidate = candidate if isinstance(candidate, dict) else {}
-    reasons: list[str] = []
-    if artifact.get("artifact_schema_class") != "safe_delta_signal_v1":
-        reasons.append("artifact_schema_not_metadata_safe_delta")
-    if candidate.get("contains_raw_private_data") is not False:
-        reasons.append("raw_private_data_present_or_unknown")
-    if candidate.get("contains_tenant_identifiers") is not False:
-        reasons.append("tenant_identifiers_present_or_unknown")
-    if candidate.get("redaction_review_complete") is not True:
-        reasons.append("redaction_review_incomplete")
-    if candidate.get("abstraction_level") != "metadata_only":
-        reasons.append("abstraction_level_not_metadata_only")
-    if candidate.get("retention_class") != "review_receipt_only":
-        reasons.append("retention_class_not_review_receipt_only")
-    source_record_count = candidate.get("source_record_count")
-    if type(source_record_count) is not int or source_record_count <= 0:
-        reasons.append("source_record_count_not_positive_integer")
-    eligible = not reasons
-    result = {
-        "operation": "evaluate_core_review_handoff",
-        "classification": ELIGIBLE if eligible else INELIGIBLE,
-        "eligible_for_core_review": eligible,
-        "reason_codes": sorted(reasons),
-        "source_record_count": source_record_count if type(source_record_count) is int else 0,
-        "abstraction_level": _text(candidate.get("abstraction_level")),
-        "retention_class": _text(candidate.get("retention_class")),
+    payload = {
+        "contract": "stage18_managed_copy_safe_delta_core_review_input_v1",
+        "artifact_plan_fingerprint": "0" * 64,
+        "export_artifact_receipt_id": "safe-delta-evaluation",
+        "export_artifact_receipt_fingerprint": "0" * 64,
+        "artifact_content_fingerprint": "0" * 64,
+        "artifact": artifact,
     }
-    return result
+    result = build_safe_delta_core_review(payload)
+    projected = {
+        key: result[key]
+        for key in (
+            "classification",
+            "eligible_for_core_review",
+            "reason_codes",
+            "source_record_count",
+            "abstraction_level",
+            "retention_class",
+        )
+    }
+    return {"operation": "evaluate_core_review_handoff", **projected}
+
+
+def load_safe_delta_runtime_artifact(request: dict[str, str]) -> tuple[dict[str, Any], str]:
+    """Reload an export artifact from governed lineage for runtime composition."""
+    return _load_artifact_lineage(request)
 
 
 def _load_artifact_lineage(request: dict[str, str]) -> tuple[dict[str, Any], str]:

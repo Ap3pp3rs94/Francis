@@ -27,6 +27,38 @@ from francis.governance.pilot_scope_lease import (
 _REAL_PILOT_LEASE_CONTEXT = container_isolation._pilot_lease_context
 
 
+def _safe_delta_operation_input() -> dict[str, Any]:
+    artifact = {
+        "kind": "francis.stage18.managed_copies.safe_delta_export_artifact",
+        "contract": "stage18_managed_copy_safe_delta_export_artifact_v2",
+        "artifact_media_type": "application/vnd.francis.safe-delta+json",
+        "artifact_schema_class": "safe_delta_signal_v1",
+        "signal_class": "approved_non_private_signal",
+        "candidate": {
+            "signal_fingerprint": "1" * 64,
+            "summary_fingerprint": "2" * 64,
+            "lineage_fingerprint": "3" * 64,
+            "source_record_count": 7,
+            "contains_raw_private_data": False,
+            "contains_tenant_identifiers": False,
+            "redaction_review_complete": True,
+            "abstraction_level": "metadata_only",
+            "retention_class": "review_receipt_only",
+        },
+        "review_fingerprint": "4" * 64,
+        "authorization_decision_fingerprint": "5" * 64,
+        "artifact_plan_fingerprint": "6" * 64,
+    }
+    return {
+        "contract": container_isolation.SAFE_DELTA_INPUT_CONTRACT,
+        "artifact_plan_fingerprint": "6" * 64,
+        "export_artifact_receipt_id": "export-artifact-001",
+        "export_artifact_receipt_fingerprint": "d" * 64,
+        "artifact_content_fingerprint": "e" * 64,
+        "artifact": artifact,
+    }
+
+
 def test_windows_default_proof_base_uses_fixed_local_application_data(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -478,9 +510,10 @@ def _write_runtime_records(root: Path, payload: dict[str, Any], tenant_key: str,
         )
     else:
         output = container_isolation.build_runtime_operation_preview(payload["operation_input"])
-    output_name = (
-        "tenant_boundary_probe" if operation_name == container_isolation.TENANT_BOUNDARY_OPERATION else "briefing"
-    )
+    output_name = {
+        container_isolation.TENANT_BOUNDARY_OPERATION: "tenant_boundary_probe",
+        container_isolation.SAFE_DELTA_OPERATION: "safe_delta_core_review",
+    }.get(operation_name, "briefing")
     handshake = {
         "kind": "francis.stage18.managed_copies.runtime_handshake",
         "runtime_identity": container_isolation.RUNTIME_IDENTITY,
@@ -1047,9 +1080,10 @@ def test_create_timeout_without_recoverable_identity_is_cleanup_required(
             },
             False,
         ),
+        (_safe_delta_operation_input(), False),
         (None, True),
     ],
-    ids=("work-briefing", "tenant-boundary-probe", "evidence-failure"),
+    ids=("work-briefing", "tenant-boundary-probe", "safe-delta-core-review", "evidence-failure"),
 )
 def test_fixed_docker_profile_launches_proves_and_cleans_up(
     isolation_fixture: dict[str, Any],
@@ -1059,11 +1093,23 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
 ) -> None:
     if operation_input is not None:
         isolation_fixture["payload"]["operation_input"] = operation_input
-        isolation_fixture["payload"]["runtime_evidence_intent"] = {
-            "requirement_id": runtime_evidence.TENANT_ISOLATION_REQUIREMENT,
-            "proof_kind": runtime_evidence.TENANT_ISOLATION_PROOF_KIND,
-            "confirm_runtime_evidence": True,
-        }
+        if operation_input.get("contract") == container_isolation.SAFE_DELTA_INPUT_CONTRACT:
+            isolation_fixture["payload"]["runtime_evidence_intent"] = {
+                "requirement_id": runtime_evidence.SAFE_DELTA_REQUIREMENT,
+                "proof_kind": runtime_evidence.SAFE_DELTA_PROOF_KIND,
+                "confirm_runtime_evidence": True,
+            }
+            monkeypatch.setattr(
+                container_isolation,
+                "load_safe_delta_runtime_artifact",
+                lambda request: ({"artifact": operation_input["artifact"]}, ""),
+            )
+        else:
+            isolation_fixture["payload"]["runtime_evidence_intent"] = {
+                "requirement_id": runtime_evidence.TENANT_ISOLATION_REQUIREMENT,
+                "proof_kind": runtime_evidence.TENANT_ISOLATION_PROOF_KIND,
+                "confirm_runtime_evidence": True,
+            }
     _write_approval(isolation_fixture)
     payload = isolation_fixture["payload"]
     container_id = "9" * 64
@@ -1180,11 +1226,10 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         assert list(runtime_evidence.receipt_directory().glob("*.json")) == []
         return
     assert result["ok"] is True, result
-    expected_requirement = (
-        runtime_evidence.TENANT_ISOLATION_REQUIREMENT
-        if operation_input is not None
-        else runtime_evidence.COPY_CREATION_REQUIREMENT
-    )
+    expected_requirement = {
+        container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT: runtime_evidence.TENANT_ISOLATION_REQUIREMENT,
+        container_isolation.SAFE_DELTA_INPUT_CONTRACT: runtime_evidence.SAFE_DELTA_REQUIREMENT,
+    }.get(operation_input.get("contract") if operation_input else "", runtime_evidence.COPY_CREATION_REQUIREMENT)
     assert result["runtime_evidence"]["receipt"]["requirement_id"] == expected_requirement
     assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
     readbacks = managed_copies.managed_copy_runtime_evidence_readbacks_snapshot()
@@ -1365,7 +1410,7 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         )
         assert tenant_source["valid"] is False
         assert tenant_source["blocker"] == "stage18_tenant_isolation_runtime_container_source_invalid"
-    else:
+    elif operation_input.get("contract") == container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT:
         assert result["output"]["approved_tenant_input_read"] is True
         assert result["output"]["sibling_tenant_boundary_absent"] is True
         assert all(result["output"]["domain_boundaries_absent"].values())
@@ -1385,7 +1430,6 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
             result["lifecycle_receipt"]["receipt_fingerprint"],
         )
         assert tenant_source["valid"] is True
-
         ready_path = Path(result["proof_root"]) / "receipts" / "ready.json"
         lifecycle_path = Path(result["proof_root"]) / "receipts" / "lifecycle-complete.json"
         ready_value = json.loads(ready_path.read_text(encoding="utf-8"))
@@ -1413,6 +1457,17 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         assert tampered_source["blocker"] == "stage18_tenant_isolation_runtime_container_source_invalid"
         ready_path.write_text(json.dumps(ready_value), encoding="utf-8")
         lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
+    else:
+        assert result["output"]["operation"] == container_isolation.SAFE_DELTA_OPERATION
+        assert result["output"]["eligible_for_core_review"] is True
+        assert result["receipt"]["safe_delta_classification"] == "eligible_for_core_review"
+        assert result["receipt"]["safe_delta_eligible_for_core_review"] is True
+        assert result["receipt"]["safe_delta_artifact_content_fingerprint"] == "e" * 64
+        safe_delta_source = runtime_evidence.verify_safe_delta_runtime_source(
+            result["lifecycle_receipt"]["receipt_id"],
+            result["lifecycle_receipt"]["receipt_fingerprint"],
+        )
+        assert safe_delta_source["valid"] is True
     assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
     assert "--read-only" in created_argv
     assert ["--cap-drop", "ALL"] == created_argv[
@@ -1590,6 +1645,34 @@ def test_tenant_boundary_probe_rejects_caller_selected_boundary(
     )
 
     assert result["error"] == "managed_copy_tenant_boundary_probe_input_schema_invalid"
+    assert not container_isolation._proof_base().exists()
+
+
+def test_safe_delta_operation_rejects_unresolved_artifact_before_proof_effects(
+    isolation_fixture: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = isolation_fixture["payload"]
+    payload["operation_input"] = _safe_delta_operation_input()
+    payload["runtime_evidence_intent"] = {
+        "requirement_id": runtime_evidence.SAFE_DELTA_REQUIREMENT,
+        "proof_kind": runtime_evidence.SAFE_DELTA_PROOF_KIND,
+        "confirm_runtime_evidence": True,
+    }
+    monkeypatch.setattr(
+        container_isolation,
+        "load_safe_delta_runtime_artifact",
+        lambda request: ({}, "safe_delta_runtime_invocation_export_artifact_invalid"),
+    )
+
+    result = container_isolation.container_isolation_proposal(
+        payload,
+        actor=payload["request_actor"],
+        stage17_closed=True,
+    )
+
+    assert result["error"] == "managed_copy_container_safe_delta_artifact_lineage_invalid"
+    assert result["descriptor"] == {}
     assert not container_isolation._proof_base().exists()
 
 

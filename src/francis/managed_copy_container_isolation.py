@@ -22,6 +22,9 @@ from francis.managed_copy_runtime import (
     INPUT_CONTRACT,
     OUTPUT_CONTRACT,
     RUNTIME_IDENTITY,
+    SAFE_DELTA_INPUT_CONTRACT,
+    SAFE_DELTA_OPERATION,
+    SAFE_DELTA_OUTPUT_CONTRACT,
     TENANT_BOUNDARY_INPUT_CONTRACT,
     TENANT_DOMAIN_BOUNDARY_PATHS,
     TENANT_BOUNDARY_OPERATION,
@@ -29,6 +32,7 @@ from francis.managed_copy_runtime import (
     WORK_BRIEFING_OPERATION,
     ManagedCopyRuntimeInputError,
     build_runtime_operation_preview,
+    build_safe_delta_core_review,
     build_tenant_boundary_probe,
     build_work_briefing,
     runtime_operation_name,
@@ -37,11 +41,14 @@ from francis.managed_copy_runtime_start import validate_runtime_start_approval_r
 from francis.managed_copy_runtime_evidence import (
     COPY_CREATION_PROOF_KIND,
     COPY_CREATION_REQUIREMENT,
+    SAFE_DELTA_PROOF_KIND,
+    SAFE_DELTA_REQUIREMENT,
     TENANT_ISOLATION_PROOF_KIND,
     TENANT_ISOLATION_REQUIREMENT,
     plan_runtime_evidence,
     record_runtime_evidence_with_lease_transaction,
 )
+from francis.managed_copy_safe_delta_runtime_invocation import load_safe_delta_runtime_artifact
 
 CONTAINER_ISOLATION_SCOPE = "managed_copies.container_isolation.execute"
 CONTAINER_ISOLATION_ACTION = "managed_copies.container_isolation"
@@ -266,7 +273,7 @@ def container_isolation_contract_snapshot() -> dict[str, Any]:
         "fixed_platform": FIXED_PLATFORM,
         "runtime_identity": RUNTIME_IDENTITY,
         "operation": WORK_BRIEFING_OPERATION,
-        "supported_operations": [WORK_BRIEFING_OPERATION, TENANT_BOUNDARY_OPERATION],
+        "supported_operations": [WORK_BRIEFING_OPERATION, TENANT_BOUNDARY_OPERATION, SAFE_DELTA_OPERATION],
         "runtime_program_fingerprint": _file_sha256(RUNTIME_PROGRAM),
         "runtime_dockerfile_fingerprint": _file_sha256(RUNTIME_DOCKERFILE),
         "controller_verifier_fingerprint": _file_sha256(CONTROLLER_VERIFIER),
@@ -302,12 +309,7 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         blockers.append(exc.blocker)
         operation_preview = {}
     operation = operation_preview.get("operation")
-    expected_requirement = (
-        TENANT_ISOLATION_REQUIREMENT if operation == TENANT_BOUNDARY_OPERATION else COPY_CREATION_REQUIREMENT
-    )
-    expected_proof_kind = (
-        TENANT_ISOLATION_PROOF_KIND if operation == TENANT_BOUNDARY_OPERATION else COPY_CREATION_PROOF_KIND
-    )
+    expected_requirement, expected_proof_kind = _runtime_evidence_contract(operation)
     evidence_intent = payload.get("runtime_evidence_intent")
     if (
         not isinstance(evidence_intent, dict)
@@ -317,6 +319,10 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         or evidence_intent.get("confirm_runtime_evidence") is not True
     ):
         blockers.append("managed_copy_container_runtime_evidence_intent_invalid")
+    if operation == SAFE_DELTA_OPERATION:
+        safe_delta_blocker = _safe_delta_operation_lineage_blocker(payload, operation_preview)
+        if safe_delta_blocker:
+            blockers.append(safe_delta_blocker)
     lease_seconds = _exact_int(payload.get("lease_seconds"), minimum=2, maximum=30)
     keys = (
         "approval_id",
@@ -587,7 +593,10 @@ def _execute(
         if container_host_pid == 0:
             return _fail(plan, receipts, "managed_copy_container_runtime_process_identity_mismatch", inspected)
         output = _runtime_output(records, d)
-        observation_fields = _tenant_boundary_observation_fields(output, d)
+        observation_fields = {
+            **_tenant_boundary_observation_fields(output, d),
+            **_safe_delta_observation_fields(output, d),
+        }
         proof = _receipt(
             plan,
             "ready",
@@ -620,6 +629,7 @@ def _execute(
         _write_immutable(receipts / "ready.json", proof)
         from francis.managed_copy_container_live_evidence import (
             historical_lifecycle_source_verifier,
+            historical_safe_delta_source_verifier,
             historical_tenant_isolation_source_verifier,
             live_container_source_verifier,
             write_lifecycle_complete_receipt,
@@ -666,22 +676,16 @@ def _execute(
         )
         if not lifecycle:
             return _fail(plan, receipts, "managed_copy_container_lifecycle_receipt_failed", inspected)
-        historical_verifier_factory = (
-            historical_tenant_isolation_source_verifier
-            if d["operation"] == TENANT_BOUNDARY_OPERATION
-            else historical_lifecycle_source_verifier
-        )
+        historical_verifier_factory = {
+            TENANT_BOUNDARY_OPERATION: historical_tenant_isolation_source_verifier,
+            SAFE_DELTA_OPERATION: historical_safe_delta_source_verifier,
+        }.get(d["operation"], historical_lifecycle_source_verifier)
         historical_verifier = historical_verifier_factory(
             plan=plan,
             proof_root=root,
             expected_authority=publication_authority,
         )
-        requirement_id = (
-            TENANT_ISOLATION_REQUIREMENT if d["operation"] == TENANT_BOUNDARY_OPERATION else COPY_CREATION_REQUIREMENT
-        )
-        proof_kind = (
-            TENANT_ISOLATION_PROOF_KIND if d["operation"] == TENANT_BOUNDARY_OPERATION else COPY_CREATION_PROOF_KIND
-        )
+        requirement_id, proof_kind = _runtime_evidence_contract(d["operation"])
         evidence_payload = {
             "request_actor": plan["actor"],
             "requirement_id": requirement_id,
@@ -1451,6 +1455,8 @@ def _readiness_seconds(value: object) -> int:
 def _operation_input_contract(operation_input: object) -> str:
     if isinstance(operation_input, dict) and operation_input.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
         return TENANT_BOUNDARY_INPUT_CONTRACT
+    if isinstance(operation_input, dict) and operation_input.get("contract") == SAFE_DELTA_INPUT_CONTRACT:
+        return SAFE_DELTA_INPUT_CONTRACT
     return INPUT_CONTRACT
 
 
@@ -1461,11 +1467,17 @@ def _operation_preview_input_fingerprint(preview: dict[str, Any]) -> str:
 def _operation_output_contract(operation_input: object) -> str:
     if isinstance(operation_input, dict) and operation_input.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
         return TENANT_BOUNDARY_OUTPUT_CONTRACT
+    if isinstance(operation_input, dict) and operation_input.get("contract") == SAFE_DELTA_INPUT_CONTRACT:
+        return SAFE_DELTA_OUTPUT_CONTRACT
     return OUTPUT_CONTRACT
 
 
 def _runtime_output_name(descriptor: dict[str, Any]) -> str:
-    return "tenant_boundary_probe" if descriptor.get("operation") == TENANT_BOUNDARY_OPERATION else "briefing"
+    operation = _text(descriptor.get("operation"))
+    return {
+        TENANT_BOUNDARY_OPERATION: "tenant_boundary_probe",
+        SAFE_DELTA_OPERATION: "safe_delta_core_review",
+    }.get(operation, "briefing")
 
 
 def _runtime_output(records: dict[str, dict[str, Any]], descriptor: dict[str, Any]) -> dict[str, Any]:
@@ -1487,6 +1499,22 @@ def _tenant_boundary_observation_fields(output: dict[str, Any], descriptor: dict
         "bounded_cross_tenant_denial": output["bounded_cross_tenant_denial"],
         "tenant_boundary_probe_output_fingerprint": output["output_fingerprint"],
         "comprehensive_tenant_isolation_proven": False,
+    }
+
+
+def _safe_delta_observation_fields(output: dict[str, Any], descriptor: dict[str, Any]) -> dict[str, Any]:
+    if descriptor.get("operation") != SAFE_DELTA_OPERATION:
+        return {}
+    return {
+        "safe_delta_core_review_contract": output["contract"],
+        "safe_delta_classification": output["classification"],
+        "safe_delta_eligible_for_core_review": output["eligible_for_core_review"],
+        "safe_delta_reason_codes": output["reason_codes"],
+        "safe_delta_source_record_count": output["source_record_count"],
+        "safe_delta_abstraction_level": output["abstraction_level"],
+        "safe_delta_retention_class": output["retention_class"],
+        "safe_delta_artifact_content_fingerprint": output["artifact_content_fingerprint"],
+        "safe_delta_output_fingerprint": output["output_fingerprint"],
     }
 
 
@@ -1558,6 +1586,8 @@ def _runtime_records_blocker(
             sibling_boundary_absent=True,
             domain_boundaries_absent={domain: True for domain in TENANT_DOMAIN_BOUNDARY_PATHS},
         )
+    elif d.get("operation") == SAFE_DELTA_OPERATION:
+        expected_output = build_safe_delta_core_review(operation_input)
     else:
         expected_output = build_work_briefing(operation_input)
     observed_input_fingerprint = output.get("input_fingerprint", output.get("approved_tenant_input_fingerprint"))
@@ -1577,6 +1607,38 @@ def _runtime_records_blocker(
         != _fingerprint({key: value for key, value in operation.items() if key != "receipt_fingerprint"})
     ):
         return "managed_copy_container_runtime_operation_invalid"
+    return ""
+
+
+def _runtime_evidence_contract(operation: object) -> tuple[str, str]:
+    operation_name = _text(operation)
+    return {
+        TENANT_BOUNDARY_OPERATION: (TENANT_ISOLATION_REQUIREMENT, TENANT_ISOLATION_PROOF_KIND),
+        SAFE_DELTA_OPERATION: (SAFE_DELTA_REQUIREMENT, SAFE_DELTA_PROOF_KIND),
+    }.get(operation_name, (COPY_CREATION_REQUIREMENT, COPY_CREATION_PROOF_KIND))
+
+
+def _safe_delta_operation_lineage_blocker(payload: dict[str, Any], preview: dict[str, Any]) -> str:
+    operation_input = payload.get("operation_input")
+    if not isinstance(operation_input, dict):
+        return "managed_copy_container_safe_delta_artifact_lineage_invalid"
+    request = {
+        "copy_id": _text(payload.get("copy_id")),
+        "provisioning_receipt_id": _text(payload.get("provisioning_receipt_id")),
+        "isolation_verification_receipt_id": _text(payload.get("isolation_verification_receipt_id")),
+        "artifact_plan_fingerprint": _text(operation_input.get("artifact_plan_fingerprint")),
+        "export_artifact_receipt_id": _text(operation_input.get("export_artifact_receipt_id")),
+        "export_artifact_receipt_fingerprint": _text(operation_input.get("export_artifact_receipt_fingerprint")),
+        "artifact_content_fingerprint": _text(operation_input.get("artifact_content_fingerprint")),
+    }
+    lineage, blocker = load_safe_delta_runtime_artifact(request)
+    if blocker:
+        return "managed_copy_container_safe_delta_artifact_lineage_invalid"
+    if lineage.get("artifact") != operation_input.get("artifact"):
+        return "managed_copy_container_safe_delta_artifact_lineage_invalid"
+    expected = build_safe_delta_core_review(operation_input)
+    if expected != preview:
+        return "managed_copy_container_safe_delta_artifact_lineage_invalid"
     return ""
 
 

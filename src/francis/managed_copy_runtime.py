@@ -14,8 +14,11 @@ INPUT_CONTRACT = "stage18_managed_copy_work_briefing_input_v1"
 OUTPUT_CONTRACT = "stage18_managed_copy_work_briefing_output_v1"
 TENANT_BOUNDARY_INPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_input_v1"
 TENANT_BOUNDARY_OUTPUT_CONTRACT = "stage18_managed_copy_tenant_boundary_probe_output_v2"
+SAFE_DELTA_INPUT_CONTRACT = "stage18_managed_copy_safe_delta_core_review_input_v1"
+SAFE_DELTA_OUTPUT_CONTRACT = "stage18_managed_copy_safe_delta_core_review_output_v1"
 WORK_BRIEFING_OPERATION = "tenant_work_briefing"
 TENANT_BOUNDARY_OPERATION = "tenant_boundary_probe"
+SAFE_DELTA_OPERATION = "safe_delta_core_review"
 TENANT_BOUNDARY_ID = "fixed_sibling_tenant_boundary_v1"
 TENANT_BOUNDARY_RELATIVE_PATH = "tenant-b"
 TENANT_DOMAIN_BOUNDARY_PATHS = {
@@ -39,6 +42,9 @@ _PUBLIC_INPUT_BLOCKERS = frozenset(
         "managed_copy_tenant_boundary_probe_contract_invalid",
         "managed_copy_tenant_boundary_probe_input_invalid",
         "managed_copy_tenant_boundary_probe_observation_invalid",
+        "managed_copy_safe_delta_core_review_input_schema_invalid",
+        "managed_copy_safe_delta_core_review_contract_invalid",
+        "managed_copy_safe_delta_core_review_artifact_invalid",
     }
 )
 
@@ -132,6 +138,62 @@ def build_tenant_boundary_probe(
     return {**result, "output_fingerprint": _fingerprint(result)}
 
 
+def build_safe_delta_core_review(payload: object) -> dict[str, Any]:
+    fields = {
+        "contract",
+        "artifact_plan_fingerprint",
+        "export_artifact_receipt_id",
+        "export_artifact_receipt_fingerprint",
+        "artifact_content_fingerprint",
+        "artifact",
+    }
+    if not isinstance(payload, dict) or set(payload) != fields:
+        raise ManagedCopyRuntimeInputError("managed_copy_safe_delta_core_review_input_schema_invalid")
+    if payload.get("contract") != SAFE_DELTA_INPUT_CONTRACT:
+        raise ManagedCopyRuntimeInputError("managed_copy_safe_delta_core_review_contract_invalid")
+    if not (
+        _sha256(payload.get("artifact_plan_fingerprint"))
+        and _bounded(payload.get("export_artifact_receipt_id"), 240)
+        and _sha256(payload.get("export_artifact_receipt_fingerprint"))
+        and _sha256(payload.get("artifact_content_fingerprint"))
+    ):
+        raise ManagedCopyRuntimeInputError("managed_copy_safe_delta_core_review_artifact_invalid")
+    artifact = payload.get("artifact")
+    candidate = artifact.get("candidate") if isinstance(artifact, dict) else None
+    candidate = candidate if isinstance(candidate, dict) else {}
+    reasons: list[str] = []
+    if not isinstance(artifact, dict) or artifact.get("artifact_schema_class") != "safe_delta_signal_v1":
+        reasons.append("artifact_schema_not_metadata_safe_delta")
+    if candidate.get("contains_raw_private_data") is not False:
+        reasons.append("raw_private_data_present_or_unknown")
+    if candidate.get("contains_tenant_identifiers") is not False:
+        reasons.append("tenant_identifiers_present_or_unknown")
+    if candidate.get("redaction_review_complete") is not True:
+        reasons.append("redaction_review_incomplete")
+    if candidate.get("abstraction_level") != "metadata_only":
+        reasons.append("abstraction_level_not_metadata_only")
+    if candidate.get("retention_class") != "review_receipt_only":
+        reasons.append("retention_class_not_review_receipt_only")
+    source_record_count = candidate.get("source_record_count")
+    if type(source_record_count) is not int or source_record_count <= 0:
+        reasons.append("source_record_count_not_positive_integer")
+    eligible = not reasons
+    result = {
+        "contract": SAFE_DELTA_OUTPUT_CONTRACT,
+        "operation": SAFE_DELTA_OPERATION,
+        "classification": "eligible_for_core_review" if eligible else "ineligible_for_core_review",
+        "eligible_for_core_review": eligible,
+        "reason_codes": sorted(reasons),
+        "source_record_count": source_record_count if type(source_record_count) is int else 0,
+        "abstraction_level": _bounded(candidate.get("abstraction_level"), 80),
+        "retention_class": _bounded(candidate.get("retention_class"), 80),
+        "artifact_content_fingerprint": payload["artifact_content_fingerprint"],
+        "input_fingerprint": _fingerprint(payload),
+        "fixture_runtime": False,
+    }
+    return {**result, "output_fingerprint": _fingerprint(result)}
+
+
 def build_runtime_operation_preview(payload: object) -> dict[str, Any]:
     if isinstance(payload, dict) and payload.get("contract") == TENANT_BOUNDARY_INPUT_CONTRACT:
         return build_tenant_boundary_probe(
@@ -140,6 +202,8 @@ def build_runtime_operation_preview(payload: object) -> dict[str, Any]:
             sibling_boundary_absent=False,
             domain_boundaries_absent={domain: False for domain in TENANT_DOMAIN_BOUNDARY_PATHS},
         )
+    if isinstance(payload, dict) and payload.get("contract") == SAFE_DELTA_INPUT_CONTRACT:
+        return build_safe_delta_core_review(payload)
     return build_work_briefing(payload)
 
 
@@ -204,6 +268,10 @@ def main() -> int:
             )
             operation_name = TENANT_BOUNDARY_OPERATION
             output_name = "tenant_boundary_probe"
+        elif isinstance(source, dict) and source.get("contract") == SAFE_DELTA_INPUT_CONTRACT:
+            output = build_safe_delta_core_review(source)
+            operation_name = SAFE_DELTA_OPERATION
+            output_name = "safe_delta_core_review"
         else:
             output = build_work_briefing(source)
             operation_name = WORK_BRIEFING_OPERATION
@@ -258,6 +326,10 @@ def _fingerprint(value: object) -> str:
 
 def _bounded(value: object, limit: int) -> str:
     return value.strip() if isinstance(value, str) and 0 < len(value.strip()) <= limit else ""
+
+
+def _sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 
 if __name__ == "__main__":

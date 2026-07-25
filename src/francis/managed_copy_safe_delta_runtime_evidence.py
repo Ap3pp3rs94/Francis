@@ -106,6 +106,10 @@ def safe_delta_runtime_source_directory() -> Path:
 
 def verify_safe_delta_runtime_source(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
     """Validate canonical safe-delta lineage without executing or exporting."""
+    if source_receipt_id.startswith("mclc_"):
+        from francis.managed_copy_container_live_evidence import verify_server_resolved_safe_delta_source
+
+        return verify_server_resolved_safe_delta_source(source_receipt_id, source_receipt_fingerprint)
     source = _verify_safe_delta_runtime_source(
         source_receipt_id,
         source_receipt_fingerprint,

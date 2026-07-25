@@ -69,6 +69,17 @@ _TENANT_BOUNDARY_READY_FIELDS = _READY_FIELDS | {
     "tenant_boundary_probe_output_fingerprint",
     "comprehensive_tenant_isolation_proven",
 }
+_SAFE_DELTA_READY_FIELDS = _READY_FIELDS | {
+    "safe_delta_core_review_contract",
+    "safe_delta_classification",
+    "safe_delta_eligible_for_core_review",
+    "safe_delta_reason_codes",
+    "safe_delta_source_record_count",
+    "safe_delta_abstraction_level",
+    "safe_delta_retention_class",
+    "safe_delta_artifact_content_fingerprint",
+    "safe_delta_output_fingerprint",
+}
 _LIFECYCLE_FIELDS = _BASE_RECEIPT_FIELDS | {
     "ready_receipt_id",
     "ready_receipt_fingerprint",
@@ -272,6 +283,29 @@ def historical_tenant_isolation_source_verifier(
     return verify
 
 
+def historical_safe_delta_source_verifier(
+    *,
+    plan: dict[str, Any],
+    proof_root: Path,
+    expected_authority: dict[str, Any],
+) -> Callable[[str, str], dict[str, Any]]:
+    def verify(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
+        verified = _verify_historical_lifecycle(
+            source_receipt_id,
+            source_receipt_fingerprint,
+            plan=plan,
+            proof_root=proof_root,
+            expected_authority=expected_authority,
+        )
+        if verified.get("valid") is not True:
+            return verified
+        ready = isolation._read_json(proof_root / "receipts" / "ready.json")
+        blocker = _safe_delta_ready_blocker(ready, plan=plan, proof_root=proof_root)
+        return _blocked(blocker) if blocker else verified
+
+    return verify
+
+
 def verify_server_resolved_lifecycle_source(
     source_receipt_id: str,
     source_receipt_fingerprint: str,
@@ -355,6 +389,38 @@ def verify_server_resolved_tenant_isolation_source(
     return _blocked(blocker) if blocker else verified
 
 
+def verify_server_resolved_safe_delta_source(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+) -> dict[str, Any]:
+    verified = verify_server_resolved_lifecycle_source(source_receipt_id, source_receipt_fingerprint)
+    if verified.get("valid") is not True:
+        return verified
+    matches: list[Path] = []
+    for base in _canonical_proof_bases():
+        for lifecycle_path in sorted(base.glob("*/receipts/lifecycle-complete.json")):
+            lifecycle = isolation._read_json(lifecycle_path)
+            if lifecycle.get("receipt_id") == source_receipt_id:
+                matches.append(lifecycle_path.parent.parent)
+    if len(matches) != 1:
+        return _blocked("stage18_safe_delta_runtime_container_source_not_unique")
+    proof_root = matches[0]
+    ready = isolation._read_json(proof_root / "receipts" / "ready.json")
+    approval = isolation._approval(str(ready.get("approval_id", "")))
+    approval_payload = approval.get("payload")
+    descriptor = approval_payload.get("descriptor") if isinstance(approval_payload, dict) else None
+    if not isinstance(descriptor, dict):
+        return _blocked("stage18_safe_delta_runtime_container_source_invalid")
+    plan = {
+        "actor": ready.get("actor"),
+        "approval_id": ready.get("approval_id"),
+        "descriptor": descriptor,
+        "descriptor_fingerprint": ready.get("descriptor_fingerprint"),
+    }
+    blocker = _safe_delta_ready_blocker(ready, plan=plan, proof_root=proof_root)
+    return _blocked(blocker) if blocker else verified
+
+
 def _tenant_boundary_ready_blocker(ready: dict[str, Any]) -> str:
     domain_boundaries = ready.get("domain_boundaries_absent")
     if (
@@ -373,6 +439,40 @@ def _tenant_boundary_ready_blocker(ready: dict[str, Any]) -> str:
         or ready.get("fixture_only") is not False
     ):
         return "stage18_tenant_isolation_runtime_container_source_invalid"
+    return ""
+
+
+def _safe_delta_ready_blocker(ready: dict[str, Any], *, plan: dict[str, Any], proof_root: Path) -> str:
+    descriptor = plan["descriptor"]
+    operation_input = isolation._read_json(proof_root / "tenant" / "work_items.json")
+    try:
+        preview = isolation.build_safe_delta_core_review(operation_input)
+    except isolation.ManagedCopyRuntimeInputError:
+        return "stage18_safe_delta_runtime_container_source_invalid"
+    payload = {
+        "copy_id": descriptor.get("copy_id"),
+        "provisioning_receipt_id": descriptor.get("provisioning_receipt_id"),
+        "isolation_verification_receipt_id": descriptor.get("isolation_verification_receipt_id"),
+        "operation_input": operation_input,
+    }
+    source_record_count = ready.get("safe_delta_source_record_count")
+    if (
+        set(ready) != _SAFE_DELTA_READY_FIELDS
+        or ready.get("operation") != isolation.SAFE_DELTA_OPERATION
+        or ready.get("safe_delta_core_review_contract") != isolation.SAFE_DELTA_OUTPUT_CONTRACT
+        or ready.get("safe_delta_classification") != "eligible_for_core_review"
+        or ready.get("safe_delta_eligible_for_core_review") is not True
+        or ready.get("safe_delta_reason_codes") != []
+        or type(source_record_count) is not int
+        or source_record_count <= 0
+        or ready.get("safe_delta_abstraction_level") != "metadata_only"
+        or ready.get("safe_delta_retention_class") != "review_receipt_only"
+        or ready.get("safe_delta_artifact_content_fingerprint") != operation_input.get("artifact_content_fingerprint")
+        or ready.get("safe_delta_output_fingerprint") != ready.get("output_fingerprint")
+        or isolation._safe_delta_operation_lineage_blocker(payload, preview)
+        or ready.get("fixture_only") is not False
+    ):
+        return "stage18_safe_delta_runtime_container_source_invalid"
     return ""
 
 
@@ -410,11 +510,10 @@ def _verify_historical_lifecycle(
     ready = isolation._read_json(proof_root / "receipts" / "ready.json")
     cleanup = isolation._read_json(proof_root / "receipts" / "cleanup.json")
     descriptor = plan["descriptor"]
-    expected_ready_fields = (
-        _TENANT_BOUNDARY_READY_FIELDS
-        if descriptor.get("operation") == isolation.TENANT_BOUNDARY_OPERATION
-        else _READY_FIELDS
-    )
+    expected_ready_fields = {
+        isolation.TENANT_BOUNDARY_OPERATION: _TENANT_BOUNDARY_READY_FIELDS,
+        isolation.SAFE_DELTA_OPERATION: _SAFE_DELTA_READY_FIELDS,
+    }.get(descriptor.get("operation"), _READY_FIELDS)
     if (
         set(lifecycle) != _LIFECYCLE_FIELDS
         or set(cleanup) != _CLEANUP_FIELDS

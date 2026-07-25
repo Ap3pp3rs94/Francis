@@ -29,8 +29,10 @@ from francis.managed_copy_runtime_evidence import (
 )
 from francis.managed_copy_runtime import (
     INPUT_CONTRACT,
+    SAFE_DELTA_INPUT_CONTRACT,
     TENANT_BOUNDARY_INPUT_CONTRACT,
     TENANT_DOMAIN_BOUNDARY_PATHS,
+    build_safe_delta_core_review,
     build_work_briefing,
 )
 from francis.process_identity import process_identity, terminate_owned_process
@@ -131,6 +133,37 @@ def test_work_briefing_is_deterministic_and_actionable() -> None:
         "status": "open",
     }
     assert len(result["input_fingerprint"]) == 64
+    assert len(result["output_fingerprint"]) == 64
+
+
+def test_safe_delta_core_review_is_real_deterministic_runtime_logic() -> None:
+    artifact = {
+        "artifact_schema_class": "safe_delta_signal_v1",
+        "candidate": {
+            "source_record_count": 7,
+            "contains_raw_private_data": False,
+            "contains_tenant_identifiers": False,
+            "redaction_review_complete": True,
+            "abstraction_level": "metadata_only",
+            "retention_class": "review_receipt_only",
+        },
+    }
+    payload = {
+        "contract": SAFE_DELTA_INPUT_CONTRACT,
+        "artifact_plan_fingerprint": "a" * 64,
+        "export_artifact_receipt_id": "export-artifact-001",
+        "export_artifact_receipt_fingerprint": "b" * 64,
+        "artifact_content_fingerprint": "c" * 64,
+        "artifact": artifact,
+    }
+
+    result = build_safe_delta_core_review(payload)
+
+    assert result["operation"] == "safe_delta_core_review"
+    assert result["eligible_for_core_review"] is True
+    assert result["classification"] == "eligible_for_core_review"
+    assert result["source_record_count"] == 7
+    assert result["artifact_content_fingerprint"] == "c" * 64
     assert len(result["output_fingerprint"]) == 64
 
 
@@ -310,7 +343,7 @@ def test_managed_copy_runtime_image_is_fixed_to_real_francis_entrypoint() -> Non
         "FROM python:3.12-alpine@sha256:dbb1970cc04ce7d381c65efe8309c0c03d463e5b35c88f14d721796ad24cfbfd",
         "",
         'LABEL francis.runtime.contract="stage18_managed_copy_runtime_v1"',
-        'LABEL francis.runtime.program_sha256="5c6ff6a28b6dee77d80980cbcf9bf0f30c6aea55bdc597178e2f7b07079e84ba"',
+        'LABEL francis.runtime.program_sha256="834e94c90acca37716bd951aef5a10362c734804d4c56116bdce739338440fc0"',
         "",
         "COPY --chown=65532:65532 src/francis/managed_copy_runtime.py /opt/francis/managed_copy_runtime.py",
         "",
