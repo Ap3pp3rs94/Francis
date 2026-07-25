@@ -134,6 +134,15 @@ def verify_tenant_isolation_runtime_source(
     """Validate a canonical non-fixture tenant-isolation receipt and current state."""
     if not _identifier(source_receipt_id) or not _is_hash(source_receipt_fingerprint):
         return _blocked("stage18_tenant_isolation_runtime_source_binding_invalid")
+    if source_receipt_id.startswith("mclc_"):
+        from francis.managed_copy_container_live_evidence import (
+            verify_server_resolved_tenant_isolation_source,
+        )
+
+        return verify_server_resolved_tenant_isolation_source(
+            source_receipt_id,
+            source_receipt_fingerprint,
+        )
     source = _read_json(tenant_isolation_source_directory() / f"{source_receipt_id}.json")
     if not source:
         return _blocked(TENANT_ISOLATION_SOURCE_MISSING)

@@ -37,6 +37,8 @@ from francis.managed_copy_runtime_start import validate_runtime_start_approval_r
 from francis.managed_copy_runtime_evidence import (
     COPY_CREATION_PROOF_KIND,
     COPY_CREATION_REQUIREMENT,
+    TENANT_ISOLATION_PROOF_KIND,
+    TENANT_ISOLATION_REQUIREMENT,
     plan_runtime_evidence,
     record_runtime_evidence_with_lease_transaction,
 )
@@ -294,12 +296,24 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         blockers.append("stage17_prerequisite_not_closed")
     if type(payload.get("confirm_container_isolation")) is not bool:
         blockers.append("managed_copy_container_isolation_confirmation_invalid")
+    try:
+        operation_preview = build_runtime_operation_preview(payload.get("operation_input"))
+    except ManagedCopyRuntimeInputError as exc:
+        blockers.append(exc.blocker)
+        operation_preview = {}
+    operation = operation_preview.get("operation")
+    expected_requirement = (
+        TENANT_ISOLATION_REQUIREMENT if operation == TENANT_BOUNDARY_OPERATION else COPY_CREATION_REQUIREMENT
+    )
+    expected_proof_kind = (
+        TENANT_ISOLATION_PROOF_KIND if operation == TENANT_BOUNDARY_OPERATION else COPY_CREATION_PROOF_KIND
+    )
     evidence_intent = payload.get("runtime_evidence_intent")
     if (
         not isinstance(evidence_intent, dict)
         or set(evidence_intent) != _RUNTIME_EVIDENCE_INTENT_FIELDS
-        or evidence_intent.get("requirement_id") != COPY_CREATION_REQUIREMENT
-        or evidence_intent.get("proof_kind") != COPY_CREATION_PROOF_KIND
+        or evidence_intent.get("requirement_id") != expected_requirement
+        or evidence_intent.get("proof_kind") != expected_proof_kind
         or evidence_intent.get("confirm_runtime_evidence") is not True
     ):
         blockers.append("managed_copy_container_runtime_evidence_intent_invalid")
@@ -334,12 +348,6 @@ def container_isolation_proposal(payload: dict[str, Any], *, actor: str, stage17
         blockers.append("managed_copy_container_isolation_pilot_lease_lineage_invalid")
     if len(set(digests.get(key) for key in ("image_manifest_digest", "image_platform_digest", "image_id"))) != 1:
         blockers.append("managed_copy_container_isolation_fixed_image_mismatch")
-    try:
-        operation_preview = build_runtime_operation_preview(payload.get("operation_input"))
-    except ManagedCopyRuntimeInputError as exc:
-        blockers.append(exc.blocker)
-        operation_preview = {}
-
     provision: dict[str, Any] = {}
     isolation: dict[str, Any] = {}
     if not blockers:
@@ -612,6 +620,7 @@ def _execute(
         _write_immutable(receipts / "ready.json", proof)
         from francis.managed_copy_container_live_evidence import (
             historical_lifecycle_source_verifier,
+            historical_tenant_isolation_source_verifier,
             live_container_source_verifier,
             write_lifecycle_complete_receipt,
         )
@@ -657,15 +666,26 @@ def _execute(
         )
         if not lifecycle:
             return _fail(plan, receipts, "managed_copy_container_lifecycle_receipt_failed", inspected)
-        historical_verifier = historical_lifecycle_source_verifier(
+        historical_verifier_factory = (
+            historical_tenant_isolation_source_verifier
+            if d["operation"] == TENANT_BOUNDARY_OPERATION
+            else historical_lifecycle_source_verifier
+        )
+        historical_verifier = historical_verifier_factory(
             plan=plan,
             proof_root=root,
             expected_authority=publication_authority,
         )
+        requirement_id = (
+            TENANT_ISOLATION_REQUIREMENT if d["operation"] == TENANT_BOUNDARY_OPERATION else COPY_CREATION_REQUIREMENT
+        )
+        proof_kind = (
+            TENANT_ISOLATION_PROOF_KIND if d["operation"] == TENANT_BOUNDARY_OPERATION else COPY_CREATION_PROOF_KIND
+        )
         evidence_payload = {
             "request_actor": plan["actor"],
-            "requirement_id": COPY_CREATION_REQUIREMENT,
-            "proof_kind": COPY_CREATION_PROOF_KIND,
+            "requirement_id": requirement_id,
+            "proof_kind": proof_kind,
             "source_receipt_id": lifecycle["receipt_id"],
             "source_receipt_fingerprint": lifecycle["receipt_fingerprint"],
             "trace_id": d["trace_id"],
@@ -690,7 +710,7 @@ def _execute(
         )
 
         def verifier_factory(authority: dict[str, Any]) -> Callable[[str, str], dict[str, Any]]:
-            return historical_lifecycle_source_verifier(
+            return historical_verifier_factory(
                 plan=plan,
                 proof_root=root,
                 expected_authority=authority,
@@ -1464,6 +1484,7 @@ def _tenant_boundary_observation_fields(output: dict[str, Any], descriptor: dict
         "sibling_tenant_boundary_absent": output["sibling_tenant_boundary_absent"],
         "domain_boundaries_absent": output["domain_boundaries_absent"],
         "bounded_isolation_domains_proven": output["bounded_isolation_domains_proven"],
+        "bounded_cross_tenant_denial": output["bounded_cross_tenant_denial"],
         "tenant_boundary_probe_output_fingerprint": output["output_fingerprint"],
         "comprehensive_tenant_isolation_proven": False,
     }

@@ -1059,6 +1059,11 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
 ) -> None:
     if operation_input is not None:
         isolation_fixture["payload"]["operation_input"] = operation_input
+        isolation_fixture["payload"]["runtime_evidence_intent"] = {
+            "requirement_id": runtime_evidence.TENANT_ISOLATION_REQUIREMENT,
+            "proof_kind": runtime_evidence.TENANT_ISOLATION_PROOF_KIND,
+            "confirm_runtime_evidence": True,
+        }
     _write_approval(isolation_fixture)
     payload = isolation_fixture["payload"]
     container_id = "9" * 64
@@ -1175,14 +1180,17 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         assert list(runtime_evidence.receipt_directory().glob("*.json")) == []
         return
     assert result["ok"] is True, result
-    assert result["runtime_evidence"]["receipt"]["requirement_id"] == runtime_evidence.COPY_CREATION_REQUIREMENT
+    expected_requirement = (
+        runtime_evidence.TENANT_ISOLATION_REQUIREMENT
+        if operation_input is not None
+        else runtime_evidence.COPY_CREATION_REQUIREMENT
+    )
+    assert result["runtime_evidence"]["receipt"]["requirement_id"] == expected_requirement
     assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
     readbacks = managed_copies.managed_copy_runtime_evidence_readbacks_snapshot()
-    copy_check = next(
-        check for check in readbacks["checks"] if check["id"] == runtime_evidence.COPY_CREATION_REQUIREMENT
-    )
-    assert copy_check["passed"] is True
-    assert copy_check["blocker"] == ""
+    requirement_check = next(check for check in readbacks["checks"] if check["id"] == expected_requirement)
+    assert requirement_check["passed"] is True
+    assert requirement_check["blocker"] == ""
     monkeypatch.setattr(pilot_runtime, "PILOT_RUNTIME_LEASES", PilotScopeLeaseRegistry())
     assert runtime_evidence.receipt_satisfies_runtime_requirement(result["runtime_evidence"]["receipt"]) is True
     assert isolation_fixture["registry"].state(payload["lease_id"]) is PilotLeaseState.CONSUMED
@@ -1351,6 +1359,12 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
     )
     if operation_input is None:
         assert result["output"]["next_action"]["id"] == "work-1"
+        tenant_source = runtime_evidence.verify_tenant_isolation_runtime_source(
+            result["lifecycle_receipt"]["receipt_id"],
+            result["lifecycle_receipt"]["receipt_fingerprint"],
+        )
+        assert tenant_source["valid"] is False
+        assert tenant_source["blocker"] == "stage18_tenant_isolation_runtime_container_source_invalid"
     else:
         assert result["output"]["approved_tenant_input_read"] is True
         assert result["output"]["sibling_tenant_boundary_absent"] is True
@@ -1363,8 +1377,42 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
         assert result["receipt"]["sibling_tenant_boundary_absent"] is True
         assert all(result["receipt"]["domain_boundaries_absent"].values())
         assert result["receipt"]["bounded_isolation_domains_proven"] is True
+        assert result["receipt"]["bounded_cross_tenant_denial"] is True
         assert result["receipt"]["comprehensive_tenant_isolation_proven"] is False
         assert "synthetic-tenant-a-marker" not in " ".join(created_argv)
+        tenant_source = runtime_evidence.verify_tenant_isolation_runtime_source(
+            result["lifecycle_receipt"]["receipt_id"],
+            result["lifecycle_receipt"]["receipt_fingerprint"],
+        )
+        assert tenant_source["valid"] is True
+
+        ready_path = Path(result["proof_root"]) / "receipts" / "ready.json"
+        lifecycle_path = Path(result["proof_root"]) / "receipts" / "lifecycle-complete.json"
+        ready_value = json.loads(ready_path.read_text(encoding="utf-8"))
+        lifecycle_value = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+        tampered_ready = json.loads(json.dumps(ready_value))
+        tampered_ready["domain_boundaries_absent"]["tenant_memory"] = False
+        tampered_ready["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in tampered_ready.items() if key != "receipt_fingerprint"}
+        )
+        tampered_lifecycle = {
+            **lifecycle_value,
+            "ready_receipt_fingerprint": tampered_ready["receipt_fingerprint"],
+        }
+        tampered_lifecycle["receipt_id"] = live_evidence._lifecycle_id(tampered_lifecycle)
+        tampered_lifecycle["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in tampered_lifecycle.items() if key != "receipt_fingerprint"}
+        )
+        ready_path.write_text(json.dumps(tampered_ready), encoding="utf-8")
+        lifecycle_path.write_text(json.dumps(tampered_lifecycle), encoding="utf-8")
+        tampered_source = runtime_evidence.verify_tenant_isolation_runtime_source(
+            tampered_lifecycle["receipt_id"],
+            tampered_lifecycle["receipt_fingerprint"],
+        )
+        assert tampered_source["valid"] is False
+        assert tampered_source["blocker"] == "stage18_tenant_isolation_runtime_container_source_invalid"
+        ready_path.write_text(json.dumps(ready_value), encoding="utf-8")
+        lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
     assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
     assert "--read-only" in created_argv
     assert ["--cap-drop", "ALL"] == created_argv[
@@ -1465,6 +1513,11 @@ def test_tenant_boundary_probe_tamper_is_rejected(isolation_fixture: dict[str, A
         "probe_id": "tenant-boundary-probe-tamper",
         "tenant_marker": "synthetic-tenant-a-marker",
     }
+    payload["runtime_evidence_intent"] = {
+        "requirement_id": runtime_evidence.TENANT_ISOLATION_REQUIREMENT,
+        "proof_kind": runtime_evidence.TENANT_ISOLATION_PROOF_KIND,
+        "confirm_runtime_evidence": True,
+    }
     _write_approval(isolation_fixture)
     plan = container_isolation.container_isolation_proposal(
         payload, actor=payload["request_actor"], stage17_closed=True
@@ -1500,6 +1553,25 @@ def test_tenant_boundary_probe_tamper_is_rejected(isolation_fixture: dict[str, A
         )
         == "managed_copy_container_runtime_output_invalid"
     )
+
+
+def test_tenant_boundary_probe_rejects_copy_creation_evidence_intent(
+    isolation_fixture: dict[str, Any],
+) -> None:
+    payload = isolation_fixture["payload"]
+    payload["operation_input"] = {
+        "contract": container_isolation.TENANT_BOUNDARY_INPUT_CONTRACT,
+        "probe_id": "tenant-boundary-intent-mismatch",
+        "tenant_marker": "synthetic-tenant-a-marker",
+    }
+
+    result = container_isolation.container_isolation_proposal(
+        payload, actor=payload["request_actor"], stage17_closed=True
+    )
+
+    assert result["error"] == "managed_copy_container_runtime_evidence_intent_invalid"
+    assert result["descriptor"] == {}
+    assert not container_isolation._proof_base().exists()
 
 
 def test_tenant_boundary_probe_rejects_caller_selected_boundary(

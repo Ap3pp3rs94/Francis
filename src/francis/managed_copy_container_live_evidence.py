@@ -65,6 +65,7 @@ _TENANT_BOUNDARY_READY_FIELDS = _READY_FIELDS | {
     "sibling_tenant_boundary_absent",
     "domain_boundaries_absent",
     "bounded_isolation_domains_proven",
+    "bounded_cross_tenant_denial",
     "tenant_boundary_probe_output_fingerprint",
     "comprehensive_tenant_isolation_proven",
 }
@@ -248,6 +249,29 @@ def historical_lifecycle_source_verifier(
     return verify
 
 
+def historical_tenant_isolation_source_verifier(
+    *,
+    plan: dict[str, Any],
+    proof_root: Path,
+    expected_authority: dict[str, Any],
+) -> Callable[[str, str], dict[str, Any]]:
+    def verify(source_receipt_id: str, source_receipt_fingerprint: str) -> dict[str, Any]:
+        verified = _verify_historical_lifecycle(
+            source_receipt_id,
+            source_receipt_fingerprint,
+            plan=plan,
+            proof_root=proof_root,
+            expected_authority=expected_authority,
+        )
+        if verified.get("valid") is not True:
+            return verified
+        ready = isolation._read_json(proof_root / "receipts" / "ready.json")
+        blocker = _tenant_boundary_ready_blocker(ready)
+        return _blocked(blocker) if blocker else verified
+
+    return verify
+
+
 def verify_server_resolved_lifecycle_source(
     source_receipt_id: str,
     source_receipt_fingerprint: str,
@@ -309,6 +333,47 @@ def verify_server_resolved_lifecycle_source(
         proof_root=proof_root,
         expected_authority=authority,
     )
+
+
+def verify_server_resolved_tenant_isolation_source(
+    source_receipt_id: str,
+    source_receipt_fingerprint: str,
+) -> dict[str, Any]:
+    verified = verify_server_resolved_lifecycle_source(source_receipt_id, source_receipt_fingerprint)
+    if verified.get("valid") is not True:
+        return verified
+    matches: list[Path] = []
+    for base in _canonical_proof_bases():
+        for lifecycle_path in sorted(base.glob("*/receipts/lifecycle-complete.json")):
+            lifecycle = isolation._read_json(lifecycle_path)
+            if lifecycle.get("receipt_id") == source_receipt_id:
+                matches.append(lifecycle_path.parent.parent)
+    if len(matches) != 1:
+        return _blocked("stage18_tenant_isolation_runtime_container_source_not_unique")
+    ready = isolation._read_json(matches[0] / "receipts" / "ready.json")
+    blocker = _tenant_boundary_ready_blocker(ready)
+    return _blocked(blocker) if blocker else verified
+
+
+def _tenant_boundary_ready_blocker(ready: dict[str, Any]) -> str:
+    domain_boundaries = ready.get("domain_boundaries_absent")
+    if (
+        set(ready) != _TENANT_BOUNDARY_READY_FIELDS
+        or ready.get("operation") != isolation.TENANT_BOUNDARY_OPERATION
+        or ready.get("approved_tenant_input_read") is not True
+        or ready.get("sibling_tenant_boundary_absent") is not True
+        or not isinstance(domain_boundaries, dict)
+        or set(domain_boundaries) != set(isolation.TENANT_DOMAIN_BOUNDARY_PATHS)
+        or any(value is not True for value in domain_boundaries.values())
+        or ready.get("bounded_isolation_domains_proven") is not True
+        or ready.get("bounded_cross_tenant_denial") is not True
+        or ready.get("bounded_cross_tenant_mount_denial") is not True
+        or ready.get("comprehensive_tenant_isolation_proven") is not False
+        or ready.get("cross_tenant_production_isolation_proven") is not False
+        or ready.get("fixture_only") is not False
+    ):
+        return "stage18_tenant_isolation_runtime_container_source_invalid"
+    return ""
 
 
 def _canonical_proof_bases() -> tuple[Path, ...]:
