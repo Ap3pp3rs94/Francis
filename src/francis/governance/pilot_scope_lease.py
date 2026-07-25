@@ -280,19 +280,26 @@ class PilotScopeLeaseRegistry:
         lease_id: object,
         operation: Callable[[PilotScopeLease, PilotLeaseState], dict[str, Any]],
     ) -> tuple[PilotLeaseDecision, dict[str, Any]]:
-        """Run one bounded publication while lease revocation is excluded."""
+        """Run one bounded publication and fail closed on concurrent revocation."""
+        safe_lease_id = str(lease_id or "").strip()
         with self._intent_lock:
+            if safe_lease_id in self._pending_revocations:
+                return _denied("pilot_lease_revocation_pending"), {}
+        with self._lock:
+            lease = self._leases.get(safe_lease_id)
+            if lease is None:
+                return _denied("missing_pilot_lease"), {}
+            state = self._effective_state(lease, self._now())
+            if state not in {PilotLeaseState.ACTIVE, PilotLeaseState.CONSUMED}:
+                return _denied(f"pilot_lease_{state.value}", state=state), {}
+            result = operation(lease, state)
+        with self._intent_lock:
+            if safe_lease_id in self._pending_revocations:
+                return _denied(
+                    "pilot_lease_revocation_pending_during_transaction",
+                    state=state,
+                ), result
             with self._lock:
-                safe_lease_id = str(lease_id or "").strip()
-                if safe_lease_id in self._pending_revocations:
-                    return _denied("pilot_lease_revocation_pending"), {}
-                lease = self._leases.get(safe_lease_id)
-                if lease is None:
-                    return _denied("missing_pilot_lease"), {}
-                state = self._effective_state(lease, self._now())
-                if state not in {PilotLeaseState.ACTIVE, PilotLeaseState.CONSUMED}:
-                    return _denied(f"pilot_lease_{state.value}", state=state), {}
-                result = operation(lease, state)
                 current = self._leases.get(lease.lease_id)
                 final_state = self._effective_state(current, self._now()) if current is not None else None
                 if current != lease or final_state is not state:
