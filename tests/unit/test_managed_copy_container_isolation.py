@@ -1468,6 +1468,32 @@ def test_fixed_docker_profile_launches_proves_and_cleans_up(
             result["lifecycle_receipt"]["receipt_fingerprint"],
         )
         assert safe_delta_source["valid"] is True
+        ready_path = Path(result["proof_root"]) / "receipts" / "ready.json"
+        lifecycle_path = Path(result["proof_root"]) / "receipts" / "lifecycle-complete.json"
+        ready_value = json.loads(ready_path.read_text(encoding="utf-8"))
+        lifecycle_value = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+        tampered_ready = {**ready_value, "safe_delta_source_record_count": 8}
+        tampered_ready["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in tampered_ready.items() if key != "receipt_fingerprint"}
+        )
+        tampered_lifecycle = {
+            **lifecycle_value,
+            "ready_receipt_fingerprint": tampered_ready["receipt_fingerprint"],
+        }
+        tampered_lifecycle["receipt_id"] = live_evidence._lifecycle_id(tampered_lifecycle)
+        tampered_lifecycle["receipt_fingerprint"] = container_isolation._fingerprint(
+            {key: value for key, value in tampered_lifecycle.items() if key != "receipt_fingerprint"}
+        )
+        ready_path.write_text(json.dumps(tampered_ready), encoding="utf-8")
+        lifecycle_path.write_text(json.dumps(tampered_lifecycle), encoding="utf-8")
+        tampered_source = runtime_evidence.verify_safe_delta_runtime_source(
+            tampered_lifecycle["receipt_id"],
+            tampered_lifecycle["receipt_fingerprint"],
+        )
+        assert tampered_source["valid"] is False
+        assert tampered_source["blocker"] == "stage18_safe_delta_runtime_container_source_invalid"
+        ready_path.write_text(json.dumps(ready_value), encoding="utf-8")
+        lifecycle_path.write_text(json.dumps(lifecycle_value), encoding="utf-8")
     assert ["--network", "none"] == created_argv[created_argv.index("--network") : created_argv.index("--network") + 2]
     assert "--read-only" in created_argv
     assert ["--cap-drop", "ALL"] == created_argv[

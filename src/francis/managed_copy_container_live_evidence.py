@@ -456,18 +456,23 @@ def _safe_delta_ready_blocker(ready: dict[str, Any], *, plan: dict[str, Any], pr
         "operation_input": operation_input,
     }
     source_record_count = ready.get("safe_delta_source_record_count")
+    expected_projection = {
+        "safe_delta_core_review_contract": preview["contract"],
+        "safe_delta_classification": preview["classification"],
+        "safe_delta_eligible_for_core_review": preview["eligible_for_core_review"],
+        "safe_delta_reason_codes": preview["reason_codes"],
+        "safe_delta_source_record_count": preview["source_record_count"],
+        "safe_delta_abstraction_level": preview["abstraction_level"],
+        "safe_delta_retention_class": preview["retention_class"],
+        "safe_delta_artifact_content_fingerprint": preview["artifact_content_fingerprint"],
+        "safe_delta_output_fingerprint": preview["output_fingerprint"],
+    }
     if (
         set(ready) != _SAFE_DELTA_READY_FIELDS
         or ready.get("operation") != isolation.SAFE_DELTA_OPERATION
-        or ready.get("safe_delta_core_review_contract") != isolation.SAFE_DELTA_OUTPUT_CONTRACT
-        or ready.get("safe_delta_classification") != "eligible_for_core_review"
-        or ready.get("safe_delta_eligible_for_core_review") is not True
-        or ready.get("safe_delta_reason_codes") != []
+        or any(ready.get(key) != value for key, value in expected_projection.items())
         or type(source_record_count) is not int
         or source_record_count <= 0
-        or ready.get("safe_delta_abstraction_level") != "metadata_only"
-        or ready.get("safe_delta_retention_class") != "review_receipt_only"
-        or ready.get("safe_delta_artifact_content_fingerprint") != operation_input.get("artifact_content_fingerprint")
         or ready.get("safe_delta_output_fingerprint") != ready.get("output_fingerprint")
         or isolation._safe_delta_operation_lineage_blocker(payload, preview)
         or ready.get("fixture_only") is not False
