@@ -870,6 +870,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_export_artifact_plan": "/managed-copies/safe-delta-export-artifact-plan",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+            "rogue_recovery_runtime_halt": "/managed-copies/rogue-recovery-runtime-halt",
             "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
             "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
             "integrity_scan": "/managed-copies/integrity-scan",
@@ -3634,6 +3635,7 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
             **status["routes"],
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+            "rogue_recovery_runtime_halt": "/managed-copies/rogue-recovery-runtime-halt",
         },
         "blocked_failure_modes": [
             "uncontained_anomalous_instance",

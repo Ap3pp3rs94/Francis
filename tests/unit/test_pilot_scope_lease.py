@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from threading import Barrier, Thread
+from threading import Barrier, Event, Thread
 import time
 
 import pytest
@@ -291,6 +291,70 @@ def test_concurrent_checks_consume_one_binding_at_most_once() -> None:
 
     assert sum(result.allowed for result in results) == 1
     assert {result.reason for result in results} == {"pilot_lease_binding_consumed", "pilot_lease_consumed"}
+
+
+def test_effect_transaction_linearizes_before_later_revocation() -> None:
+    registry = _registry(_lease(bindings=(_CREATE,)))
+    effect_started = Event()
+    release_effect = Event()
+    effect_results: list[tuple[object, dict[str, object]]] = []
+    revoke_results = []
+
+    def effect() -> None:
+        effect_results.append(
+            registry.authorize_execute_and_consume(
+                actor_id=_ACTOR,
+                check=_check(),
+                operation=lambda lease, state: (
+                    effect_started.set(),
+                    release_effect.wait(timeout=2),
+                    {"ok": True, "effect": "committed", "state": state.value},
+                )[-1],
+            )
+        )
+
+    def revoke() -> None:
+        revoke_results.append(registry.revoke("pilot-lease-001", now_ms=_NOW))
+
+    effect_thread = Thread(target=effect)
+    effect_thread.start()
+    assert effect_started.wait(timeout=1)
+    revoke_thread = Thread(target=revoke)
+    revoke_thread.start()
+    time.sleep(0.02)
+    assert revoke_results == []
+    release_effect.set()
+    effect_thread.join()
+    revoke_thread.join()
+
+    decision, result = effect_results[0]
+    assert decision.allowed is True
+    assert result == {"ok": True, "effect": "committed", "state": "consumed"}
+    assert revoke_results[0].allowed is True
+    assert registry.state("pilot-lease-001", now_ms=_NOW) is PilotLeaseState.REVOKED
+
+
+def test_binding_effect_is_consumed_only_after_success() -> None:
+    registry = _registry(_lease(bindings=(_CREATE,)))
+    failed, failure = registry.authorize_execute_and_consume(
+        actor_id=_ACTOR,
+        check=_check(),
+        operation=lambda lease, state: {"ok": False, "error": "receipt_write_failed"},
+    )
+    assert failed.allowed is True
+    assert failed.evidence["binding_consumed"] is False
+    assert failure["error"] == "receipt_write_failed"
+    assert registry.state("pilot-lease-001", now_ms=_NOW) is PilotLeaseState.ACTIVE
+
+    passed, success = registry.authorize_execute_and_consume(
+        actor_id=_ACTOR,
+        check=_check(),
+        operation=lambda lease, state: {"ok": True, "effect": "committed"},
+    )
+    assert passed.allowed is True
+    assert passed.evidence["binding_consumed"] is True
+    assert success["effect"] == "committed"
+    assert registry.state("pilot-lease-001", now_ms=_NOW) is PilotLeaseState.CONSUMED
 
 
 def test_api_permission_gate_remains_compatible_without_lease_mode() -> None:

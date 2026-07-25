@@ -102,6 +102,7 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     )
     from francis.managed_copy_isolation import latest_managed_copy_isolation_verification_for_provision
     from francis.managed_copy_provisioning import managed_copy_provision_for_copy
+    from francis.managed_copy_rogue_runtime_halt import verify_rogue_runtime_halt_receipt
     from francis.managed_copy_rogue_recovery_plan import managed_copy_rogue_recovery_plan
     from francis.managed_copy_rogue_detection_assessment import managed_copy_rogue_detection_assessments_readback
 
@@ -198,7 +199,14 @@ def _owned_lineage_blocker(source: dict[str, Any]) -> str:
     )
     if plan.get("ok") is not True or plan.get("plan_fingerprint") != source["recovery_plan_fingerprint"]:
         return "stage18_rogue_recovery_runtime_plan_lineage_invalid"
-    return "stage18_rogue_recovery_runtime_halt_receipt_not_implemented"
+    halt = verify_rogue_runtime_halt_receipt(
+        source["runtime_halt_receipt_id"],
+        source["runtime_halt_receipt_fingerprint"],
+        expected=source,
+    )
+    if halt.get("valid") is not True:
+        return str(halt.get("error") or "stage18_rogue_recovery_runtime_halt_receipt_invalid")
+    return "stage18_rogue_recovery_runtime_quarantine_receipt_not_implemented"
 
 
 def _assessment_lineage_current(source: dict[str, Any], assessments: dict[str, Any]) -> bool:

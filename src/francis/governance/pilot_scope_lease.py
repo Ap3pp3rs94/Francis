@@ -281,41 +281,94 @@ class PilotScopeLeaseRegistry:
         operation: Callable[[PilotScopeLease, PilotLeaseState], dict[str, Any]],
     ) -> tuple[PilotLeaseDecision, dict[str, Any]]:
         """Run one bounded publication while lease revocation is excluded."""
-        with self._lock:
-            safe_lease_id = str(lease_id or "").strip()
-            with self._intent_lock:
-                revocation_pending = safe_lease_id in self._pending_revocations
-            lease = self._leases.get(safe_lease_id)
-            if lease is None:
-                return _denied("missing_pilot_lease"), {}
-            if revocation_pending:
-                return _denied("pilot_lease_revocation_pending"), {}
-            state = self._effective_state(lease, self._now())
-            if state not in {PilotLeaseState.ACTIVE, PilotLeaseState.CONSUMED}:
-                return _denied(f"pilot_lease_{state.value}", state=state), {}
-            result = operation(lease, state)
-            current = self._leases.get(lease.lease_id)
-            final_state = self._effective_state(current, self._now()) if current is not None else None
-            with self._intent_lock:
-                revocation_pending = lease.lease_id in self._pending_revocations
-            if current != lease or final_state is not state or revocation_pending:
-                return _denied(
-                    (
-                        "pilot_lease_revocation_pending_during_transaction"
-                        if revocation_pending
-                        else f"pilot_lease_{final_state.value if final_state else 'changed'}_during_transaction"
+        with self._intent_lock:
+            with self._lock:
+                safe_lease_id = str(lease_id or "").strip()
+                if safe_lease_id in self._pending_revocations:
+                    return _denied("pilot_lease_revocation_pending"), {}
+                lease = self._leases.get(safe_lease_id)
+                if lease is None:
+                    return _denied("missing_pilot_lease"), {}
+                state = self._effective_state(lease, self._now())
+                if state not in {PilotLeaseState.ACTIVE, PilotLeaseState.CONSUMED}:
+                    return _denied(f"pilot_lease_{state.value}", state=state), {}
+                result = operation(lease, state)
+                current = self._leases.get(lease.lease_id)
+                final_state = self._effective_state(current, self._now()) if current is not None else None
+                if current != lease or final_state is not state:
+                    return _denied(
+                        f"pilot_lease_{final_state.value if final_state else 'changed'}_during_transaction",
+                        state=final_state,
+                    ), result
+                return (
+                    PilotLeaseDecision(
+                        True,
+                        "pilot_lease_authority_transaction_committed",
+                        state,
+                        {"lease_bound": True, "lease_state": state.value},
                     ),
-                    state=final_state,
-                ), result
-            return (
-                PilotLeaseDecision(
-                    True,
-                    "pilot_lease_authority_transaction_committed",
-                    state,
-                    {"lease_bound": True, "lease_state": state.value},
-                ),
-                result,
-            )
+                    result,
+                )
+
+    def authorize_execute_and_consume(
+        self,
+        *,
+        actor_id: object,
+        check: PilotLeaseCheck,
+        operation: Callable[[PilotScopeLease, PilotLeaseState], dict[str, Any]],
+    ) -> tuple[PilotLeaseDecision, dict[str, Any]]:
+        """Execute one effect and consume its exact binding only after success."""
+        with self._intent_lock:
+            with self._lock:
+                safe_lease_id = str(check.lease_id or "").strip()
+                if safe_lease_id in self._pending_revocations:
+                    return _denied("pilot_lease_revocation_pending"), {}
+                lease = self._leases.get(safe_lease_id)
+                if lease is None:
+                    return _denied("missing_pilot_lease"), {}
+                state = self._effective_state(lease, self._now())
+                if state is not PilotLeaseState.ACTIVE:
+                    return _denied(f"pilot_lease_{state.value}", state=state), {}
+                try:
+                    binding = check.binding()
+                except ValueError:
+                    return _denied("malformed_pilot_lease_check", state=state), {}
+                mismatch = _binding_mismatch(lease, actor_id=actor_id, check=check, binding=binding)
+                if mismatch:
+                    return _denied(mismatch, state=state), {}
+                if binding in lease.consumed_bindings:
+                    return _denied("pilot_lease_binding_replayed", state=state), {}
+                if binding != lease.bindings[len(lease.consumed_bindings)]:
+                    return _denied("pilot_lease_binding_out_of_order", state=state), {}
+
+                updated = replace(lease, consumed_bindings=frozenset((*lease.consumed_bindings, binding)))
+                resulting_state = self._effective_state(updated, self._now())
+                result = operation(updated, resulting_state)
+                if result.get("ok") is True:
+                    self._leases[lease.lease_id] = updated
+                return (
+                    PilotLeaseDecision(
+                        True,
+                        (
+                            "pilot_lease_binding_effect_committed"
+                            if result.get("ok") is True
+                            else "pilot_lease_binding_effect_not_committed"
+                        ),
+                        resulting_state if result.get("ok") is True else state,
+                        {
+                            "lease_bound": True,
+                            "binding_consumed": result.get("ok") is True,
+                            "consumed_binding_count": (
+                                len(updated.consumed_bindings)
+                                if result.get("ok") is True
+                                else len(lease.consumed_bindings)
+                            ),
+                            "allowed_binding_count": len(lease.bindings),
+                            "lease_state": (resulting_state if result.get("ok") is True else state).value,
+                        },
+                    ),
+                    result,
+                )
 
     def revoke(self, lease_id: str, *, now_ms: int | None = None) -> PilotLeaseDecision:
         now = self._now() if now_ms is None else _timestamp(now_ms, field_name="now_ms")

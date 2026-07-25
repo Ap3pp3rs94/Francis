@@ -1486,6 +1486,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Produces no halt, quarantine, evidence-preservation, replacement, restore, incident, or runtime receipt.",
     ),
     AuthorityRule(
+        family="managed_copies_rogue_runtime_halt",
+        prefixes=("/managed-copies/rogue-recovery-runtime-halt",),
+        required_actor="payload.request_actor",
+        required_scope="managed_copies.rogue_recovery.runtime_halt.execute",
+        approval_requirement="exact expiring approval bound to current recovery plan, owned runtime identity, and one-run pilot lease",
+        receipt_behavior="immutable halt receipt bound to the exact owned pilot cleanup receipt",
+        denial_behavior="api_permission_denied before payload validation, lineage reads, filesystem writes, or process action",
+        governance_maturity="permission_and_exact_approval_gated_owned_runtime_halt",
+        notes="Delegates only to the existing exact-owned pilot stop primitive; grants no quarantine, replacement, restore, or arbitrary process authority.",
+    ),
+    AuthorityRule(
         family="managed_copies_safe_delta_export_artifact_write",
         prefixes=("/managed-copies/safe-delta-export-artifact",),
         required_actor="payload.request_actor",

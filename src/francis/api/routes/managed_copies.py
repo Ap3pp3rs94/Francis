@@ -86,6 +86,12 @@ from francis.managed_copy_runtime_start import (
     start_fixture_runtime,
 )
 from francis.managed_copy_runtime_evidence import SAFE_DELTA_REQUIREMENT
+from francis.managed_copy_rogue_runtime_halt import (
+    ROGUE_RUNTIME_HALT_ROUTE,
+    ROGUE_RUNTIME_HALT_SCOPE,
+    execute_rogue_runtime_halt,
+    rogue_runtime_halt_lease_bindings,
+)
 from francis.managed_copy_safe_delta_runtime_evidence import safe_delta_runtime_source_authority_context
 from francis.managed_copy_container_isolation import (
     CONTAINER_ISOLATION_ACTION,
@@ -107,6 +113,7 @@ from francis.managed_copy_pilot_runtime import (
     PILOT_RUNTIME_START_ROUTE,
     PILOT_RUNTIME_STOP_ACTION,
     PILOT_RUNTIME_STOP_ROUTE,
+    authorize_execute_pilot_runtime_lease_effect,
     pilot_runtime_lease_authority_snapshot,
     authorize_pilot_runtime_proposal,
     issue_pilot_runtime_lease,
@@ -1170,6 +1177,46 @@ def rogue_recovery_review(payload: dict[str, Any], request: Request) -> dict[str
             next_step="configure_actor_scope_before_reviewing_managed_copy_rogue_recovery",
         )
     return managed_copy_rogue_recovery_review_blocked_snapshot(payload, actor=actor)
+
+
+@router.post("/rogue-recovery-runtime-halt")
+def rogue_recovery_runtime_halt(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[ROGUE_RUNTIME_HALT_SCOPE],
+        route=ROGUE_RUNTIME_HALT_ROUTE,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=ROGUE_RUNTIME_HALT_SCOPE,
+            next_step="attach_exact_approved_rogue_runtime_halt_lease_binding",
+        )
+    bindings = rogue_runtime_halt_lease_bindings()
+    allowed, reason, result = authorize_execute_pilot_runtime_lease_effect(
+        payload.get("pilot_lease_id"),
+        actor=actor,
+        binding=bindings[-1],
+        expected_bindings=bindings,
+        operation=lambda authority: execute_rogue_runtime_halt(
+            payload,
+            actor=actor,
+            authority=authority,
+        ),
+    )
+    if not allowed:
+        return _permission_denied(
+            ApiPermissionDecision(
+                False,
+                reason,
+                {"actor_present": bool(actor), "lease_bound": False},
+            ),
+            required_scope=ROGUE_RUNTIME_HALT_SCOPE,
+            next_step="attach_current_exact_rogue_runtime_halt_authority",
+        )
+    return result
 
 
 @router.get("/sla-framework-contract")

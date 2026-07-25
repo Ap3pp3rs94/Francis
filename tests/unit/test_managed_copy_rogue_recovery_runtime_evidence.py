@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from francis import managed_copy_rogue_recovery_runtime_evidence as recovery_evidence
+from francis import managed_copy_rogue_runtime_halt as runtime_halt
 from francis import managed_copy_runtime_evidence as runtime_evidence
 
 
@@ -158,7 +159,7 @@ def test_malformed_fixture_weaker_and_injected_sources_fail_exact_schema(
     assert result["blocker"] == "stage18_rogue_recovery_runtime_source_receipt_invalid"
 
 
-def test_current_preflight_lineage_stops_at_missing_runtime_halt_producer(
+def test_current_preflight_and_halt_lineage_stop_at_missing_quarantine_producer(
     isolated_data: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -227,11 +228,16 @@ def test_current_preflight_lineage_stops_at_missing_runtime_halt_producer(
         "francis.managed_copy_rogue_recovery_plan.managed_copy_rogue_recovery_plan",
         lambda *args, **kwargs: {"ok": True, "plan_fingerprint": source["recovery_plan_fingerprint"]},
     )
+    monkeypatch.setattr(
+        runtime_halt,
+        "verify_rogue_runtime_halt_receipt",
+        lambda *args, **kwargs: {"valid": True, "blocker": ""},
+    )
 
     result = recovery_evidence.verify_rogue_recovery_runtime_source(source["receipt_id"], source["receipt_fingerprint"])
 
     assert result["valid"] is False
-    assert result["blocker"] == "stage18_rogue_recovery_runtime_halt_receipt_not_implemented"
+    assert result["blocker"] == "stage18_rogue_recovery_runtime_quarantine_receipt_not_implemented"
 
 
 def test_superseded_rogue_assessment_cannot_satisfy_current_lineage(

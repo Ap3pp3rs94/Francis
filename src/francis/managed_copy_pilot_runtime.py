@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from francis.governance.pilot_scope_lease import (
     PilotLeaseBinding,
+    PilotLeaseCheck,
     PilotLeaseState,
     PilotScopeLease,
     PilotScopeLeaseRegistry,
@@ -678,6 +679,60 @@ def execute_pilot_runtime_lease_authority_transaction(
     return decision.allowed, decision.reason, result if isinstance(result, dict) else {}
 
 
+def authorize_execute_pilot_runtime_lease_effect(
+    lease_id: object,
+    *,
+    actor: object,
+    binding: PilotLeaseBinding,
+    expected_bindings: tuple[PilotLeaseBinding, ...],
+    operation: Callable[[dict[str, Any]], dict[str, Any]],
+) -> tuple[bool, str, dict[str, Any]]:
+    """Authorize one exact binding and consume it only after its effect succeeds."""
+    try:
+        exact_binding = binding.normalized()
+        bindings = tuple(item.normalized() for item in expected_bindings)
+    except (AttributeError, ValueError):
+        return False, "managed_copy_pilot_lease_binding_invalid", {}
+    registry = PILOT_RUNTIME_LEASES
+    observation = registry.lease_snapshot_with_state(lease_id)
+    if observation is None:
+        return False, "missing_pilot_lease", {}
+    lease, _ = observation
+    check = PilotLeaseCheck(
+        lease_id=lease.lease_id,
+        package_id=lease.package_id,
+        package_fingerprint=lease.package_fingerprint,
+        pilot_run_id=lease.pilot_run_id,
+        runtime_nonce=lease.runtime_nonce,
+        operator_decision_fingerprint=lease.operator_decision_fingerprint,
+        scope=exact_binding.scope,
+        route=exact_binding.route,
+        method=exact_binding.method,
+        action=exact_binding.action,
+    )
+
+    def guarded(updated: PilotScopeLease, state: PilotLeaseState) -> dict[str, Any]:
+        authority = _lease_authority_snapshot(updated, state, actor=actor, bindings=bindings)
+        if authority.get("valid") is not True:
+            return {"ok": False, "authority": authority, "result": {}}
+        result = operation(authority)
+        return {"ok": result.get("ok") is True, "authority": authority, "result": result}
+
+    decision, transaction = registry.authorize_execute_and_consume(
+        actor_id=actor,
+        check=check,
+        operation=guarded,
+    )
+    if registry is not PILOT_RUNTIME_LEASES:
+        return False, "pilot_lease_registry_replaced_during_transaction", transaction.get("result", {})
+    authority = transaction.get("authority")
+    result = transaction.get("result")
+    if not isinstance(authority, dict) or authority.get("valid") is not True:
+        blocker = authority.get("blocker") if isinstance(authority, dict) else decision.reason
+        return False, _text(blocker) or decision.reason, {}
+    return decision.allowed, decision.reason, result if isinstance(result, dict) else {}
+
+
 def _lease_authority_snapshot(
     lease: PilotScopeLease,
     state: PilotLeaseState,
@@ -795,7 +850,12 @@ def pilot_runtime_status_snapshot(copy_id: str = "") -> dict[str, Any]:
     }
 
 
-def stop_pilot_runtime(payload: dict[str, Any], *, actor: str) -> dict[str, Any]:
+def stop_pilot_runtime(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+    seal_lease: bool = True,
+) -> dict[str, Any]:
     if set(payload) != {"request_actor", "pilot_lease_id", "startup_receipt_id", "confirm_stop"}:
         return _blocked("managed_copy_pilot_runtime_stop_payload_schema_invalid")
     if _identifier(payload.get("request_actor")) != _identifier(actor) or payload.get("confirm_stop") is not True:
@@ -838,7 +898,8 @@ def stop_pilot_runtime(payload: dict[str, Any], *, actor: str) -> dict[str, Any]
     }
     cleanup["receipt_fingerprint"] = _fingerprint(cleanup)
     _write_immutable(state_dir / "cleanup.json", cleanup)
-    PILOT_RUNTIME_LEASES.seal(_text(payload.get("pilot_lease_id")))
+    if seal_lease:
+        PILOT_RUNTIME_LEASES.seal(_text(payload.get("pilot_lease_id")))
     return {"ok": True, "status": cleanup["status"], "receipt": cleanup}
 
 

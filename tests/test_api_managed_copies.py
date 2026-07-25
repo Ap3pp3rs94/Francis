@@ -83,6 +83,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_export_artifact_plan": "/managed-copies/safe-delta-export-artifact-plan",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+        "rogue_recovery_runtime_halt": "/managed-copies/rogue-recovery-runtime-halt",
         "rogue_detection_assessment": "/managed-copies/rogue-detection-assessment",
         "rogue_detection_assessments": "/managed-copies/rogue-detection-assessments",
         "integrity_scan": "/managed-copies/integrity-scan",
